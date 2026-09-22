@@ -28,6 +28,7 @@
 		"warden": "bun src/cli.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
 		"build:dist": "bun build src/cli.ts --target=node --outdir dist --format=esm --packages=external",
 		"build:binary": "bun build --compile --minify --outfile dist/bastion src/cli.ts",
 		"prepublishOnly": "bun run build:dist",
