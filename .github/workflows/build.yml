@@ -2,14 +2,14 @@ name: Build
 
 on:
   push:
-    branches: [master]
+    branches: [master, ver/*, feat/*, renovate/*]
   pull_request:
-    branches: [master]
+    branches: [master, ver/*, feat/*, renovate/*]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   gate:
@@ -138,3 +138,93 @@ jobs:
       - name: Score The Specs That Read The Sibling
         run: REQUIRE_SIBLINGS=1 bun run test
         working-directory: bastion
+
+  nightly:
+    name: Publish Dev Build to GitHub Packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [gate, dashboard]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Set up Node For GitHub Packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@drupflare'
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Version Both Packages With The Commit Hash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./core/package.json').version")
+          DEV="${VERSION}-${GITHUB_SHA::7}"
+          for dir in core warden; do
+            npm pkg set version="$DEV" --prefix "$dir"
+            npm pkg set publishConfig.registry=https://npm.pkg.github.com --prefix "$dir"
+          done
+          echo "DEV=$DEV" >> "$GITHUB_ENV"
+          echo "Publishing dev build $DEV" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish core To GitHub Packages
+        working-directory: core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access public --tag dev
+      - name: Publish warden To GitHub Packages
+        working-directory: warden
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access public --tag dev
+
+  image:
+    name: Publish Dev Image to ghcr.io
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: gate
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log In To ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Derive The Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/drupflare/bastion
+          tags: |
+            type=raw,value=dev
+            type=sha,format=long
+      - name: Build And Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: The Entrypoint Answers
+        run: docker run --rm ghcr.io/drupflare/bastion:dev --version
