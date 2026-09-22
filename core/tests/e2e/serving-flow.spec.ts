@@ -82,6 +82,48 @@ async function inside(script: string): Promise<{ code: number; out: string }> {
 	}
 }
 
+/** the operator token the management assertions authenticate with, minted once on the live box */
+let token = '';
+
+/**
+ * The secret from `api token create`, which is printed once and never stored.
+ *
+ * Read from the text render rather than from `--json`: the json payload deliberately carries the
+ * id and not the secret, so that a secret cannot reach a caller that logs its own output.
+ */
+async function mintToken(argv: string): Promise<string> {
+	const minted = await bastion(`api token create ${argv}`);
+	const lines = minted.out.trim().split('\n');
+	const at = lines.findIndex((line) => line.includes('only time the secret is shown'));
+	return (lines[at - 1] ?? '').trim();
+}
+
+/**
+ * Asks the management listener, from inside the container.
+ *
+ * Plain http, because this box has no certificate for `127.0.0.1` and the listener says so rather
+ * than refusing to bind: the console renders and the api answers a token, and only browser
+ * sign-in needs tls. `bun -e` rather than curl, which this image does not carry.
+ */
+async function management(
+	path: string,
+	headers = '{}',
+	method = 'GET',
+	body?: unknown
+): Promise<{ code: number; out: string }> {
+	const sent =
+		body === undefined
+			? ''
+			: `, body: ${JSON.stringify(JSON.stringify(body))}, ` +
+				`headers: { "content-type": "application/json" }`;
+	return inside(
+		`cd /work && bun -e 'const r = await fetch("http://127.0.0.1:8787${path}", ` +
+			`{ method: "${method}", headers: ${headers}${sent} }); console.log(r.status); ` +
+			`for (const [k, v] of r.headers) console.log(k + ": " + v); ` +
+			`console.log(await r.text());'`
+	);
+}
+
 /** every bastion invocation, with the PATH the rig mounts it on */
 const bastion = (argv: string): Promise<{ code: number; out: string }> =>
 	inside(`cd /work && export PATH=/rig:$PATH && bastion ${argv} 2>&1`);
@@ -359,6 +401,97 @@ describe.skipIf(reason !== null)(`serving flow (${reason ?? 'enabled'})`, () => 
 		it('marks the tenant up in that table', async () => {
 			const answer = await bastion('status');
 			expect(answer.out.split('\n').find((line) => line.startsWith('acme'))).toContain('up');
+		});
+
+		/**
+		 * The dashboard and the API, on the box rather than in a unit test.
+		 *
+		 * Both shipped unreachable for a long time and neither failed a test: the management
+		 * listener answered 503 to everything because nothing passed it a session store, and every
+		 * route answered `not-implemented` because nothing passed it a handler map. The gate lane
+		 * could not see it -- `buildRuntime` is the only place that wires them, and until now no
+		 * test started a box and asked it for a page.
+		 */
+		it('mints an api token, which the routes below authenticate with', async () => {
+			token = await mintToken('dashboard --role operator');
+			expect(token).toMatch(/^\S{16,}$/);
+		});
+
+		it('serves the dashboard at the management listener', async () => {
+			const answer = await management('/');
+			expect(answer.out).toContain('200');
+			expect(answer.out).toContain('__nuxt');
+		});
+
+		it('nonces the shell, so the csp it sends does not block its own scripts', async () => {
+			const answer = await management('/');
+			const nonce = /x-bastion-nonce: (\S+)/.exec(answer.out)?.[1];
+			expect(nonce).toBeTruthy();
+			expect(answer.out).toContain('content-security-policy:');
+			expect(answer.out).toContain(`<script nonce="${nonce as string}"`);
+		});
+
+		it('serves a page route from the same shell', async () => {
+			expect((await management('/tenants')).out).toContain('__nuxt');
+		});
+
+		it('answers the api with json rather than the app', async () => {
+			const answer = await management('/api/session');
+			expect(answer.out).toContain('401');
+			expect(answer.out).toContain('no session and no token');
+		});
+
+		it('answers a real route to a real token, with the tenants this box is running', async () => {
+			const answer = await management('/api/tenants', `{ authorization: "Bearer ${token}" }`);
+			expect(answer.out).toContain('200');
+			expect(answer.out).toContain('acme');
+		});
+
+		/**
+		 * A tenant credential is narrowed by the handler, not by the caller.
+		 *
+		 * The route table's `token` column keeps an unattended credential off the routes that
+		 * change the host, and the handler's own filter keeps a tenant credential off another
+		 * tenant's rows. Both are asserted here because neither is visible from the other side.
+		 */
+		it('refuses a token on a route the table marks session-only', async () => {
+			const answer = await management('/api/secrets', `{ authorization: "Bearer ${token}" }`);
+			expect(answer.out).toContain('403');
+		});
+
+		/**
+		 * The claim token crosses a process boundary, which is the whole reason it exists.
+		 *
+		 * `bastion dashboard token` runs at a shell; the running `serve` is what has to accept it.
+		 * Held in memory, as it was, every claim answered no.
+		 */
+		it('exchanges the claim the cli minted for a session on the running box', async () => {
+			const minted = await bastion('dashboard token');
+			const claim = minted.out.trim().split('\n')[0] as string;
+			expect(claim).toMatch(/^\S{16,}$/);
+
+			const answer = await management('/api/session', '{}', 'POST', { claim });
+			expect(answer.out).toContain('200');
+			expect(answer.out).toContain('set-cookie: __Host-bastion-session=');
+			expect(answer.out).toContain('operator');
+		});
+
+		it('spends it, so the same claim does not work twice', async () => {
+			const minted = await bastion('dashboard token');
+			const claim = minted.out.trim().split('\n')[0] as string;
+			expect((await management('/api/session', '{}', 'POST', { claim })).out).toContain(
+				'200'
+			);
+			expect((await management('/api/session', '{}', 'POST', { claim })).out).toContain(
+				'401'
+			);
+		});
+
+		it('shows a tenant credential its own tenant and no other', async () => {
+			const scoped = await mintToken('dept --role tenant-admin --tenant acme');
+			const mine = await management('/api/tenants', `{ authorization: "Bearer ${scoped}" }`);
+			expect(mine.out).toContain('acme');
+			expect(mine.out).not.toContain('beta');
 		});
 
 		/**
