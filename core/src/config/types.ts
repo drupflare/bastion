@@ -96,6 +96,14 @@ export interface TenantConfig {
 	limits?: TenantLimits;
 	egress?: { allow: string[] };
 	capabilities?: Partial<TenantCapabilities>;
+	/**
+	 * Stopped, with its state kept.
+	 *
+	 * Distinct from removing the tenant: a suspended tenant keeps its sites, its storage and its
+	 * certificates, and `bastion up` does not start it. That is what makes the state recoverable
+	 * rather than a delete an operator has to undo from a backup.
+	 */
+	suspended?: boolean;
 }
 
 export interface DomainsConfig {
