@@ -52,6 +52,34 @@ export function cgroupWrites(
 	return { path: cgroupPath(tenant, root), files };
 }
 
+/** the controllers a tenant's limits need, which a parent has to delegate before a child sees them */
+export const CONTROLLERS = ['cpu', 'memory', 'pids'] as const;
+
+/**
+ * Hands the controllers down to where the tenant cgroup will be.
+ *
+ * On cgroup v2 a child's `cpu.max` and `memory.max` do not exist until the PARENT lists that
+ * controller in its own `cgroup.subtree_control`. Creating the directory and writing the limits
+ * without this answers EACCES on a host where nothing else has delegated them, so every tenant ran
+ * unbounded while the configuration said otherwise and nothing reported it.
+ *
+ * Each write is attempted on its own: a controller already delegated answers EBUSY, and a root
+ * bastion may not write is the operator's to fix rather than a reason to abandon the others.
+ */
+export function delegate(ctx: Context, root = CGROUP_ROOT): string[] {
+	const wanted = CONTROLLERS.map((name) => `+${name}`).join(' ');
+	const failed: string[] = [];
+	// the tree above bastion's own slice first, then the slice itself
+	for (const parent of [root.slice(0, root.lastIndexOf('/')) || '/sys/fs/cgroup', root]) {
+		try {
+			ctx.files.writeText(`${parent}/cgroup.subtree_control`, wanted);
+		} catch (error) {
+			failed.push(`${parent}: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+	return failed;
+}
+
 export function applyCgroup(
 	ctx: Context,
 	tenant: string,
@@ -59,6 +87,8 @@ export function applyCgroup(
 	root = CGROUP_ROOT
 ): CgroupWrites {
 	const writes = cgroupWrites(tenant, limits, root);
+	ctx.files.mkdirp(root);
+	delegate(ctx, root);
 	ctx.files.mkdirp(writes.path);
 	for (const [name, value] of Object.entries(writes.files)) {
 		ctx.files.writeText(`${writes.path}/${name}`, value);
