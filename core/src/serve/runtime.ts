@@ -9,6 +9,7 @@ import {
 	DEFAULT_COMPATIBILITY_FLAGS,
 	resolveSiteWorker
 } from '../config/defaults';
+import { loadConfig } from '../config/file';
 import type { BastionConfig, SiteConfig, TenantConfig } from '../config/types';
 import type { Context } from '../context';
 import { BastionError } from '../errors';
@@ -18,6 +19,9 @@ import type { Listener, ListenerHost, TlsMaterial } from '../front/listener';
 import { swapListener } from '../front/listener';
 import type { Route } from '../front/router';
 import { TENANT_SOCKET } from '../front/upstream';
+import { HealthLedger } from '../health/ledger';
+import { sweep, type HealthInput } from '../health/probes';
+import type { Finding } from '../health/tripwires';
 import { applyCgroup, attachPid } from '../isolation/cgroups';
 import { assertModeSafe } from '../isolation/modes';
 import { modeAvailable, preflight } from '../isolation/preflight';
@@ -55,6 +59,15 @@ export interface RuntimeOptions {
 	 * substitutes it because a driver opens a real sqlite file and a real socket.
 	 */
 	adapters?: (ctx: Context, input: AdapterInput) => AdapterSet;
+	/**
+	 * Where the configuration came from, so a reload can read it again.
+	 *
+	 * Without this the running process compares the config it loaded at STARTUP against the digest
+	 * it recorded from that same config, finds them equal, and swaps nothing: `bastion reload` after
+	 * raising a memory limit reported `0 tenants swapped` and left the old limit in place. The CLI
+	 * edits the file; the process holding the tenants has to go back to it.
+	 */
+	configPath?: string;
 }
 
 /**
@@ -72,6 +85,25 @@ const SPAWN_POLL_MS = 10;
 
 /** what a tenant is running with, so `reload` compares against the box rather than against nothing */
 export const RUNTIME_DIGEST = 'config.sha256';
+
+/**
+ * How `bastion reload` reaches the process that holds the tenants.
+ *
+ * A file rather than a signal or the management API, for the reasons the rest of this state
+ * directory already works that way: a signal carries no payload and cannot say which tenants, and
+ * the management API needs a credential and a listener that may be the thing that is broken. The
+ * CLI writes the request, `serve` performs the swap and writes the outcome beside it, and the CLI
+ * reads that back. Both files are inside `state`, so the filesystem permissions on the state
+ * directory are the access control.
+ */
+export const RELOAD_REQUEST = 'reload.request';
+export const RELOAD_OUTCOME = 'reload.outcome';
+
+export interface ReloadOutcome {
+	at: number;
+	swapped: string[];
+	failed: { tenant: string; reason: string }[];
+}
 
 /**
  * A digest of everything that decides one tenant's generated configuration.
@@ -106,7 +138,7 @@ export interface RuntimeState {
  */
 export class Runtime {
 	private readonly ctx: Context;
-	private readonly options: RuntimeOptions;
+	private options: RuntimeOptions;
 	private readonly supervisors = new Map<string, TenantSupervisor>();
 	private readonly listeners = new Map<string, Listener>();
 	/** one unix listener per adapter slot, per tenant, torn down with the tenant */
@@ -115,6 +147,9 @@ export class Runtime {
 	private front: FrontDeps | null = null;
 	/** every served request lands here, which is what the analytics view reads */
 	readonly analytics = new AnalyticsWindow();
+	/** the findings file this box writes, which `bastion health` reads from another process */
+	readonly ledger: HealthLedger;
+	private readonly startedAt: number;
 	/** what a tenant's own Analytics Engine binding writes, which is a different record entirely */
 	readonly dataPoints = new DataPointWindow();
 	/**
@@ -129,6 +164,8 @@ export class Runtime {
 	constructor(ctx: Context, options: RuntimeOptions) {
 		this.ctx = ctx;
 		this.options = options;
+		this.ledger = new HealthLedger(ctx, options.config.state);
+		this.startedAt = ctx.now();
 	}
 
 	get challengeResponder() {
@@ -514,6 +551,94 @@ export class Runtime {
 		}
 	}
 
+	/**
+	 * Stops one tenant and starts it again on the configuration now on disk.
+	 *
+	 * The unit is the tenant because workerd has no in-place reload: `--watch` re-executes the
+	 * binary over itself and loses every in-memory Durable Object, so a swap is a process swap
+	 * whatever it is called. What this buys over `restart` is the blast radius: the tenants that did
+	 * not change keep their objects resident, which on a box holding a department's sites is the
+	 * difference between one site blinking and all of them.
+	 *
+	 * Sequential rather than concurrent: two tenants swapping at once double the memory high-water
+	 * mark for no gain, and the whole point is to disturb as little as possible.
+	 */
+	async swapTenant(tenant: string): Promise<void> {
+		const supervisor = this.supervisors.get(tenant);
+		if (supervisor !== undefined) {
+			supervisor.stop();
+			for (const listener of this.adapters.get(tenant) ?? []) await listener.stop(false);
+			this.adapters.delete(tenant);
+			this.supervisors.delete(tenant);
+		}
+		// the capnp is regenerated from the config on disk, which is what makes this a swap rather
+		// than a restart of the same thing
+		await this.startTenant(tenant);
+	}
+
+	/**
+	 * Swaps every tenant whose configuration no longer matches what it is running.
+	 *
+	 * Reads the digest each tenant recorded when it started, so a tenant nobody touched is left
+	 * alone rather than restarted for symmetry.
+	 */
+	async swapChanged(): Promise<string[]> {
+		const swapped: string[] = [];
+		for (const tenant of this.options.config.tenants) {
+			if (tenant.suspended === true) continue;
+			const path = `${this.pathsFor(tenant.name).state}/${RUNTIME_DIGEST}`;
+			const running = this.ctx.files.exists(path)
+				? this.ctx.files.readText(path).trim()
+				: null;
+			if (running === tenantDigest(this.options.config, tenant)) continue;
+			await this.swapTenant(tenant.name);
+			swapped.push(tenant.name);
+		}
+		return swapped;
+	}
+
+	/**
+	 * Performs a swap the CLI asked for, if it asked for one.
+	 *
+	 * Polled from the same timer as the health sweep rather than watched, because a missed inotify
+	 * on a network filesystem is a reload that silently never happens and a poll cannot miss.
+	 */
+	async serveReloadRequest(): Promise<ReloadOutcome | null> {
+		const request = `${this.options.config.state}/${RELOAD_REQUEST}`;
+		if (!this.ctx.files.exists(request)) return null;
+		this.ctx.files.remove(request);
+		this.reread();
+
+		const swapped: string[] = [];
+		const failed: { tenant: string; reason: string }[] = [];
+		for (const tenant of this.options.config.tenants) {
+			if (tenant.suspended === true) continue;
+			const path = `${this.pathsFor(tenant.name).state}/${RUNTIME_DIGEST}`;
+			const running = this.ctx.files.exists(path)
+				? this.ctx.files.readText(path).trim()
+				: null;
+			if (running === tenantDigest(this.options.config, tenant)) continue;
+			try {
+				await this.swapTenant(tenant.name);
+				swapped.push(tenant.name);
+			} catch (error) {
+				// one tenant whose new configuration does not start must not take the others with
+				// it; the outcome names it and the rest of the box carries on
+				failed.push({
+					tenant: tenant.name,
+					reason: error instanceof Error ? error.message : String(error)
+				});
+			}
+		}
+
+		const outcome: ReloadOutcome = { at: this.ctx.now(), swapped, failed };
+		this.ctx.files.writeText(
+			`${this.options.config.state}/${RELOAD_OUTCOME}`,
+			`${JSON.stringify(outcome)}\n`
+		);
+		return outcome;
+	}
+
 	async down(): Promise<void> {
 		for (const supervisor of this.supervisors.values()) supervisor.stop();
 		for (const listener of this.listeners.values()) await listener.stop(false);
@@ -528,6 +653,73 @@ export class Runtime {
 	/** one tenant's supervisor, so `status` and the health ledger can read its restart count */
 	supervisorFor(tenant: string): TenantSupervisor | undefined {
 		return this.supervisors.get(tenant);
+	}
+
+	/**
+	 * What every probe needs, read off this process and this host.
+	 *
+	 * Assembled here because this is the only place that holds both halves: the supervisors know
+	 * their restart counts and breaker state, and the config knows the quotas and the residency. A
+	 * field it cannot read is left absent rather than zeroed, which is what keeps an unmeasured
+	 * input from reading as a healthy one.
+	 */
+	sample(): HealthInput {
+		const config = this.options.config;
+		const space = this.ctx.files.space(config.state);
+		return {
+			now: this.ctx.now(),
+			config: { mode: config.mode, runtime: config.runtime, tenants: config.tenants },
+			...(space === null
+				? {}
+				: { host: { totalBytes: space.totalBytes, freeBytes: space.freeBytes } }),
+			tenants: config.tenants.map((tenant) => {
+				const supervisor = this.supervisors.get(tenant.name);
+				const process = supervisor?.snapshot();
+				return {
+					name: tenant.name,
+					sites: tenant.sites.length,
+					...(tenant.limits?.maxSites === undefined
+						? {}
+						: { maxSites: tenant.limits.maxSites }),
+					...(process === undefined
+						? {}
+						: {
+								restarts: Math.max(0, process.attempts - 1),
+								quarantined: process.state === 'quarantined'
+							})
+				};
+			}),
+			front: {
+				rateLimited: this.unattributed.get('rate-limited') ?? 0,
+				slowloris: this.unattributed.get('slowloris') ?? 0,
+				windowMs: this.ctx.now() - this.startedAt
+			},
+			isolation: { configured: config.mode, available: config.mode }
+		};
+	}
+
+	/**
+	 * Picks up the configuration file again, so a swap lands on what the operator wrote.
+	 *
+	 * A refusal here leaves the running configuration in place rather than taking the box down: an
+	 * unparseable edit is a reason to keep serving the last good one and say so.
+	 */
+	private reread(): void {
+		if (this.options.configPath === undefined) return;
+		try {
+			const loaded = loadConfig(this.ctx, { path: this.options.configPath });
+			this.options = { ...this.options, config: loaded.config };
+		} catch (error) {
+			this.ctx.io.err(
+				`the configuration did not load, so nothing changed: ` +
+					`${error instanceof Error ? error.message : String(error)}`
+			);
+		}
+	}
+
+	/** detects, records what is new, and clears what recovered; returns what is currently open */
+	health(): Finding[] {
+		return sweep(this.ledger, this.sample());
 	}
 
 	get running(): string[] {

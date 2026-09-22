@@ -142,6 +142,31 @@ describe('Runtime.startTenant', () => {
 		return made;
 	}
 
+	/** the same, with a site, so the adapter sockets and the generated capnp are real */
+	function servingSite() {
+		const h = harness({
+			state: '/var/lib/bastion',
+			tenants: [{ name: 'acme', sites: [{ host: 'a.example.edu', bundle: BUNDLE }] }]
+		});
+		h.files.writeText(`${BUNDLE}/index.js`, 'export default {}');
+		const spawn = h.runner.spawn;
+		h.runner.spawn = (command, args, options) => ({
+			...spawn(command, args, options),
+			exited: new Promise<number>(() => {})
+		});
+		return {
+			h,
+			runtime: new Runtime(h.ctx, {
+				config: h.config,
+				host: h.host,
+				upstream: h.upstream,
+				binary: '/usr/local/bin/workerd',
+				adapters: memoryAdapters,
+				platform: 'linux'
+			})
+		};
+	}
+
 	it('drives the restart loop rather than spawning once and walking away', async () => {
 		const { h, runtime } = serving();
 		await runtime.startTenant('acme');
@@ -153,6 +178,88 @@ describe('Runtime.startTenant', () => {
 		const { h, runtime } = serving();
 		await runtime.startTenant('acme');
 		expect(h.files.readText('/var/lib/bastion/tenants/acme/workerd.pid')).toBe('4242');
+	});
+
+	/**
+	 * A swap is a process swap, because workerd has no in-place reload.
+	 *
+	 * What it buys over `restart` is the blast radius: the tenants that did not change keep their
+	 * Durable Objects resident, which on a box holding a department's sites is the difference
+	 * between one site blinking and all of them.
+	 */
+	it('starts the tenant again on the configuration now on disk', async () => {
+		const { h, runtime } = serving();
+		await runtime.startTenant('acme');
+		const before = h.runner.calls.filter((call) => call.mode === 'spawn').length;
+		await runtime.swapTenant('acme');
+		expect(h.runner.calls.filter((call) => call.mode === 'spawn').length).toBe(before + 1);
+		expect(runtime.supervisorFor('acme')?.snapshot().state).toBe('running');
+	});
+
+	it('takes the adapter sockets down with the old process and binds them again', async () => {
+		const { h, runtime } = servingSite();
+		await runtime.startTenant('acme');
+		const bound = h.host.bound.length;
+		await runtime.swapTenant('acme');
+		expect(h.host.bound.length).toBeGreaterThan(bound);
+		expect(h.host.stopped.length).toBeGreaterThan(0);
+	});
+
+	it('swaps only the tenant whose digest moved', async () => {
+		const { h, runtime } = serving();
+		await runtime.startTenant('acme');
+		expect(await runtime.swapChanged()).toEqual([]);
+
+		h.files.remove('/var/lib/bastion/tenants/acme/config.sha256');
+		expect(await runtime.swapChanged()).toEqual(['acme']);
+	});
+
+	it('leaves a suspended tenant alone', async () => {
+		const { h, runtime } = serving();
+		await runtime.startTenant('acme');
+		h.files.remove('/var/lib/bastion/tenants/acme/config.sha256');
+		(h.config.tenants[0] as { suspended?: boolean }).suspended = true;
+		expect(await runtime.swapChanged()).toEqual([]);
+	});
+
+	/**
+	 * The CLI is a different process, so it asks through a file under `state`.
+	 *
+	 * A signal carries no payload and the management API needs a credential and a listener that may
+	 * be the thing that is broken. The request is removed as it is picked up, so a crash mid-swap
+	 * does not replay it forever.
+	 */
+	it('answers nothing when no reload was asked for', async () => {
+		const { runtime } = serving();
+		expect(await runtime.serveReloadRequest()).toBeNull();
+	});
+
+	it('performs the swap a request asks for and writes the outcome beside it', async () => {
+		const { h, runtime } = serving();
+		await runtime.startTenant('acme');
+		h.files.remove('/var/lib/bastion/tenants/acme/config.sha256');
+		h.files.writeText('/var/lib/bastion/reload.request', '{}');
+
+		const outcome = await runtime.serveReloadRequest();
+		expect(outcome?.swapped).toEqual(['acme']);
+		expect(h.files.exists('/var/lib/bastion/reload.request')).toBe(false);
+		expect(JSON.parse(h.files.readText('/var/lib/bastion/reload.outcome')).swapped).toEqual([
+			'acme'
+		]);
+	});
+
+	/** one tenant that will not come back must not take the others with it */
+	it('names a tenant whose new configuration would not start, and carries on', async () => {
+		const { h, runtime } = servingSite();
+		await runtime.startTenant('acme');
+		h.files.remove('/var/lib/bastion/tenants/acme/config.sha256');
+		// the bundle the site names is gone, so regenerating its configuration refuses
+		h.files.remove(`${BUNDLE}/index.js`);
+		h.files.writeText('/var/lib/bastion/reload.request', '{}');
+
+		const outcome = await runtime.serveReloadRequest();
+		expect(outcome?.swapped).toEqual([]);
+		expect(outcome?.failed[0]?.tenant).toBe('acme');
 	});
 
 	it('forgets that pid once the tenant stops, so nothing reads a dead one as alive', async () => {
