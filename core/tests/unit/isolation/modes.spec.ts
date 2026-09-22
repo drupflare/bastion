@@ -71,11 +71,14 @@ describe('the refusal', () => {
 
 describe('nothing describes an unsafe mode as safe', () => {
 	// a second spec, because the documentation claim is the product claim here
+	// the published surface, which is where the claim would actually mislead someone
 	const sources = [
 		'src/isolation/modes.ts',
 		'src/config/types.ts',
 		'../warden/README.md',
-		'../PROGRESS.md'
+		'../README.md',
+		'../MANUAL.md',
+		'../ADVANCED_USAGE.md'
 	];
 
 	for (const relative of sources) {
