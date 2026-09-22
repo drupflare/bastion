@@ -35,6 +35,23 @@ export const ROUTES: RouteDefinition[] = [
 	},
 	{
 		method: 'GET',
+		path: '/api/capabilities',
+		action: 'host.read',
+		token: true,
+		command: 'bastion doctor'
+	},
+	// installing a package is privileged and outward-facing, so it takes `host.write` and is
+	// SESSION ONLY: an unattended token driving self-service signup must not be able to install
+	// software on the box, which is the invariant `authz.spec.ts` already asserts
+	{
+		method: 'POST',
+		path: '/api/capabilities/:slot/install',
+		action: 'host.write',
+		token: false,
+		command: 'bastion doctor --install'
+	},
+	{
+		method: 'GET',
 		path: '/api/health',
 		action: 'host.read',
 		token: true,
