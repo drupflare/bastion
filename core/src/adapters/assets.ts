@@ -1,4 +1,5 @@
 import { extname, normalize, resolve } from 'node:path';
+import { PROBE_PROFILES, type ProbeProfile } from '../config/profiles';
 import type { FileHost } from '../host/files';
 
 /**
@@ -48,16 +49,10 @@ export const NEVER_SERVED = [
 	/(^|\/)(node_modules|vendor)\//
 ];
 
-export interface AssetProfile {
-	/** the ignore file a CMS ships, named per probe profile rather than hardcoded */
-	ignoreFile: string;
-}
+export type AssetProfile = ProbeProfile;
 
-/** drupflare ships `.assetsignore`; a different CMS names its own */
-export const ASSET_PROFILES: Record<string, AssetProfile> = {
-	drupflare: { ignoreFile: '.assetsignore' },
-	generic: { ignoreFile: '.assetsignore' }
-};
+/** the probe profile table, which is the one place a CMS is named */
+export const ASSET_PROFILES = PROBE_PROFILES;
 
 /** one ignore rule; `*` matches within a segment and `**` across them */
 export function compileIgnore(contents: string): RegExp[] {
