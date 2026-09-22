@@ -879,6 +879,42 @@ staying patched.
 A mechanism that used to be present and now is not never downgrades the mode. bastion refuses and
 names what disappeared.
 
+### What Isolated Needs Before It Will Start
+
+Three things, none of which bastion ships, and the mode refuses by name when any is missing.
+
+    /dev/kvm            the host must expose it, and bastion must be able to open it
+    firecracker+jailer  1.15.1 or newer, at /usr/bin/firecracker and /usr/bin/jailer
+    a guest image       a kernel and a root filesystem carrying workerd
+
+`/dev/kvm` is owned by `root:kvm` on a stock Ubuntu, so the account running bastion joins that
+group. The change takes effect on the next login:
+
+    sudo usermod -aG kvm bastion
+    ls -l /dev/kvm
+
+A bare-metal host, or a VM with nested virtualisation turned on, can do this. Most VPS instances
+cannot, and `bastion doctor` says which case a host is in rather than letting it fail later.
+
+The hypervisor is a release binary from the Firecracker project. The release archive names its
+binaries after the version, so install them under the plain names bastion looks for:
+
+    tar xzf firecracker-v1.17.0-x86_64.tgz
+    sudo install -m 0755 release-v1.17.0-x86_64/firecracker-v1.17.0-x86_64 /usr/bin/firecracker
+    sudo install -m 0755 release-v1.17.0-x86_64/jailer-v1.17.0-x86_64 /usr/bin/jailer
+
+A symlink works too. The jailer canonicalises the binary it is given and names each guest's chroot
+after what that resolves to, so a link to a versioned filename puts the version in the chroot path;
+bastion follows the same resolution, so the two agree either way.
+
+The guest image is the operator's. It needs a kernel with virtio block and vsock support, and a
+root filesystem whose init starts workerd against the capnp bastion mounts at `/config.capnp`.
+The tenant's storage arrives as a separate writable device; nothing else in the guest is writable.
+
+Each guest's serial console is written to `/var/log/bastion/guests/<tenant>.log`. A guest that
+fails to boot says why there and nowhere else, so that file is the first thing to read when a
+tenant will not start.
+
 ## Clustering
 
 <a id="clustering"></a>
