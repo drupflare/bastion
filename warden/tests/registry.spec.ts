@@ -1,4 +1,10 @@
-import { defaultContext, memoryFiles, memoryIo, scriptedRunner } from '@drupflare/bastion';
+import {
+	ACKNOWLEDGE_FLAG,
+	defaultContext,
+	memoryFiles,
+	memoryIo,
+	scriptedRunner
+} from '@drupflare/bastion';
 import { describe, expect, it } from 'vitest';
 import { commandReference } from '../src/commands/lifecycle';
 import { MANUAL, manualMarkdown, manualTopics, renderTopic } from '../src/manual';
@@ -189,13 +195,170 @@ describe('lifecycle commands', () => {
 		const ctx = {
 			...defaultContext(),
 			files,
-			runner: scriptedRunner({ kill: { code: 1, stdout: '', stderr: 'no such process' } }),
+			runner: scriptedRunner({ signal: { code: 1, stdout: '', stderr: 'no such process' } }),
 			io,
 			env: {},
 			cwd: '/srv'
 		};
 		await run(ctx, ['up']);
 		expect(io.errText()).toContain('stale pidfile');
+	});
+
+	/**
+	 * `up` spawned `serve` with inherited stdio, so it never exited.
+	 *
+	 * The child holds the parent's stdout and stderr, and a process that is meant to outlive its
+	 * parent holding the other end of a pipe means nothing reading that output ever gets EOF. An
+	 * interactive shell hid it, because a tty is not a pipe; `timeout 30 bastion up` in a container
+	 * printed `bastion is running as pid 541` and then exited 124.
+	 */
+	/** `up` gets past the preflight only on a host that can run the mode, so the seam says linux */
+	function startable(runner = scriptedRunner()) {
+		const io = memoryIo();
+		return {
+			io,
+			runner,
+			ctx: {
+				...defaultContext(),
+				files: memoryFiles({
+					'/srv/bastion.yml': 'version: 1\nstate: /srv/state\n',
+					'/sys/fs/cgroup/cgroup.controllers': 'cpu memory pids'
+				}),
+				runner,
+				io,
+				env: {},
+				cwd: '/srv',
+				platform: 'linux'
+			}
+		};
+	}
+
+	it('detaches the serve child to a log file rather than the caller s pipes', async () => {
+		const { ctx, runner } = startable();
+		await run(ctx, ['up']);
+		const spawned = runner.calls.find((call) => call.mode === 'spawn');
+		expect(spawned?.options.logFile).toBe('/srv/state/logs/serve.log');
+	});
+
+	/**
+	 * The multi-tenant refusal names a flag, and that flag has to exist.
+	 *
+	 * It told the operator to pass `--i-understand-this-is-not-multi-tenant-safe` and no command
+	 * registered it, so following the instruction answered `unknown option` and the escape hatch the
+	 * message promised was unreachable. Measured through the compiled binary in a container.
+	 */
+	function twoTenants(argv: string[]) {
+		const io = memoryIo();
+		return {
+			io,
+			ctx: {
+				...defaultContext(),
+				files: memoryFiles({
+					'/srv/bastion.yml':
+						'version: 1\nstate: /srv/state\ntenants:\n  - name: a\n    sites: []\n' +
+						'  - name: b\n    sites: []\n',
+					'/sys/fs/cgroup/cgroup.controllers': 'cpu memory pids'
+				}),
+				runner: scriptedRunner(),
+				io,
+				env: {},
+				cwd: '/srv',
+				platform: 'linux'
+			},
+			argv
+		};
+	}
+
+	it('refuses two tenants in solo, and names a flag that parses', async () => {
+		const refused = twoTenants(['up']);
+		expect(await run(refused.ctx, refused.argv)).toBe(2);
+		expect(refused.io.errText()).toContain('not multi-tenant safe');
+
+		const named = twoTenants(['up', ACKNOWLEDGE_FLAG]);
+		expect(await run(named.ctx, named.argv)).not.toBe(2);
+		expect(named.io.errText()).not.toContain('unknown option');
+	});
+
+	it('takes the acknowledgement on serve and restart too', async () => {
+		for (const command of ['serve', 'restart']) {
+			const { ctx, io, argv } = twoTenants([command, ACKNOWLEDGE_FLAG]);
+			await run(ctx, argv);
+			expect(io.errText(), command).not.toContain('unknown option');
+		}
+	});
+
+	/**
+	 * `up` has to pass it on, because the child is the process that starts the tenants.
+	 *
+	 * It accepted the flag, printed the warning, and spawned a `serve` nobody had told, which
+	 * refused: `bastion exited 2 during startup`. The acknowledgement reached the parent and died
+	 * there.
+	 */
+	it('forwards the acknowledgement to the serve it spawns', async () => {
+		const runner = scriptedRunner();
+		const { ctx, argv } = twoTenants(['up', ACKNOWLEDGE_FLAG]);
+		ctx.runner = runner;
+		await run(ctx, argv);
+		const spawned = runner.calls.find((call) => call.mode === 'spawn');
+		expect(spawned?.args).toContain(ACKNOWLEDGE_FLAG);
+	});
+
+	it('does not forward it when it was not given', async () => {
+		const runner = scriptedRunner();
+		const { ctx, argv } = twoTenants(['up']);
+		ctx.runner = runner;
+		await run(ctx, argv);
+		const spawned = runner.calls.find((call) => call.mode === 'spawn');
+		expect(spawned?.args ?? []).not.toContain(ACKNOWLEDGE_FLAG);
+	});
+
+	/** `--yes` is typed reflexively in a script; a security boundary should not ride on it */
+	it('does not let --yes stand in for the acknowledgement', async () => {
+		const { ctx, io, argv } = twoTenants(['up', '--yes']);
+		expect(await run(ctx, argv)).toBe(2);
+		expect(io.errText()).toContain('not multi-tenant safe');
+	});
+
+	// the success path waits out the whole startup grace, so it is asserted in the serving lane
+	// where a real `up` runs anyway rather than costing this one 1.5s of its 2s budget
+
+	it('names it in the refusal too, when the child dies during startup', async () => {
+		const { ctx, io } = startable(
+			scriptedRunner({ serve: { code: 2, stdout: '', stderr: '' } })
+		);
+		expect(await run(ctx, ['up'])).toBe(1);
+		expect(io.errText()).toContain('/srv/state/logs/serve.log');
+	});
+
+	/**
+	 * A refusal inside `serve` has to reach the terminal, not only the log.
+	 *
+	 * Detaching the child sent its stderr to a file, so `bastion up` against a missing certificate
+	 * said `bastion exited 2 during startup` and nothing else: the operator had to open a file to
+	 * learn which setting was wrong. The child is dead by then, so the log is complete.
+	 */
+	it('puts what the child said back on the terminal', async () => {
+		const { ctx, io } = startable(
+			scriptedRunner({ serve: { code: 2, stdout: '', stderr: '' } })
+		);
+		ctx.files.writeText(
+			'/srv/state/logs/serve.log',
+			'the https listener has no certificate\nnext: bastion cert issue\n'
+		);
+		await run(ctx, ['up']);
+		expect(io.errText()).toContain('no certificate');
+		expect(io.errText()).toContain('bastion cert issue');
+	});
+
+	it('shows the tail rather than a whole crash loop', async () => {
+		const { ctx, io } = startable(
+			scriptedRunner({ serve: { code: 2, stdout: '', stderr: '' } })
+		);
+		const lines = Array.from({ length: 40 }, (_unused, at) => `line ${at}`);
+		ctx.files.writeText('/srv/state/logs/serve.log', `${lines.join('\n')}\n`);
+		await run(ctx, ['up']);
+		expect(io.errText()).toContain('line 39');
+		expect(io.errText()).not.toContain('line 0\n');
 	});
 
 	it('says plainly that nothing is running rather than exiting 0', async () => {
@@ -221,8 +384,52 @@ describe('lifecycle commands', () => {
 		const runner = scriptedRunner();
 		const ctx = { ...defaultContext(), files, runner, io, env: {}, cwd: '/srv' };
 		expect(await run(ctx, ['down'])).toBe(0);
-		expect(runner.calls[0]?.args).toEqual(['-TERM', '4242']);
+		expect(runner.calls[0]).toMatchObject({ mode: 'signal', args: ['SIGTERM', '4242'] });
 		expect(files.exists('/srv/state/bastion.pid')).toBe(false);
+	});
+
+	/**
+	 * `down` used to shell out to `kill` and ignore its exit code.
+	 *
+	 * `kill` is a shell builtin and debian ships the binary in `procps`, which a slim image does
+	 * not install, so `execFile` failed ENOENT on every stop: the pidfile went away, the operator
+	 * read `asked pid N to stop`, and every workerd bastion had started kept running.
+	 */
+	it('signals through the runner rather than shelling out to a kill binary', async () => {
+		const io = memoryIo();
+		const files = memoryFiles({
+			'/srv/bastion.yml': 'version: 1\nstate: /srv/state\n',
+			'/srv/state/bastion.pid': '4242'
+		});
+		const runner = scriptedRunner();
+		const ctx = { ...defaultContext(), files, runner, io, env: {}, cwd: '/srv' };
+		await run(ctx, ['down']);
+		expect(runner.calls.map((call) => call.command)).not.toContain('kill');
+	});
+
+	it('says so rather than claiming a stop when the process had already exited', async () => {
+		const io = memoryIo();
+		const files = memoryFiles({
+			'/srv/bastion.yml': 'version: 1\nstate: /srv/state\n',
+			'/srv/state/bastion.pid': '4242'
+		});
+		const runner = scriptedRunner({ signal: { code: 1, stdout: '', stderr: '' } });
+		const ctx = { ...defaultContext(), files, runner, io, env: {}, cwd: '/srv' };
+		expect(await run(ctx, ['down'])).toBe(0);
+		expect(io.outText()).toContain('already exited');
+	});
+
+	/** the pidfile is the only handle on a process this user may not signal, so it stays */
+	it('keeps the pidfile when the signal is refused', async () => {
+		const io = memoryIo();
+		const files = memoryFiles({
+			'/srv/bastion.yml': 'version: 1\nstate: /srv/state\n',
+			'/srv/state/bastion.pid': '4242'
+		});
+		const runner = scriptedRunner({ signal: { code: 1, stdout: 'refused', stderr: '' } });
+		const ctx = { ...defaultContext(), files, runner, io, env: {}, cwd: '/srv' };
+		expect(await run(ctx, ['down'])).toBe(1);
+		expect(files.exists('/srv/state/bastion.pid')).toBe(true);
 	});
 });
 

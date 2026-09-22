@@ -1,14 +1,15 @@
 import type { Context } from '@drupflare/bastion';
 import {
-	BastionError,
-	Runtime,
+	ACKNOWLEDGE_FLAG,
 	assertModeSafe,
+	BastionError,
 	bunListenerHost,
 	defaultConfig,
 	http3Warning,
 	modeAvailable,
 	preflight,
 	resolveBinary,
+	Runtime,
 	socketPaths,
 	unixUpstream,
 	writeConfig
@@ -16,6 +17,23 @@ import {
 import { MANUAL, manualTopics, renderTopic } from '../manual';
 import { COMMANDS, GLOBAL_OPTIONS, type CommandSpec } from '../registry';
 import { emit, load, type Globals } from '../state';
+
+/**
+ * How long `up` waits before believing the child is running.
+ *
+ * Long enough for a configuration error to surface, short enough that a healthy start is not a
+ * noticeable pause. A preflight refusal, a bundle that is not there and an unparseable capnp all
+ * land well inside it.
+ */
+const STARTUP_GRACE_MS = 1500;
+
+/**
+ * How much of the log a failed start puts back on the terminal.
+ *
+ * Enough for a refusal and its `next:` line, short enough that a crash loop does not bury the
+ * command that produced it. The whole file is still there and `up` names it.
+ */
+const STARTUP_LOG_LINES = 12;
 
 export function runInit(ctx: Context, globals: Globals & { force?: boolean }): void {
 	const path = globals.config ?? `${ctx.cwd}/bastion.yml`;
@@ -48,6 +66,22 @@ export function runInit(ctx: Context, globals: Globals & { force?: boolean }): v
 }
 
 /**
+ * Whether the operator accepted that this mode puts no security boundary between tenants.
+ *
+ * Its own flag rather than `--yes`. The refusal already told the operator to pass
+ * `--i-understand-this-is-not-multi-tenant-safe`, and that flag was registered on no command, so
+ * following the instruction answered `unknown option` and the escape hatch the message promised did
+ * not exist. `--yes` is typed reflexively in a provisioning script; accepting a security boundary
+ * should not ride on it.
+ */
+function acknowledged(globals: Globals): boolean {
+	const key = ACKNOWLEDGE_FLAG.replace(/^--/, '').replace(/-(\w)/g, (_all, c: string) =>
+		c.toUpperCase()
+	);
+	return (globals as unknown as Record<string, unknown>)[key] === true;
+}
+
+/**
  * The checks `up` and `serve` run before anything binds.
  *
  * The mode refusal is here rather than deeper because it must happen before a single tenant starts:
@@ -69,7 +103,7 @@ export function preflightForStart(
 			next: 'bastion doctor'
 		});
 	}
-	const safety = assertModeSafe(mode, loaded.config.tenants.length, globals.yes === true);
+	const safety = assertModeSafe(mode, loaded.config.tenants.length, acknowledged(globals));
 	const warnings: string[] = [];
 	if (safety.warned) warnings.push(safety.warning);
 	const h3 = http3Warning(loaded.config);
@@ -106,7 +140,7 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 		config,
 		host: bunListenerHost(),
 		upstream: unixUpstream(ctx, socketPaths(loaded.state)),
-		acknowledgeUnsafeMode: globals.yes === true,
+		acknowledgeUnsafeMode: acknowledged(globals),
 		...(binary === null ? {} : { binary })
 	});
 }
@@ -273,8 +307,7 @@ export async function runUp(
 	const path = pidFile(loaded.state);
 	if (ctx.files.exists(path)) {
 		const existing = Number(ctx.files.readText(path).trim());
-		const alive = await ctx.runner.run('kill', ['-0', String(existing)]);
-		if (alive.code === 0) {
+		if (ctx.runner.signal(existing, 0) !== 'gone') {
 			ctx.io.err(`bastion is already running as pid ${existing}`);
 			return 2;
 		}
@@ -287,18 +320,51 @@ export async function runUp(
 	const { warnings } = preflightForStart(ctx, globals);
 	for (const warning of warnings) ctx.io.err(warning);
 
+	// everything the child needs to reach the same decision this process just did. The
+	// acknowledgement was accepted here and not passed on, so `up` printed the warning and then
+	// spawned a `serve` nobody had told, which refused and took the box down with it
 	const argv = ['serve'];
 	if (globals.mode !== undefined) argv.push('--mode', globals.mode);
 	if (globals.config !== undefined) argv.push('--config', globals.config);
-	const started = ctx.runner.spawn(process.execPath, argv);
+	if (acknowledged(globals)) argv.push(ACKNOWLEDGE_FLAG);
+
+	// Detached, with its output in a file. Inheriting handed the child this process's stdout and
+	// stderr, so `up` printed a pid and then never exited: nothing reading its output could get
+	// EOF while a process that is meant to outlive it held the other end.
+	const log = `${loaded.state}/logs/serve.log`;
+	const started = ctx.runner.spawn(process.execPath, argv, { logFile: log });
 	if (started.pid !== null) ctx.files.writeText(path, String(started.pid));
 
-	emit(ctx, globals, { pid: started.pid, state: loaded.state, warnings }, () =>
+	// A child that exits during startup used to leave `up` reporting a pid and exiting 0, so an
+	// operator read "bastion is running as pid 113" for a process that had already died on the
+	// configuration it was handed. Whatever it printed went to the terminal and was ignored.
+	const died = await Promise.race([
+		started.exited.then((code) => code),
+		new Promise<null>((resolve) => setTimeout(() => resolve(null), STARTUP_GRACE_MS))
+	]);
+	if (died !== null) {
+		ctx.files.remove(path);
+		// The child's refusal is in the log rather than on this terminal, and an operator whose
+		// certificate is missing should not have to open a file to find that out. It is dead, so
+		// the file is complete: read what it said and put it back where it used to appear.
+		const said = ctx.files.exists(log)
+			? ctx.files.readText(log).trimEnd().split('\n').slice(-STARTUP_LOG_LINES)
+			: [];
+		for (const line of said) ctx.io.err(line);
+		throw new BastionError(
+			'workerd-boot',
+			`bastion exited ${died} during startup; the rest is in ${log}`,
+			{ next: 'bastion logs' }
+		);
+	}
+
+	emit(ctx, globals, { pid: started.pid, state: loaded.state, log, warnings }, () =>
 		[
 			`bastion is running as pid ${started.pid ?? '(unknown)'}`,
 			globals.dashboard === false
 				? 'the dashboard was not started'
-				: `dashboard on ${loaded.config.listeners.management.address}`
+				: `dashboard on ${loaded.config.listeners.management.address}`,
+			`logging to ${log}`
 		].join('\n')
 	);
 	return 0;
@@ -312,9 +378,23 @@ export async function runDown(ctx: Context, globals: Globals): Promise<number> {
 		return 2;
 	}
 	const pid = Number(ctx.files.readText(path).trim());
-	await ctx.runner.run('kill', ['-TERM', String(pid)]);
+	const outcome = ctx.runner.signal(pid, 'SIGTERM');
+
+	// the pidfile is the only handle on a process bastion may not signal, so a refusal keeps it
+	if (outcome === 'refused') {
+		throw new BastionError(
+			'permission-denied',
+			`bastion is running as pid ${pid} and this user may not signal it`,
+			{ next: 'sudo bastion down' }
+		);
+	}
+
 	ctx.files.remove(path);
-	emit(ctx, globals, { stopped: pid }, () => `asked pid ${pid} to stop`);
+	emit(ctx, globals, { stopped: pid, outcome }, () =>
+		outcome === 'gone'
+			? `pid ${pid} had already exited; removed the pidfile`
+			: `asked pid ${pid} to stop`
+	);
 	return 0;
 }
 

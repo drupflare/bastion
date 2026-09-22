@@ -1,3 +1,4 @@
+import { ACKNOWLEDGE_FLAG } from '@drupflare/bastion';
 export interface OptionSpec {
 	flags: string;
 	description: string;
@@ -55,7 +56,11 @@ export const COMMANDS: CommandSpec[] = [
 		manual: 'running',
 		options: [
 			{ flags: '--no-dashboard', description: 'do not start the management listener' },
-			{ flags: '--mode <mode>', description: 'solo, hardened or isolated' }
+			{ flags: '--mode <mode>', description: 'solo, hardened or isolated' },
+			{
+				flags: ACKNOWLEDGE_FLAG,
+				description: 'accept that this mode puts no security boundary between tenants'
+			}
 		],
 		exits: [JSON_EXIT],
 		surface: null,
@@ -74,13 +79,19 @@ export const COMMANDS: CommandSpec[] = [
 		name: 'restart',
 		description: 'stop and start, keeping the configuration',
 		manual: 'running',
+		options: [
+			{
+				flags: ACKNOWLEDGE_FLAG,
+				description: 'accept that this mode puts no security boundary between tenants'
+			}
+		],
 		surface: null,
 		exempt: 'the dashboard cannot restart the process serving it'
 	},
 	{
 		group: 'lifecycle',
 		name: 'reload',
-		description: 'restart only the tenants whose generated capnp changed',
+		description: 'report which tenants are running an older configuration',
 		manual: 'running',
 		surface: '/'
 	},
@@ -89,7 +100,13 @@ export const COMMANDS: CommandSpec[] = [
 		name: 'serve',
 		description: 'run in the foreground; what a unit file calls',
 		manual: 'running',
-		options: [{ flags: '--mode <mode>', description: 'solo, hardened or isolated' }],
+		options: [
+			{ flags: '--mode <mode>', description: 'solo, hardened or isolated' },
+			{
+				flags: ACKNOWLEDGE_FLAG,
+				description: 'accept that this mode puts no security boundary between tenants'
+			}
+		],
 		surface: null,
 		exempt: 'a foreground process is what a unit file calls, not a browser'
 	},
@@ -398,9 +415,15 @@ export const COMMANDS: CommandSpec[] = [
 	{
 		group: 'sites',
 		name: 'site probe',
-		description: 'render the probe path and report what came back',
+		description: 'ask this box to serve the site and report what came back',
 		manual: 'sites',
 		args: [{ name: 'host', required: true, description: 'the hostname' }],
+		options: [
+			{
+				flags: '--public',
+				description: 'resolve the hostname instead, checking dns and the certificate too'
+			}
+		],
 		exits: [FINDING_EXIT],
 		surface: '/tenants'
 	},
