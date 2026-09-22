@@ -12,7 +12,7 @@
 <h1>Interface NodeRouteInput</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">NodeRouteInput</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#hassession">hasSession</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#localnode">localNode</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#method">method</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#pathname">pathname</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#primarynode">primaryNode</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#replicanodes">replicaNodes</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#site">site</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L20">core/src/cluster/route.ts:20</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L20">core/src/cluster/route.ts:20</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -37,41 +37,41 @@
 <div class="tsd-comment tsd-typography"><p>whether the request already carries a session</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L30">core/src/cluster/route.ts:30</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L30">core/src/cluster/route.ts:30</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="localnode"><span>local<wbr/>Node</span><a href="#localnode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">localNode</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>the node this request arrived at</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L24">core/src/cluster/route.ts:24</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L24">core/src/cluster/route.ts:24</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="method"><span>method</span><a href="#method" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">method</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L22">core/src/cluster/route.ts:22</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L22">core/src/cluster/route.ts:22</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="pathname"><code class="tsd-tag">Optional</code><span>pathname</span><a href="#pathname" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">pathname</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>the rewritten pathname; absent pins to the primary</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L28">core/src/cluster/route.ts:28</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L28">core/src/cluster/route.ts:28</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="primarynode"><span>primary<wbr/>Node</span><a href="#primarynode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">primaryNode</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L25">core/src/cluster/route.ts:25</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L25">core/src/cluster/route.ts:25</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="replicanodes"><span>replica<wbr/>Nodes</span><a href="#replicanodes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">replicaNodes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L26">core/src/cluster/route.ts:26</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L26">core/src/cluster/route.ts:26</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="site"><span>site</span><a href="#site" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">site</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/cluster/route.ts#L21">core/src/cluster/route.ts:21</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/route.ts#L21">core/src/cluster/route.ts:21</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

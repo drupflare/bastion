@@ -12,7 +12,7 @@
 <h1>Interface CostModel</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">CostModel</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#microvmbytes">microVmBytes</a><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#residentsitebytes">residentSiteBytes</a><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#sitestoragebytes">siteStorageBytes</a><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenantbaselinebytes">tenantBaselineBytes</a><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/capacity/model.ts#L105">core/src/capacity/model.ts:105</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/capacity/model.ts#L105">core/src/capacity/model.ts:105</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -34,28 +34,28 @@
 <div class="tsd-comment tsd-typography"><p><code>isolated</code> only</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/capacity/model.ts#L113">core/src/capacity/model.ts:113</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/capacity/model.ts#L113">core/src/capacity/model.ts:113</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="residentsitebytes"><span>resident<wbr/>Site<wbr/>Bytes</span><a href="#residentsitebytes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">residentSiteBytes</span><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a></div>
 <div class="tsd-comment tsd-typography"><p>worst-case resident RAM for one site</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/capacity/model.ts#L107">core/src/capacity/model.ts:107</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/capacity/model.ts#L107">core/src/capacity/model.ts:107</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sitestoragebytes"><span>site<wbr/>Storage<wbr/>Bytes</span><a href="#sitestoragebytes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">siteStorageBytes</span><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a></div>
 <div class="tsd-comment tsd-typography"><p>the site database plus its WAL</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/capacity/model.ts#L109">core/src/capacity/model.ts:109</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/capacity/model.ts#L109">core/src/capacity/model.ts:109</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenantbaselinebytes"><span>tenant<wbr/>Baseline<wbr/>Bytes</span><a href="#tenantbaselinebytes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenantBaselineBytes</span><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a></div>
 <div class="tsd-comment tsd-typography"><p>one workerd process plus its interpreter, SHARED across that tenant's sites</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/capacity/model.ts#L111">core/src/capacity/model.ts:111</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/capacity/model.ts#L111">core/src/capacity/model.ts:111</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
