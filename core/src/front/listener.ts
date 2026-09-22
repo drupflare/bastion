@@ -11,6 +11,14 @@ export interface ListenerSpec {
 	tls?: TlsMaterial[];
 	/** two listeners may hold one port, which is what makes a swap seamless */
 	reusePort?: boolean;
+	/**
+	 * A unix socket path, which takes the place of the address when it is set.
+	 *
+	 * Every adapter bastion serves to a tenant is reached this way: workerd addresses them as
+	 * `external` services at `unix:<path>`, so nothing an adapter holds is on a port and a tenant
+	 * cannot reach another tenant's store by guessing one.
+	 */
+	unix?: string;
 }
 
 export interface Listener {
@@ -80,9 +88,9 @@ export function bunListenerHost(): ListenerHost {
 		listen(spec, handler) {
 			const { hostname, port } = parseAddress(spec.address);
 			const server = bun.serve({
-				hostname,
-				port,
-				reusePort: spec.reusePort === true,
+				...(spec.unix === undefined
+					? { hostname, port, reusePort: spec.reusePort === true }
+					: { unix: spec.unix }),
 				...(spec.tls === undefined
 					? {}
 					: {
@@ -102,8 +110,8 @@ export function bunListenerHost(): ListenerHost {
 				}
 			});
 			return {
-				port: server.port,
-				hostname: server.hostname,
+				port: spec.unix === undefined ? server.port : 0,
+				hostname: spec.unix ?? server.hostname,
 				stop: async (force = false) => {
 					await server.stop(force);
 				}
@@ -117,22 +125,27 @@ export function recordingListenerHost(): ListenerHost & {
 	readonly bound: ListenerSpec[];
 	readonly stopped: number[];
 	readonly live: Listener[];
+	/** each listener's handler, in bind order, so a spec drives a socket without opening one */
+	readonly handlers: RequestHandler[];
 } {
 	const bound: ListenerSpec[] = [];
 	const stopped: number[] = [];
 	const live: Listener[] = [];
+	const handlers: RequestHandler[] = [];
 	let n = 0;
 	return {
 		bound,
 		stopped,
 		live,
-		listen(spec) {
+		handlers,
+		listen(spec, handler) {
 			bound.push(spec);
+			handlers.push(handler);
 			const id = n++;
 			const { hostname, port } = parseAddress(spec.address);
 			const listener: Listener = {
-				port,
-				hostname,
+				port: spec.unix === undefined ? port : 0,
+				hostname: spec.unix ?? hostname,
 				stop: async () => {
 					stopped.push(id);
 				}
