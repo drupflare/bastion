@@ -16,7 +16,34 @@ export type BindingSpec =
 	| { name: string; kind: 'kvNamespace'; service: string }
 	| { name: string; kind: 'r2Bucket'; service: string }
 	| { name: string; kind: 'queue'; service: string }
-	| { name: string; kind: 'unsafeEval' };
+	| { name: string; kind: 'json'; value: unknown }
+	| {
+			name: string;
+			kind: 'hyperdrive';
+			service: string;
+			database: string;
+			user: string;
+			password: string;
+			scheme: string;
+	  }
+	| { name: string; kind: 'unsafeEval' }
+	| {
+			name: string;
+			kind: 'wrapped';
+			/** an internal module declared by an extension in this same config */
+			moduleName: string;
+			entrypoint?: string;
+			/** bindings handed to the wrapper as `env`, reachable by nothing else */
+			innerBindings: BindingSpec[];
+	  };
+
+/** a javascript module workerd instantiates itself, which is how a wrapped binding gets its api */
+export interface ExtensionModuleSpec {
+	/** a fully qualified url with a non-file scheme, e.g. `bastion:d1` */
+	name: string;
+	internal: boolean;
+	esModule: string;
+}
 
 export interface DurableObjectSpec {
 	className: string;
@@ -72,6 +99,8 @@ export interface SocketSpec {
 export interface CapnpConfig {
 	services: ServiceSpec[];
 	sockets: SocketSpec[];
+	/** modules backing the wrapped bindings; workerd requires these to be internal */
+	extensionModules?: ExtensionModuleSpec[];
 }
 
 const INDENT = '\t';
@@ -104,8 +133,26 @@ function bindingLine(binding: BindingSpec): string {
 			return `(name = ${name}, r2Bucket = ${text(binding.service)})`;
 		case 'queue':
 			return `(name = ${name}, queue = ${text(binding.service)})`;
+		case 'json':
+			return `(name = ${name}, json = ${text(JSON.stringify(binding.value))})`;
+		// a real group in the schema rather than a shim: workerd pools and caches against whatever
+		// the designator names, so bastion points it at its own sql adapter
+		case 'hyperdrive':
+			return (
+				`(name = ${name}, hyperdrive = (designator = ${text(binding.service)}, ` +
+				`database = ${text(binding.database)}, user = ${text(binding.user)}, ` +
+				`password = ${text(binding.password)}, scheme = ${text(binding.scheme)}))`
+			);
 		case 'unsafeEval':
 			return `(name = ${name}, unsafeEval = void)`;
+		case 'wrapped': {
+			// how a binding workerd has no field for still reaches the worker as a real object: an
+			// internal module is handed the inner bindings and returns what `env.<name>` becomes
+			const inner = binding.innerBindings.map(bindingLine).join(', ');
+			return `(name = ${name}, wrapped = (moduleName = ${text(binding.moduleName)}, entrypoint = ${text(
+				binding.entrypoint ?? 'default'
+			)}, innerBindings = [${inner}]))`;
+		}
 	}
 }
 
@@ -222,7 +269,24 @@ export function renderConfig(config: CapnpConfig): string {
 	out.push(`${INDENT}],`);
 	out.push(`${INDENT}sockets = [`);
 	out.push(config.sockets.map((s) => `${INDENT.repeat(2)}${socketEntry(s)}`).join(',\n'));
-	out.push(`${INDENT}]`);
+	const modules = config.extensionModules ?? [];
+	if (modules.length === 0) {
+		out.push(`${INDENT}]`);
+	} else {
+		out.push(`${INDENT}],`);
+		out.push(`${INDENT}extensions = [`);
+		out.push(`${INDENT.repeat(2)}(modules = [`);
+		out.push(
+			modules
+				.map(
+					(m) =>
+						`${INDENT.repeat(3)}(name = ${text(m.name)}, internal = ${m.internal}, esModule = ${text(m.esModule)})`
+				)
+				.join(',\n')
+		);
+		out.push(`${INDENT.repeat(2)}])`);
+		out.push(`${INDENT}]`);
+	}
 	out.push(');');
 
 	for (const service of config.services) {
