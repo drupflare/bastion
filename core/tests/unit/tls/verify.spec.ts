@@ -3,7 +3,16 @@ import { generateKey } from '../../../src/tls/csr';
 import { assertChain, checkChain, splitChain } from '../../../src/tls/verify';
 import { localCa, selfSigned, signLeaf } from '../../../src/tls/x509';
 
-const NOW = Date.now();
+/**
+ * A minute ahead of module load, which is what makes this file deterministic.
+ *
+ * Every certificate below is generated during the run and stamps its own `notBefore` from the
+ * real clock, while each assertion checks it as of this constant. DER encodes time to the second,
+ * so a bare `Date.now()` here failed whenever generation crossed a second boundary -- about one
+ * run in three under load, and never in isolation. The offset dwarfs that and is far smaller than
+ * the 5 and 10 day offsets the expiry cases use.
+ */
+const NOW = Date.now() + 60_000;
 
 describe('splitChain', () => {
 	it('finds every certificate in a bundle', () => {
