@@ -1,0 +1,347 @@
+import type { BastionConfig, Context, TenantConfig } from '@drupflare/bastion';
+import {
+	BastionError,
+	DEFAULT_CAPABILITIES,
+	firecrackerHypervisor,
+	writeConfig
+} from '@drupflare/bastion';
+import { kv, table, yesNo } from '../format';
+import { emit, load, type Globals, type Loaded } from '../state';
+
+function write(ctx: Context, path: string | null, config: BastionConfig): string {
+	return writeConfig(ctx, path ?? `${ctx.cwd}/bastion.yml`, config);
+}
+
+function tenantOrRefuse(loaded: Loaded, name: string): TenantConfig {
+	const tenant = loaded.config.tenants.find((entry) => entry.name === name);
+	if (tenant === undefined) {
+		throw new BastionError('usage', `there is no tenant called ${name}`, {
+			next: 'bastion tenant list'
+		});
+	}
+	return tenant;
+}
+
+function replaceTenant(
+	loaded: Loaded,
+	name: string,
+	patch: (tenant: TenantConfig) => TenantConfig
+): BastionConfig {
+	return {
+		...loaded.config,
+		tenants: loaded.config.tenants.map((entry) => (entry.name === name ? patch(entry) : entry))
+	};
+}
+
+// #region tenants
+
+/**
+ * Stops a tenant and keeps everything it owns.
+ *
+ * The distinction from `tenant rm` is the whole command: suspending keeps the sites, the storage
+ * and the certificates, so resuming is one word rather than a restore.
+ */
+export function runTenantSuspend(ctx: Context, globals: Globals, name: string): void {
+	const loaded = load(ctx, globals);
+	const tenant = tenantOrRefuse(loaded, name);
+	if (tenant.suspended === true) {
+		emit(
+			ctx,
+			globals,
+			{ tenant: name, suspended: true, changed: false },
+			() => `${name} is already suspended`
+		);
+		return;
+	}
+	const path = write(
+		ctx,
+		loaded.path,
+		replaceTenant(loaded, name, (entry) => ({ ...entry, suspended: true }))
+	);
+	emit(ctx, globals, { tenant: name, suspended: true, changed: true, path }, () =>
+		[
+			kv([
+				['suspended', name],
+				['sites', String(tenant.sites.length)],
+				['state', 'kept']
+			]),
+			'',
+			`its sites stop answering on the next \`bastion reload\`. Resume with ` +
+				`\`bastion tenant resume ${name}\``
+		].join('\n')
+	);
+}
+
+export function runTenantResume(ctx: Context, globals: Globals, name: string): void {
+	const loaded = load(ctx, globals);
+	const tenant = tenantOrRefuse(loaded, name);
+	if (tenant.suspended !== true) {
+		emit(
+			ctx,
+			globals,
+			{ tenant: name, suspended: false, changed: false },
+			() => `${name} is not suspended`
+		);
+		return;
+	}
+	const path = write(
+		ctx,
+		loaded.path,
+		replaceTenant(loaded, name, ({ suspended: _was, ...rest }) => rest)
+	);
+	emit(
+		ctx,
+		globals,
+		{ tenant: name, suspended: false, changed: true, path },
+		() => `${name} resumed; run \`bastion reload\` to start it`
+	);
+}
+
+/** one tenant's egress policy, which is deny-by-default and therefore worth printing in full */
+export function runTenantEgress(ctx: Context, globals: Globals, name: string): void {
+	const loaded = load(ctx, globals);
+	const tenant = tenantOrRefuse(loaded, name);
+	const allow = tenant.egress?.allow ?? [];
+	emit(ctx, globals, { tenant: name, allow }, () =>
+		allow.length === 0
+			? `${name} has no allow list, so every outbound connection is denied`
+			: [
+					`${name} may reach:`,
+					...allow.map((entry) => `  ${entry}`),
+					'',
+					'everything else is denied'
+				].join('\n')
+	);
+}
+
+// #endregion
+
+// #region sites
+
+export function runSiteShow(ctx: Context, globals: Globals, host: string): void {
+	const loaded = load(ctx, globals);
+	const owner = loaded.config.tenants.find((tenant) =>
+		tenant.sites.some((site) => site.host === host)
+	);
+	const site = owner?.sites.find((entry) => entry.host === host);
+	if (owner === undefined || site === undefined) {
+		throw new BastionError('usage', `no tenant holds ${host}`, { next: 'bastion site list' });
+	}
+	const capabilities = { ...DEFAULT_CAPABILITIES, ...(owner.capabilities ?? {}) };
+	emit(ctx, globals, { site, tenant: owner.name, capabilities }, () =>
+		[
+			kv([
+				['host', site.host],
+				['tenant', owner.name],
+				['bundle', site.bundle],
+				['probe', site.probe],
+				['aliases', site.aliases?.join(', ') ?? '(none)'],
+				['primary node', site.primary ?? '(this node)'],
+				['replicas', site.replicas?.join(', ') ?? '(none)'],
+				['force https', yesNo(site.forceHttps === true)],
+				[
+					'verified',
+					site.verifiedAt === undefined ? 'no' : new Date(site.verifiedAt).toISOString()
+				]
+			]),
+			'',
+			table(
+				['capability', 'value'],
+				Object.entries(capabilities).map(([key, value]) => [key, String(value)])
+			)
+		].join('\n')
+	);
+}
+
+/**
+ * Asks the site to prove it booted, on a path the prefill cannot answer.
+ *
+ * A probe against a cached path proves the cache works and nothing else, which is why the profile
+ * carries the path rather than the command choosing one.
+ */
+export async function runSiteProbe(ctx: Context, globals: Globals, host: string): Promise<number> {
+	const loaded = load(ctx, globals);
+	const owner = loaded.config.tenants.find((tenant) =>
+		tenant.sites.some((site) => site.host === host)
+	);
+	const site = owner?.sites.find((entry) => entry.host === host);
+	if (owner === undefined || site === undefined) {
+		throw new BastionError('usage', `no tenant holds ${host}`, { next: 'bastion site list' });
+	}
+
+	const address = loaded.config.listeners.https?.address ?? '(no https listener)';
+	const url = `https://${host}/`;
+	let answered: { status: number; booted: string | null } | null = null;
+	let failure: string | null = null;
+	try {
+		const response = await ctx.fetch(url, { headers: { host } });
+		answered = { status: response.status, booted: response.headers.get('x-cfw-php-booted') };
+	} catch (error) {
+		failure = error instanceof Error ? error.message : String(error);
+	}
+
+	const ok = answered !== null && answered.status < 500;
+	emit(ctx, globals, { host, profile: site.probe, url, answered, failure, ok }, () =>
+		[
+			kv([
+				['site', host],
+				['profile', site.probe],
+				['listener', address],
+				['status', answered === null ? `unreachable: ${failure}` : String(answered.status)],
+				['booted', answered?.booted ?? '(header absent)']
+			]),
+			'',
+			ok ? 'the site answered' : 'the site did not answer; is bastion running?'
+		].join('\n')
+	);
+	return ok ? 0 : 3;
+}
+
+// #endregion
+
+// #region egress
+
+function editAllow(
+	ctx: Context,
+	globals: Globals,
+	tenant: string,
+	target: string,
+	change: (allow: string[]) => string[]
+): { allow: string[]; path: string } {
+	const loaded = load(ctx, globals);
+	const found = tenantOrRefuse(loaded, tenant);
+	const allow = change(found.egress?.allow ?? []);
+	const path = write(
+		ctx,
+		loaded.path,
+		replaceTenant(loaded, tenant, (entry) => ({ ...entry, egress: { allow } }))
+	);
+	void target;
+	return { allow, path };
+}
+
+/** adds one `host:port` to a tenant's allow list; everything outside it stays denied */
+export function runEgressAllow(
+	ctx: Context,
+	globals: Globals,
+	tenant: string,
+	target: string
+): void {
+	if (!/^[a-z0-9.*-]+:\d+$/i.test(target)) {
+		throw new BastionError('usage', `${target} is not a host:port`, {
+			next: `bastion egress allow ${tenant} smtp.example.edu:587`
+		});
+	}
+	const { allow } = editAllow(ctx, globals, tenant, target, (current) =>
+		current.includes(target) ? current : [...current, target].sort()
+	);
+	emit(
+		ctx,
+		globals,
+		{ tenant, target, allow },
+		() =>
+			`${tenant} may now reach ${target}; ${allow.length} rule${allow.length === 1 ? '' : 's'} in total`
+	);
+}
+
+export function runEgressDeny(
+	ctx: Context,
+	globals: Globals,
+	tenant: string,
+	target: string
+): number {
+	const loaded = load(ctx, globals);
+	const found = tenantOrRefuse(loaded, tenant);
+	if (!(found.egress?.allow ?? []).includes(target)) {
+		emit(
+			ctx,
+			globals,
+			{ tenant, target, changed: false },
+			() => `${tenant} was not allowed to reach ${target}; it is denied either way`
+		);
+		return 3;
+	}
+	const { allow } = editAllow(ctx, globals, tenant, target, (current) =>
+		current.filter((entry) => entry !== target)
+	);
+	emit(
+		ctx,
+		globals,
+		{ tenant, target, allow, changed: true },
+		() => `${tenant} can no longer reach ${target}`
+	);
+	return 0;
+}
+
+// #endregion
+
+// #region guests
+
+function guestOrRefuse(ctx: Context, globals: Globals, tenant: string) {
+	const loaded = load(ctx, globals);
+	if (loaded.config.mode !== 'isolated') {
+		throw new BastionError(
+			'capability-refused',
+			`there are no guests in \`${loaded.config.mode}\`; guests exist only in \`isolated\``,
+			{ next: 'bastion config set mode isolated' }
+		);
+	}
+	const hypervisor = firecrackerHypervisor();
+	const reason = hypervisor.unavailableReason(ctx);
+	if (reason !== null) throw new BastionError('driver-unreachable', reason);
+	const guest = hypervisor.list().find((entry) => entry.tenant === tenant);
+	if (guest === undefined) {
+		throw new BastionError('usage', `${tenant} has no guest running`, {
+			next: 'bastion vm list'
+		});
+	}
+	return { hypervisor, guest };
+}
+
+export function runVmShow(ctx: Context, globals: Globals, tenant: string): void {
+	const { guest } = guestOrRefuse(ctx, globals, tenant);
+	emit(ctx, globals, guest, () =>
+		kv([
+			['tenant', guest.tenant],
+			['state', guest.state],
+			['pid', String(guest.pid ?? '-')],
+			['chroot', guest.chroot]
+		])
+	);
+}
+
+/**
+ * Names the console rather than attaching to it.
+ *
+ * The jailer chroot is 0700 and the socket lives inside it, so attaching needs the privilege the
+ * CLI deliberately does not assume. Printing the exact command is the honest answer.
+ */
+export function runVmConsole(ctx: Context, globals: Globals, tenant: string): void {
+	const { guest } = guestOrRefuse(ctx, globals, tenant);
+	const socket = `${guest.chroot}/root/console.sock`;
+	emit(ctx, globals, { tenant, chroot: guest.chroot, socket }, () =>
+		[
+			kv([
+				['tenant', tenant],
+				['chroot', guest.chroot],
+				['console', socket]
+			]),
+			'',
+			`attach with: sudo socat - UNIX-CONNECT:${socket}`,
+			'the jailer chroot is 0700, so this needs the privilege bastion does not take for you'
+		].join('\n')
+	);
+}
+
+export async function runVmStop(ctx: Context, globals: Globals, tenant: string): Promise<void> {
+	const { hypervisor, guest } = guestOrRefuse(ctx, globals, tenant);
+	await hypervisor.stop(ctx, guest.tenant);
+	emit(
+		ctx,
+		globals,
+		{ tenant, stopped: true },
+		() => `${tenant}'s guest stopped; its state on disk is untouched`
+	);
+}
+
+// #endregion
