@@ -62,8 +62,9 @@ jobs:
           set -euo pipefail
           PIN=$(bun -e "import {defaultConfig} from './core/src/config/defaults'; console.log(defaultConfig().runtime.workerd.version)")
           echo "bastion pins workerd ${PIN}"
-          npm install --no-save --no-audit --no-fund "workerd@${PIN}"
-          BIN="$PWD/node_modules/workerd/bin/workerd"
+          mkdir -p "$RUNNER_TEMP/runtime"
+          npm install --prefix "$RUNNER_TEMP/runtime" --no-save --no-audit --no-fund "workerd@${PIN}"
+          BIN="$RUNNER_TEMP/runtime/node_modules/workerd/bin/workerd"
           "$BIN" --version
           echo "WORKERD_BINARY=$BIN" >> "$GITHUB_ENV"
       - name: Compile the Binary
@@ -169,8 +170,9 @@ jobs:
         run: |
           set -euo pipefail
           PIN=$(bun -e "import {defaultConfig} from './core/src/config/defaults'; console.log(defaultConfig().runtime.workerd.version)")
-          npm install --no-save --no-audit --no-fund "workerd@${PIN}"
-          echo "WORKERD_BINARY=$PWD/node_modules/workerd/bin/workerd" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/runtime"
+          npm install --prefix "$RUNNER_TEMP/runtime" --no-save --no-audit --no-fund "workerd@${PIN}"
+          echo "WORKERD_BINARY=$RUNNER_TEMP/runtime/node_modules/workerd/bin/workerd" >> "$GITHUB_ENV"
       - name: Bundle the Worker
         run: |
           set -euo pipefail
