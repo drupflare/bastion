@@ -99,6 +99,25 @@ services:
     ports:
       - '127.0.0.1:19443:9000'
 
+  chromium:
+    image: zenika/alpine-chrome@sha256:eb3378c1ed0079f94db054a5fe1aaa790a254ec0d6bbc67eda052420d86a179d
+    cap_add:
+      - SYS_ADMIN
+    command:
+      [
+        '--user-data-dir=/tmp/cdp-profile',
+        '--remote-debugging-address=0.0.0.0',
+        '--remote-debugging-port=9222',
+        'about:blank'
+      ]
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://127.0.0.1:9222/json/version || exit 1']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    ports:
+      - '127.0.0.1:19222:9222'
+
   node-b:
     build:
       context: ..
