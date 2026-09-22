@@ -142,3 +142,67 @@ export function scopeFor(role: 'operator' | 'tenant-admin' | 'tenant-viewer'): {
 		? { tenantOnly: false, hostMetrics: true }
 		: { tenantOnly: true, hostMetrics: false };
 }
+
+/**
+ * One Analytics Engine data point, as a Worker writes it.
+ *
+ * Cloudflare's own binding is `analyticsEngine @17 :ServiceDesignator` and is gated behind
+ * `--experimental`, which bastion does not pass: the same flag unlocks unsafe-eval, the worker
+ * loader and the debug port, and taking three of those to get one is not a trade worth making.
+ * So the binding is a wrapped module over this instead.
+ */
+export interface DataPoint {
+	indexes: string[];
+	doubles: number[];
+	blobs: string[];
+	at: number;
+	tenant: string;
+	site: string | null;
+}
+
+/** what a data point may carry; a write past one is truncated rather than refused */
+export const DATA_POINT_LIMITS = { indexes: 1, doubles: 20, blobs: 20, indexBytes: 96 } as const;
+
+/**
+ * A bounded ring of data points per tenant.
+ *
+ * Bounded because this is the exact shape that already cost this project a disk: miniflare's
+ * observability wrote every request into one unpruned file and reached 20.75 GB. A tenant looping
+ * on `writeDataPoint` fills a ring and evicts its own oldest rows rather than the host's free
+ * space.
+ */
+export class DataPointWindow {
+	private readonly points: DataPoint[] = [];
+	private readonly capacity: number;
+
+	constructor(capacity = 10_000) {
+		this.capacity = capacity;
+	}
+
+	write(point: DataPoint): void {
+		// truncate rather than refuse: Cloudflare's own binding returns void, so a caller has
+		// nowhere to see a rejection and would simply lose the write with no signal either way
+		this.points.push({
+			...point,
+			indexes: point.indexes
+				.slice(0, DATA_POINT_LIMITS.indexes)
+				.map((value) => value.slice(0, DATA_POINT_LIMITS.indexBytes)),
+			doubles: point.doubles.slice(0, DATA_POINT_LIMITS.doubles),
+			blobs: point.blobs.slice(0, DATA_POINT_LIMITS.blobs)
+		});
+		if (this.points.length > this.capacity) {
+			this.points.splice(0, this.points.length - this.capacity);
+		}
+	}
+
+	/** every point, newest last, optionally narrowed to one tenant */
+	all(tenant?: string): DataPoint[] {
+		return tenant === undefined
+			? [...this.points]
+			: this.points.filter((point) => point.tenant === tenant);
+	}
+
+	get size(): number {
+		return this.points.length;
+	}
+}
