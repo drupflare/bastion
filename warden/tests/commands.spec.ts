@@ -497,37 +497,81 @@ describe('lifecycle and operations', () => {
 	 * before rather than on whether anything moved. The runtime records the digest when it starts a
 	 * tenant, so an unstarted tenant is correctly out of date.
 	 */
-
 	it('reads a tenant nothing has started as out of date', async () => {
 		const { ctx, io } = harness();
-		expect(await run(ctx, ['reload'])).toBe(EXIT.FINDING);
+		expect(await run(ctx, ['reload', '--check'])).toBe(EXIT.FINDING);
 		expect(io.outText()).toContain('acme');
 	});
 
-	it('does not write the baseline itself, so a second run says the same thing', async () => {
+	it('does not write the baseline itself, so a second check says the same thing', async () => {
 		const { ctx, files } = harness();
-		await run(ctx, ['reload']);
+		await run(ctx, ['reload', '--check']);
 
 		const second = withDisk(files);
-		expect(await run(second.ctx, ['reload'])).toBe(EXIT.FINDING);
+		expect(await run(second.ctx, ['reload', '--check'])).toBe(EXIT.FINDING);
 	});
 
-	// "a tenant running the current configuration reads as unchanged" needs something to have
-	// actually started, since the runtime is what records the baseline; it is in the serving lane
-	/**
-	 * It said `1 tenant will restart`, exited 0, and restarted nothing.
-	 *
-	 * Measured in a container: raise a tenant's memory limit, run `reload`, and `memory.max` is
-	 * still the old value with the same pid serving. Reaching the running `serve` from a separate
-	 * CLI process is a mechanism bastion does not have, so the command must not imply the swap.
-	 */
+	it('changes nothing under --check, and says to run it without', async () => {
+		const { ctx, io, files } = harness();
+		await run(ctx, ['reload', '--check']);
+		expect(io.outText()).toContain('without --check');
+		expect(files.exists('/var/lib/bastion/reload.request')).toBe(false);
+	});
 
-	it('does not claim a restart it cannot perform, and names what applies it', async () => {
+	/**
+	 * Applying needs a running box, because the swap happens in the process that holds the tenants.
+	 *
+	 * `reload` used to print `1 tenant will restart`, exit 0 and restart nothing: an operator who
+	 * raised a memory limit was told it had been applied and kept serving on the old one. It refuses
+	 * rather than reporting a swap nothing performed.
+	 */
+	it('refuses to apply against a box that is not running', async () => {
 		const { ctx, io } = harness();
+		expect(await run(ctx, ['reload'])).toBe(EXIT.USAGE);
+		expect(io.errText()).toContain('not running');
+	});
+
+	it('asks the running process for the swap rather than doing it itself', async () => {
+		const { ctx, files } = harness({ '/var/lib/bastion/bastion.pid': '4242' });
+		// the outcome the running process would write, so the CLI has something to read back
+		setTimeout(() => {
+			files.writeText(
+				'/var/lib/bastion/reload.outcome',
+				JSON.stringify({ at: 0, swapped: ['acme'], failed: [] })
+			);
+		}, 5);
+		expect(await run(ctx, ['reload'])).toBe(EXIT.OK);
+		expect(files.exists('/var/lib/bastion/reload.request')).toBe(true);
+	});
+
+	it('reports which tenants were swapped, and that the rest kept their objects', async () => {
+		const { ctx, io, files } = harness({ '/var/lib/bastion/bastion.pid': '4242' });
+		setTimeout(() => {
+			files.writeText(
+				'/var/lib/bastion/reload.outcome',
+				JSON.stringify({ at: 0, swapped: ['acme'], failed: [] })
+			);
+		}, 5);
 		await run(ctx, ['reload']);
-		expect(io.outText()).not.toContain('will restart');
-		expect(io.outText()).toContain('Nothing has been restarted');
-		expect(io.outText()).toContain('bastion restart');
+		expect(io.outText()).toMatch(/swapped\s+acme/);
+		expect(io.outText()).toContain('kept their Durable Objects resident');
+	});
+
+	/** one tenant whose new configuration does not start must not be reported as applied */
+	it('exits 3 and names a tenant that did not come back', async () => {
+		const { ctx, io, files } = harness({ '/var/lib/bastion/bastion.pid': '4242' });
+		setTimeout(() => {
+			files.writeText(
+				'/var/lib/bastion/reload.outcome',
+				JSON.stringify({
+					at: 0,
+					swapped: [],
+					failed: [{ tenant: 'acme', reason: 'no bundle at /srv/gone' }]
+				})
+			);
+		}, 5);
+		expect(await run(ctx, ['reload'])).toBe(EXIT.FINDING);
+		expect(io.outText()).toContain('acme did not come back');
 	});
 
 	it('reload leaves a suspended tenant alone', async () => {
@@ -535,8 +579,8 @@ describe('lifecycle and operations', () => {
 		await run(ctx, ['tenant', 'suspend', 'acme']);
 
 		const second = withDisk(files);
-		await run(second.ctx, ['reload']);
-		expect(second.io.outText()).toContain('acme');
+		await run(second.ctx, ['reload', '--check']);
+		expect(second.io.outText()).toMatch(/suspended\s+acme/);
 	});
 
 	it('recycle exits 2 for a tenant that does not exist', async () => {
@@ -1348,5 +1392,97 @@ describe('a memory limit written the way the manual writes it', () => {
 		const store = memoryFiles({});
 		await run(withDisk(store).ctx, ['tenant', 'add', 'acme', '--memory', '512Mi']);
 		expect(await run(withDisk(store).ctx, ['config', 'validate'])).toBe(EXIT.OK);
+	});
+});
+
+/**
+ * A bundle or a template named as a url.
+ *
+ * The address is a literal in the public range so the checks run without a resolver: a hostname
+ * here would put a DNS lookup in the gate lane, and the refusals are covered against a stubbed
+ * resolver in `core/tests/unit/deploy/remote.spec.ts`.
+ */
+describe('a bundle named as a url', () => {
+	const PUBLIC = 'https://93.184.216.34/releases/payload-1.0.2.tar.gz';
+
+	function served(body = 'bundle-bytes'): Harness {
+		const base = harness();
+		return {
+			...base,
+			ctx: {
+				...base.ctx,
+				fetch: (() =>
+					Promise.resolve(
+						new Response(body, { headers: { 'content-length': String(body.length) } })
+					)) as Context['fetch']
+			}
+		};
+	}
+
+	it('downloads it, records where it landed, and deploys that', async () => {
+		const { ctx, io, files } = served();
+		expect(await run(ctx, ['deploy', 'www.example.edu', PUBLIC])).toBe(EXIT.OK);
+		expect(io.outText()).toContain('deployed');
+		expect(
+			files.readText('/var/lib/bastion/bundles/www.example.edu/payload-1.0.2.tar.gz')
+		).toBe('bundle-bytes');
+	});
+
+	it('writes the file into the config rather than the url, so a start never re-downloads', async () => {
+		const { ctx, files } = served();
+		expect(await run(ctx, ['site', 'add', 'new.example.edu', '--bundle', PUBLIC])).toBe(
+			EXIT.OK
+		);
+		const written = files.readText('/srv/bastion.yml');
+		expect(written).toContain('/var/lib/bastion/bundles/new.example.edu/payload-1.0.2.tar.gz');
+		expect(written).not.toContain('93.184.216.34');
+	});
+
+	it('refuses a digest that does not match what arrived', async () => {
+		const { ctx, io } = served();
+		expect(
+			await run(ctx, ['deploy', 'www.example.edu', PUBLIC, '--checksum', 'sha256:beef'])
+		).toBe(EXIT.USAGE);
+		expect(io.errText()).toContain('hashes to');
+	});
+
+	it('takes a digest that does match', async () => {
+		const { ctx } = served();
+		const digest = 'eb333942340dfa7da54597d78b894f35310289e75ec3a84137a197a37ab1d164';
+		expect(await run(ctx, ['deploy', 'www.example.edu', PUBLIC, '--checksum', digest])).toBe(
+			EXIT.OK
+		);
+	});
+
+	it('refuses plaintext until the operator says otherwise', async () => {
+		const { ctx, io } = served();
+		expect(await run(ctx, ['deploy', 'www.example.edu', 'http://93.184.216.34/p.tgz'])).toBe(
+			EXIT.USAGE
+		);
+		expect(io.errText()).toContain('plaintext');
+
+		const second = served();
+		expect(
+			await run(second.ctx, [
+				'deploy',
+				'www.example.edu',
+				'http://93.184.216.34/p.tgz',
+				'--insecure-source'
+			])
+		).toBe(EXIT.OK);
+	});
+
+	it('refuses a url pointing at this box, which is where the management listener is', async () => {
+		const { ctx, io } = served();
+		expect(await run(ctx, ['deploy', 'www.example.edu', 'https://127.0.0.1/p.tgz'])).toBe(
+			EXIT.USAGE
+		);
+		expect(io.errText()).toContain('127.0.0.0/8');
+	});
+
+	it('leaves a local path alone, so nothing about the existing form changes', async () => {
+		const { ctx, io } = harness({ '/srv/payload.tar.gz': 'bundle-bytes' });
+		expect(await run(ctx, ['deploy', 'www.example.edu', '/srv/payload.tar.gz'])).toBe(EXIT.OK);
+		expect(io.outText()).toContain('deployed');
 	});
 });
