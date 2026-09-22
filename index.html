@@ -1,0 +1,229 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>bastion - v1.0.0</title><link rel="icon" href="assets/favicon.png" type="image/png"/><meta name="description" content="Documentation for bastion"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">bastion - v1.0.0</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<h1>bastion - v1.0.0</h1></div>
+<div class="tsd-panel tsd-typography"><div style="display: flex; align-items: center; flex-direction: column;" align="center">
+    <img align="center" style="align-self: center; max-width: 256px" src="media/bastion.png" width="30%" alt="" />
+    <h1 style="text-align: center;">bastion</h1>
+    <p style="text-align: center;">A hardened operating environment for self-hosted workerd.</p>
+    <div align="center">
+        <img src="https://img.shields.io/github/v/release/drupflare/bastion">
+        <img src="https://img.shields.io/github/license/drupflare/bastion">
+        <img src="https://img.shields.io/github/stars/drupflare/bastion?style=flat">
+        <img src="https://img.shields.io/github/commit-activity/t/drupflare/bastion?color=violet">
+    </div>
+</div>
+<hr>
+<p>workerd is not a hardened multi-tenant sandbox, and its own repository says so. A private
+deployment running mutually untrusted tenants needs a VM, container or microVM boundary around it.
+Cloudflare Workers is workerd plus a hardened operating environment. bastion is that environment,
+as a single binary you run on your own hardware.</p>
+<h2 id="table-of-contents" class="tsd-anchor-link">Table of Contents<a href="#table-of-contents" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li><a href="#install">Install</a></li>
+<li><a href="#getting-started">Getting Started</a></li>
+<li><a href="#what-it-does">What It Does</a></li>
+<li><a href="#isolation-modes">Isolation Modes</a></li>
+<li><a href="#platform-limits">Platform Limits</a></li>
+<li><a href="#configuration">Configuration</a></li>
+<li><a href="#clustering">Clustering</a></li>
+<li><a href="#drivers">Drivers</a></li>
+<li><a href="#out-of-scope">Out of Scope</a></li>
+<li><a href="#documentation">Documentation</a></li>
+<li><a href="#development">Development</a></li>
+<li><a href="#license">License</a></li>
+</ul>
+<h2 id="install" class="tsd-anchor-link">Install<a href="#install" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<pre><code class="sh"><span class="hl-0">curl</span><span class="hl-1"> </span><span class="hl-2">-fsSL</span><span class="hl-1"> </span><span class="hl-3">https://github.com/drupflare/bastion/releases/latest/download/bastion-linux-x64</span><span class="hl-1"> </span><span class="hl-2">-o</span><span class="hl-1"> </span><span class="hl-3">bastion</span><br/><span class="hl-0">install</span><span class="hl-1"> </span><span class="hl-2">-m</span><span class="hl-1"> </span><span class="hl-4">0755</span><span class="hl-1"> </span><span class="hl-3">bastion</span><span class="hl-1"> </span><span class="hl-3">/usr/local/bin/bastion</span>
+</code><button type="button">Copy</button></pre>
+
+<p>A container image is published to GitHub Packages:</p>
+<pre><code class="sh"><span class="hl-0">docker</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-2">--rm</span><span class="hl-1"> </span><span class="hl-3">ghcr.io/drupflare/bastion:latest</span><span class="hl-1"> </span><span class="hl-3">bastion</span><span class="hl-1"> </span><span class="hl-2">--version</span>
+</code><button type="button">Copy</button></pre>
+
+<h2 id="getting-started" class="tsd-anchor-link">Getting Started<a href="#getting-started" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<pre><code class="sh"><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">init</span><br/><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">doctor</span><br/><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">tenant</span><span class="hl-1"> </span><span class="hl-3">add</span><span class="hl-1"> </span><span class="hl-3">acme</span><span class="hl-1"> </span><span class="hl-2">--cpu</span><span class="hl-1"> </span><span class="hl-4">2</span><span class="hl-1"> </span><span class="hl-2">--memory</span><span class="hl-1"> </span><span class="hl-3">4Gi</span><br/><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">site</span><span class="hl-1"> </span><span class="hl-3">add</span><span class="hl-1"> </span><span class="hl-3">www.example.edu</span><span class="hl-1"> </span><span class="hl-2">--tenant</span><span class="hl-1"> </span><span class="hl-3">acme</span><span class="hl-1"> </span><span class="hl-2">--bundle</span><span class="hl-1"> </span><span class="hl-3">./payload.tar.gz</span><br/><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">up</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>bastion doctor</code> reads the host rather than the platform name. It prints which isolation
+mechanisms are present, how each one was determined, which modes this host can run, and the limits
+table with its enforced and declared column.</p>
+<h2 id="what-it-does" class="tsd-anchor-link">What It Does<a href="#what-it-does" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>One workerd process per tenant, in every mode. A cgroup bounds that process for CPU, memory and
+pids, with the OOM policy set so the kernel takes one tenant rather than the box.</p>
+<p>A TLS front door in front of it. workerd carries exactly one keypair per socket and cannot route
+by hostname, so bastion terminates TLS itself with SNI across every configured host, and workerd
+listens behind it on a unix socket. The front door also owns what workerd has none of: per-IP and
+per-tenant rate limits, a request body cap, a connection cap, response compression and HTTP/2.</p>
+<p>Stores behind every binding. workerd ships the KV, R2 and Queues bindings and no stores, so bastion
+supplies them: SQLite, Redis or Valkey for KV; disk, S3, R2, B2, GCS, Azure Blob, SFTP or FTP for
+objects; SQLite, Postgres, MySQL or MariaDB for SQL. A cache with a memory tier in front of disk,
+which is a throughput decision rather than a preference.</p>
+<p>Backups that have been restored. Content-addressed at a fixed 16 KiB frame, encrypted, with a
+scheduled drill that restores into a scratch tenant and renders a page from it.</p>
+<p>The operational surface an institution needs: hash-chained audit, Prometheus with per-tenant
+labels, ACME with renewal, deny-by-default egress in two layers, staged updates pinned by binary
+digest, and a repair ladder that records how to undo everything it did.</p>
+<h2 id="isolation-modes" class="tsd-anchor-link">Isolation Modes<a href="#isolation-modes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<table>
+<thead>
+<tr>
+<th>mode</th>
+<th>boundary around each tenant</th>
+<th>multi-tenant safe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>solo</code></td>
+<td>the host, plus cgroups v2</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>hardened</code></td>
+<td>a network namespace, a syscall filter and an AppArmor profile</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>isolated</code></td>
+<td>one microVM per tenant</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<p><code>solo</code> and <code>hardened</code> refuse to start with more than one tenant unless the operator passes an
+acknowledgement flag. A Durable Object is a v8 isolate, and an isolate boundary is a correctness
+boundary rather than a security one. Cloudflare has published a working Spectre read against
+co-located Workers in production; on a single box, co-location is not something an attacker has to
+win.</p>
+<p>A mechanism that a preflight used to find and no longer finds never downgrades the mode. bastion
+refuses and names what disappeared.</p>
+<h2 id="platform-limits" class="tsd-anchor-link">Platform Limits<a href="#platform-limits" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Standalone workerd enforces no isolate memory cap, no CPU limit, no subrequest cap and no startup
+budget. bastion enforces what it can and declares the rest.</p>
+<table>
+<thead>
+<tr>
+<th>limit</th>
+<th>Cloudflare</th>
+<th>standalone workerd</th>
+<th>bastion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>isolate memory</td>
+<td>enforced</td>
+<td>none</td>
+<td>enforced per tenant, declared per isolate</td>
+</tr>
+<tr>
+<td>CPU</td>
+<td>enforced</td>
+<td>none</td>
+<td>enforced per tenant</td>
+</tr>
+<tr>
+<td>subrequests</td>
+<td>enforced</td>
+<td>none</td>
+<td>declared</td>
+</tr>
+<tr>
+<td>startup time</td>
+<td>enforced</td>
+<td>none</td>
+<td>declared</td>
+</tr>
+<tr>
+<td>alarms</td>
+<td>15 minutes</td>
+<td>15 minutes</td>
+<td>inherited</td>
+</tr>
+</tbody>
+</table>
+<p>The Cloudflare values are defaults and floors here. A configuration may raise any of them and may
+never lower one, because the site payload is optimised around them.</p>
+<h2 id="configuration" class="tsd-anchor-link">Configuration<a href="#configuration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p><code>bastion.yml</code>, validated against a published JSON Schema:</p>
+<pre><code class="yaml"><span class="hl-5"># yaml-language-server: $schema=https://bastion.drupflare.dev/schema.json</span><br/><span class="hl-6">version</span><span class="hl-1">: </span><span class="hl-4">1</span><br/><span class="hl-6">mode</span><span class="hl-1">: </span><span class="hl-7">isolated</span><br/><span class="hl-6">state</span><span class="hl-1">: </span><span class="hl-7">/var/lib/bastion</span><br/><span class="hl-6">listeners</span><span class="hl-1">:</span><br/><span class="hl-1">  </span><span class="hl-6">https</span><span class="hl-1">: { </span><span class="hl-6">address</span><span class="hl-1">: </span><span class="hl-7">&#39;0.0.0.0:443&#39;</span><span class="hl-1"> }</span><br/><span class="hl-1">  </span><span class="hl-6">management</span><span class="hl-1">: { </span><span class="hl-6">address</span><span class="hl-1">: </span><span class="hl-7">&#39;127.0.0.1:8787&#39;</span><span class="hl-1"> }</span><br/><span class="hl-6">runtime</span><span class="hl-1">:</span><br/><span class="hl-1">  </span><span class="hl-6">workerd</span><span class="hl-1">: { </span><span class="hl-6">version</span><span class="hl-1">: </span><span class="hl-7">&#39;1.20260828.1&#39;</span><span class="hl-1">, </span><span class="hl-6">verify</span><span class="hl-1">: </span><span class="hl-7">sha256</span><span class="hl-1"> }</span><br/><span class="hl-1">  </span><span class="hl-6">residency</span><span class="hl-1">: </span><span class="hl-7">evict</span><br/><span class="hl-6">tenants</span><span class="hl-1">:</span><br/><span class="hl-1">  - </span><span class="hl-6">name</span><span class="hl-1">: </span><span class="hl-7">acme</span><br/><span class="hl-1">    </span><span class="hl-6">limits</span><span class="hl-1">: { </span><span class="hl-6">cpu</span><span class="hl-1">: </span><span class="hl-7">&#39;2&#39;</span><span class="hl-1">, </span><span class="hl-6">memory</span><span class="hl-1">: </span><span class="hl-7">4Gi</span><span class="hl-1">, </span><span class="hl-6">maxSites</span><span class="hl-1">: </span><span class="hl-4">40</span><span class="hl-1"> }</span><br/><span class="hl-1">    </span><span class="hl-6">egress</span><span class="hl-1">: { </span><span class="hl-6">allow</span><span class="hl-1">: [</span><span class="hl-7">&#39;smtp.example.edu:587&#39;</span><span class="hl-1">] }</span><br/><span class="hl-1">    </span><span class="hl-6">capabilities</span><span class="hl-1">: { </span><span class="hl-6">codegen</span><span class="hl-1">: </span><span class="hl-2">false</span><span class="hl-1">, </span><span class="hl-6">diagnosticRoutes</span><span class="hl-1">: </span><span class="hl-2">false</span><span class="hl-1"> }</span><br/><span class="hl-1">    </span><span class="hl-6">sites</span><span class="hl-1">:</span><br/><span class="hl-1">      - </span><span class="hl-6">host</span><span class="hl-1">: </span><span class="hl-7">www.example.edu</span><br/><span class="hl-1">        </span><span class="hl-6">bundle</span><span class="hl-1">: </span><span class="hl-7">./payload.tar.gz</span><br/><span class="hl-1">        </span><span class="hl-6">probe</span><span class="hl-1">: </span><span class="hl-7">drupflare</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Secrets never appear in this file. <code>bastion config where</code> prints where each resolved value came
+from, and <code>bastion config set</code> writes back through the same validator the dashboard uses.</p>
+<h2 id="clustering" class="tsd-anchor-link">Clustering<a href="#clustering" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>workerd has no clustering: objects are always local to one runtime instance. bastion supplies the
+cluster.</p>
+<pre><code class="sh"><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">cluster</span><span class="hl-1"> </span><span class="hl-3">init</span><br/><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">cluster</span><span class="hl-1"> </span><span class="hl-3">provision</span><span class="hl-1"> </span><span class="hl-3">10.0.1.0/24</span><br/><span class="hl-0">bastion</span><span class="hl-1"> </span><span class="hl-3">cluster</span><span class="hl-1"> </span><span class="hl-3">place</span><span class="hl-1"> </span><span class="hl-3">www.example.edu</span><span class="hl-1"> </span><span class="hl-2">--replicas</span><span class="hl-1"> </span><span class="hl-4">1</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Each site has one primary node and zero or more replica nodes. Writes and anything off the serving
+path go to the primary; reads on the serving path are served locally where a replica exists.
+Children dial out to the control node and it never dials in.</p>
+<p><code>cluster provision</code> installs bastion on a host, a list or a CIDR over SSH. A range is dry-run by
+default, refuses above a /24 without an explicit flag, and skips a host that already has a bastion
+state directory rather than overwriting it.</p>
+<h2 id="drivers" class="tsd-anchor-link">Drivers<a href="#drivers" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Every driver sits behind one contract with a capability object that is probed once and cached.
+A probe that cannot run returns conservative answers, so an unknown endpoint degrades to more
+requests rather than to failed ones. Two rules bind every driver: never return partial content,
+and refuse a write it cannot honour rather than dropping part of it.</p>
+<p>Redis, SFTP, FTP and the three SQL servers take a client the operator supplies. The contracts are
+structural and probe for the optional halves, so node-redis and ioredis both satisfy the same one
+and bastion depends on neither.</p>
+<h2 id="out-of-scope" class="tsd-anchor-link">Out of Scope<a href="#out-of-scope" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Point-in-time recovery to the second. Snapshot, delta, retention, restore, verify, prune and drill
+are in.</p>
+<p>HTTP/3. Bun ships it, and it is off here: WebSocket over h3 is unsupported and bastion needs
+WebSockets, the <code>Alt-Svc</code> advertisement cannot be suppressed, and a campus firewall blocking UDP
+443 turns that into one failed QUIC attempt per client cached for a day. Front bastion with Caddy
+or nginx for h3.</p>
+<p>Content permissions. The CMS has roles; bastion has three infrastructure roles and a per-site owner
+token.</p>
+<p>Pairing with a hosted control plane. <code>bastion pair</code> refuses and names the reason.</p>
+<h2 id="documentation" class="tsd-anchor-link">Documentation<a href="#documentation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li><a href="media/MANUAL.md"><code>MANUAL.md</code></a> is the operator reference, also embedded in the binary: <code>bastion manual tls</code></li>
+<li><a href="media/commands.md"><code>docs/commands.md</code></a> is every command, generated from the program</li>
+<li><a href="media/ADVANCED_USAGE.md"><code>ADVANCED_USAGE.md</code></a> is worked flows</li>
+</ul>
+<h2 id="development" class="tsd-anchor-link">Development<a href="#development" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<pre><code class="sh"><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">install</span><br/><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">typecheck</span><br/><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">test</span><br/><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">check:reachability</span><br/><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">build:binary</span>
+</code><button type="button">Copy</button></pre>
+
+<p>The gate lane is hermetic and runs in under two seconds. Anything needing a live dependency is in
+the e2e lane behind an explicit flag:</p>
+<pre><code class="sh"><span class="hl-8">REQUIRE_PAYLOAD</span><span class="hl-1">=</span><span class="hl-3">1</span><span class="hl-1"> </span><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">test:e2e</span><span class="hl-1"> </span><span class="hl-5"># a real workerd and the release payload</span><br/><span class="hl-8">REQUIRE_DOCKER</span><span class="hl-1">=</span><span class="hl-3">1</span><span class="hl-1"> </span><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">test:e2e</span><span class="hl-1">  </span><span class="hl-5"># the compose stack: redis, minio, postgres, an ssh target</span><br/><span class="hl-8">REQUIRE_CLUSTER</span><span class="hl-1">=</span><span class="hl-3">1</span><span class="hl-1"> </span><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">test:e2e</span><span class="hl-1"> </span><span class="hl-5"># two nodes</span><br/><span class="hl-8">REQUIRE_KVM</span><span class="hl-1">=</span><span class="hl-3">1</span><span class="hl-1"> </span><span class="hl-0">bun</span><span class="hl-1"> </span><span class="hl-3">run</span><span class="hl-1"> </span><span class="hl-3">test:e2e</span><span class="hl-1">     </span><span class="hl-5"># the isolated lane</span>
+</code><button type="button">Copy</button></pre>
+
+<h2 id="license" class="tsd-anchor-link">License<a href="#license" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>MIT</p>
+</div></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details"><a href="#table-of-contents"><span>Table of <wbr/>Contents</span></a><a href="#install"><span>Install</span></a><a href="#getting-started"><span>Getting <wbr/>Started</span></a><a href="#what-it-does"><span>What <wbr/>It <wbr/>Does</span></a><a href="#isolation-modes"><span>Isolation <wbr/>Modes</span></a><a href="#platform-limits"><span>Platform <wbr/>Limits</span></a><a href="#configuration"><span>Configuration</span></a><a href="#clustering"><span>Clustering</span></a><a href="#drivers"><span>Drivers</span></a><a href="#out-of-scope"><span>Out of <wbr/>Scope</span></a><a href="#documentation"><span>Documentation</span></a><a href="#development"><span>Development</span></a><a href="#license"><span>License</span></a></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="modules.html">bastion - v1.0.0</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>
