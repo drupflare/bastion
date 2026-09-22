@@ -28,6 +28,34 @@ one drains, so nothing is unbound in between.
 Contradicts a sibling memory recorded against an older bun. One SQLite implementation therefore
 serves the gate lane, a node install and the compiled binary, and `bun:sqlite` is used nowhere.
 
+### `isolated` boots a guest
+
+paisley-park, Ubuntu 24.04, kernel 6.8.0, Ryzen 9 9900X on bare metal, 2026-09-22. Firecracker
+1.17.0 through the jailer, guest kernel 6.1.128, load average 0.56 to 0.60 across the run.
+
+`bastion`'s own `firecrackerHypervisor().create()` places the guest's files, starts the jailer and
+writes the console. The guest reaches userspace and powers itself off. `REQUIRE_KVM=1` runs it, and
+`core/scripts/microvm-rig.sh` builds the hypervisor, kernel and root filesystem it needs.
+
+| reading                                     | value                                  |
+| ------------------------------------------- | -------------------------------------- |
+| guest kernel to userspace                   | about 0.6 s of guest time              |
+| `create()` to the guest powering itself off | 1.65 s wall, median of 5, spread 18 ms |
+
+The wall figure includes `docker exec` and the jailer's chroot setup, so it bounds a tenant's cold
+start rather than measuring it. Memory per guest against the per-tenant-process baseline is still
+open, and stays in the table below.
+
+The first boot found three defects, each of which made every guest die on startup and none of which
+the unit lane could see. The chroot was computed without the path component the jailer inserts, and
+without following the symlink the jailer resolves, so bastion wrote the guest's configuration to a
+directory nothing read. Nothing placed the kernel or the root filesystem inside the chroot, so
+firecracker chrooted and then opened a path that no longer named anything. The serial console was
+discarded, so a guest that failed to boot reported the failure nowhere.
+
+That is the shape this project already pays for elsewhere: argv and refusals scored green while the
+thing they described had never run once.
+
 ## Inherited, and not re-run
 
 `J/request` and `J/render` are measured for both runtimes on one RAPL counter and **are at
@@ -51,14 +79,12 @@ Each of these needs a Linux host with the named mechanism. None of them is in CI
 | the release payload runs unmodified under bastion's generated capnp, with `unsafeEval: false` | a workerd binary and the published payload    | the two claims are only jointly meaningful, and the raw compiled-module seam is an inference until a boot reads it |
 | Durable Object persistence under power loss                                                   | a host that can be hard-killed                | `localDisk` is the one storage path nobody has pulled the plug on                                                  |
 | `residency: pin` against `evict`                                                              | a host with enough RAM to hold the pinned set | one flag separates them, so the cost is priced rather than assumed                                                 |
-| microVM cost per tenant                                                                       | `/dev/kvm`                                    | cold start, memory per tenant, and what a VM costs against the per-tenant-process baseline                         |
-| `isolated` booting a guest at all                                                             | `/dev/kvm`, a kernel image and a rootfs       | the argv, the jailer chroot mode and the preflight refusal are unit-tested; nothing has booted a guest             |
+| memory per tenant under `isolated`                                                            | `/dev/kvm` and several tenants at once        | a guest boots, but what one costs against the per-tenant-process baseline is unread                                |
 | the per-site resident cost on real hardware                                                   | any Linux host running sites                  | it is the term the capacity model currently carries as `assumed`                                                   |
 
-`isolated` is the row that bounds what may be claimed. Its refusals and its argv are asserted in
-the gate lane, including that `--enable-pci` is never emitted, which is what closes CVE-2026-5747
-by construction. What has never happened is a guest booting, so the mode is implemented and
-unexercised rather than working.
+The memory row is what now bounds a capacity answer for `isolated`. A guest boots and the mode
+works; what a rack of them costs is a different reading, and the capacity model carries it as
+`assumed` until a host takes it.
 
 The per-site cost row is the one that improves the product rather than a document. Every capacity answer
 carries the weakest provenance of its inputs, so until a host measures its own per-site cost, every
