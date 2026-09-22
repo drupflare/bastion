@@ -24,6 +24,10 @@ export interface Guest {
 	pid: number | null;
 	/** where the jailer put this guest's chroot */
 	chroot: string;
+	/** the host side of the vsock socket, which the jailer places inside the chroot */
+	vsock: string;
+	/** where this guest's serial console is written; the only place a failed boot says why */
+	console: string;
 }
 
 /**

@@ -6,9 +6,11 @@ import { memoryIo } from '../../../src/io';
 import {
 	assertVmmArgvSafe,
 	CHROOT_MODE,
+	chrootFor,
 	firecrackerConfig,
 	firecrackerHypervisor,
 	FORBIDDEN_VMM_FLAGS,
+	GUEST_PATHS,
 	jailerArgv
 } from '../../../src/isolation/firecracker';
 import type { GuestSpec } from '../../../src/isolation/hypervisor';
@@ -26,7 +28,15 @@ const spec: GuestSpec = {
 };
 
 function harness(seed: Record<string, string> = {}) {
-	const files = memoryFiles({ '/dev/kvm': '', '/usr/bin/jailer': '', ...seed });
+	const files = memoryFiles({
+		'/dev/kvm': '',
+		'/usr/bin/jailer': '',
+		[spec.kernel]: 'vmlinux',
+		[spec.rootfs]: 'rootfs',
+		[spec.state]: 'state',
+		[spec.config]: 'capnp',
+		...seed
+	});
 	const runner = scriptedRunner();
 	return {
 		ctx: { ...defaultContext(), files, runner, io: memoryIo(), env: {}, now: () => 0 },
@@ -41,7 +51,26 @@ describe('firecrackerConfig', () => {
 	});
 
 	it('crosses adapter traffic on vsock, so the guest opens no socket bastion did not give it', () => {
-		expect(firecrackerConfig(spec).vsock).toEqual({ guest_cid: 3, uds_path: spec.vsockUds });
+		expect(firecrackerConfig(spec).vsock).toEqual({
+			guest_cid: 3,
+			uds_path: GUEST_PATHS.vsock
+		});
+	});
+
+	/**
+	 * The config is read by firecracker AFTER the jailer has chrooted, so a host path in it names
+	 * nothing. The driver emitted host paths and placed no files, so every guest it started died
+	 * on `Unable to open or read from the configuration file`.
+	 */
+	it('names every file where the guest will find it rather than where the host holds it', () => {
+		const config = firecrackerConfig(spec);
+		expect(config['boot-source'].kernel_image_path).toBe(GUEST_PATHS.kernel);
+		expect(config.drives.map((drive) => drive.path_on_host)).toEqual([
+			GUEST_PATHS.rootfs,
+			GUEST_PATHS.state,
+			GUEST_PATHS.config
+		]);
+		for (const path of Object.values(GUEST_PATHS)) expect(path.startsWith('/')).toBe(true);
 	});
 
 	it('mounts the root filesystem read only and the state writable', () => {
@@ -114,6 +143,60 @@ describe('firecrackerHypervisor', () => {
 		await firecrackerHypervisor({ platform: 'linux' }).create(ctx, spec);
 		expect(runner.calls[0]?.command).toBe('/usr/bin/jailer');
 		expect(runner.calls[0]?.mode).toBe('spawn');
+	});
+
+	/**
+	 * The jailer inserts the exec file's own name, so a chroot computed without it is a directory
+	 * the jailer never looks in. bastion wrote the config to one and firecracker aborted.
+	 */
+	it('puts the chroot where the jailer will actually look for it', () => {
+		expect(chrootFor('acme', '/usr/bin/firecracker', '/srv/bastion/jail')).toBe(
+			'/srv/bastion/jail/firecracker/bastion-acme/root'
+		);
+	});
+
+	/**
+	 * A pinned binary is normally reached through a stable symlink, and the jailer canonicalizes
+	 * `--exec-file` before naming the chroot after it. Computing from the configured path put the
+	 * guest's files in a directory the jailer never built.
+	 */
+	it('follows a symlinked firecracker to the name the jailer will use', async () => {
+		const { ctx, files, runner } = harness({ '/opt/fc/firecracker-1.17.0': '' });
+		const resolved = '/opt/fc/firecracker-1.17.0';
+		ctx.files = { ...files, realpath: (path) => (path === '/rig/fc' ? resolved : path) };
+		const guest = await firecrackerHypervisor({
+			platform: 'linux',
+			firecracker: '/rig/fc'
+		}).create(ctx, spec);
+		expect(guest.chroot).toBe(chrootFor('acme', resolved, '/srv/bastion/jail'));
+		expect(runner.calls[0]?.args).toContain(resolved);
+	});
+
+	it('places every file the guest boots from inside the chroot', async () => {
+		const { ctx, files } = harness();
+		const guest = await firecrackerHypervisor({ platform: 'linux' }).create(ctx, spec);
+		expect(files.readText(`${guest.chroot}${GUEST_PATHS.kernel}`)).toBe('vmlinux');
+		expect(files.readText(`${guest.chroot}${GUEST_PATHS.rootfs}`)).toBe('rootfs');
+		expect(files.readText(`${guest.chroot}${GUEST_PATHS.state}`)).toBe('state');
+		expect(files.readText(`${guest.chroot}${GUEST_PATHS.config}`)).toBe('capnp');
+	});
+
+	/** the jailer drops firecracker to this uid, so a state drive it cannot write is a dead guest */
+	it('hands the state drive to the uid the jailer drops to, and keeps the rest read only', async () => {
+		const { ctx, files } = harness();
+		const guest = await firecrackerHypervisor({ platform: 'linux', uid: 700, gid: 700 }).create(
+			ctx,
+			spec
+		);
+		expect(files.owner(`${guest.chroot}${GUEST_PATHS.state}`)).toEqual({ uid: 700, gid: 700 });
+		expect(files.mode(`${guest.chroot}${GUEST_PATHS.state}`)).toBe(0o600);
+		expect(files.mode(`${guest.chroot}${GUEST_PATHS.config}`)).toBe(0o400);
+	});
+
+	it('reports the host side of the vsock socket, which the jailer put in the chroot', async () => {
+		const { ctx } = harness();
+		const guest = await firecrackerHypervisor({ platform: 'linux' }).create(ctx, spec);
+		expect(guest.vsock).toBe(`${guest.chroot}${GUEST_PATHS.vsock}`);
 	});
 
 	it('refuses on a host that is not linux, whatever else is present', () => {
