@@ -3,14 +3,15 @@ import {
 	BastionError,
 	DEFAULT_CAPABILITIES,
 	firecrackerHypervisor,
+	parseAddress,
 	probeProfile,
 	writeConfig
 } from '@drupflare/bastion';
 import { kv, table, yesNo } from '../format';
-import { emit, load, type Globals, type Loaded } from '../state';
+import { emit, load, writePath, type Globals, type Loaded } from '../state';
 
-function write(ctx: Context, path: string | null, config: BastionConfig): string {
-	return writeConfig(ctx, path ?? `${ctx.cwd}/bastion.yml`, config);
+function write(ctx: Context, globals: Globals, loaded: Loaded, config: BastionConfig): string {
+	return writeConfig(ctx, writePath(ctx, globals, loaded), config);
 }
 
 function tenantOrRefuse(loaded: Loaded, name: string): TenantConfig {
@@ -56,7 +57,8 @@ export function runTenantSuspend(ctx: Context, globals: Globals, name: string): 
 	}
 	const path = write(
 		ctx,
-		loaded.path,
+		globals,
+		loaded,
 		replaceTenant(loaded, name, (entry) => ({ ...entry, suspended: true }))
 	);
 	emit(ctx, globals, { tenant: name, suspended: true, changed: true, path }, () =>
@@ -87,7 +89,8 @@ export function runTenantResume(ctx: Context, globals: Globals, name: string): v
 	}
 	const path = write(
 		ctx,
-		loaded.path,
+		globals,
+		loaded,
 		replaceTenant(loaded, name, ({ suspended: _was, ...rest }) => rest)
 	);
 	emit(
@@ -155,12 +158,46 @@ export function runSiteShow(ctx: Context, globals: Globals, host: string): void 
 }
 
 /**
+ * Which address the probe dials, and what it will not have checked as a result.
+ *
+ * The local listener, so the answer is about THIS box. Building the url out of the hostname and
+ * letting DNS choose the destination is how `site probe www.example.edu` on a box with no DNS
+ * record reached IANA's example server over the public internet, read its 200, and reported the
+ * site answering. During a migration that is the machine being migrated OFF, which is the one
+ * moment the command exists for and the one answer it must not give.
+ *
+ * http where there is a listener, because the loopback hop is inside the box and a self-signed
+ * certificate on the https one would fail a chain check for a reason that has nothing to do with
+ * whether the worker serves.
+ *
+ * The chain goes unchecked only on loopback, where the request cannot leave the machine. An https
+ * listener on a routable address is verified like any other, and a chain that does not verify
+ * there is a real finding rather than noise to suppress.
+ */
+function probeTarget(config: BastionConfig): { url: string; verified: boolean } | null {
+	const http = config.listeners.http?.address;
+	if (http !== undefined) return { url: `http://${http}/`, verified: true };
+	const https = config.listeners.https?.address;
+	if (https === undefined) return null;
+	const host = parseAddress(https).hostname;
+	const local = host === '127.0.0.1' || host === '::1' || host === 'localhost';
+	return { url: `https://${https}/`, verified: !local };
+}
+
+/**
  * Asks the site to prove it booted, on a path the prefill cannot answer.
  *
  * A probe against a cached path proves the cache works and nothing else, which is why the profile
  * carries the path rather than the command choosing one.
+ *
+ * `--public` resolves the hostname instead, for an operator confirming the whole path after a
+ * cutover: DNS, the certificate and anything in front. It answers a different question and says so.
  */
-export async function runSiteProbe(ctx: Context, globals: Globals, host: string): Promise<number> {
+export async function runSiteProbe(
+	ctx: Context,
+	globals: Globals & { public?: boolean },
+	host: string
+): Promise<number> {
 	const loaded = load(ctx, globals);
 	const owner = loaded.config.tenants.find((tenant) =>
 		tenant.sites.some((site) => site.host === host)
@@ -170,15 +207,26 @@ export async function runSiteProbe(ctx: Context, globals: Globals, host: string)
 		throw new BastionError('usage', `no tenant holds ${host}`, { next: 'bastion site list' });
 	}
 
-	const address = loaded.config.listeners.https?.address ?? '(no https listener)';
-	const url = `https://${host}/`;
+	const through = globals.public === true;
+	const target = through
+		? { url: `https://${host}/`, verified: true }
+		: probeTarget(loaded.config);
+	if (target === null) {
+		throw new BastionError('config-invalid', 'this box binds no listener to probe', {
+			next: 'bastion config set listeners.http.address'
+		});
+	}
+
 	// the header comes from the profile: an arbitrary worker sets none, and demanding one would
 	// fail a site that is answering perfectly well
 	const profile = probeProfile(site.probe);
 	let answered: { status: number; booted: string | null } | null = null;
 	let failure: string | null = null;
 	try {
-		const response = await ctx.fetch(url, { headers: { host } });
+		const response = await ctx.fetch(target.url, {
+			headers: { host },
+			...(target.verified ? {} : { tls: { rejectUnauthorized: false } })
+		} as RequestInit);
 		answered = {
 			status: response.status,
 			booted: profile.bootHeader === null ? null : response.headers.get(profile.bootHeader)
@@ -188,23 +236,47 @@ export async function runSiteProbe(ctx: Context, globals: Globals, host: string)
 	}
 
 	const ok = answered !== null && answered.status < 500;
-	emit(ctx, globals, { host, profile: site.probe ?? null, url, answered, failure, ok }, () =>
-		[
-			kv([
-				['site', host],
-				['profile', site.probe ?? '(none)'],
-				['listener', address],
-				['status', answered === null ? `unreachable: ${failure}` : String(answered.status)],
-				[
-					'booted',
-					profile.bootHeader === null
-						? '(profile sets no boot header)'
-						: (answered?.booted ?? '(header absent)')
-				]
-			]),
-			'',
-			ok ? 'the site answered' : 'the site did not answer; is bastion running?'
-		].join('\n')
+	emit(
+		ctx,
+		globals,
+		{
+			host,
+			profile: site.probe ?? null,
+			url: target.url,
+			reached: through ? 'dns' : 'this box',
+			chainVerified: target.verified,
+			answered,
+			failure,
+			ok
+		},
+		() =>
+			[
+				kv([
+					['site', host],
+					['profile', site.probe ?? '(none)'],
+					['dialled', target.url],
+					['reached', through ? 'whatever dns answers for this host' : 'this box'],
+					[
+						'status',
+						answered === null ? `unreachable: ${failure}` : String(answered.status)
+					],
+					[
+						'booted',
+						profile.bootHeader === null
+							? '(profile sets no boot header)'
+							: (answered?.booted ?? '(header absent)')
+					]
+				]),
+				...(target.verified
+					? []
+					: ['', 'the certificate chain was not checked; run `bastion cert list`']),
+				'',
+				ok
+					? through
+						? 'the site answered, though not necessarily from this box'
+						: 'this box served the site'
+					: 'the site did not answer; is bastion running?'
+			].join('\n')
 	);
 	return ok ? 0 : 3;
 }
@@ -225,7 +297,8 @@ function editAllow(
 	const allow = change(found.egress?.allow ?? []);
 	const path = write(
 		ctx,
-		loaded.path,
+		globals,
+		loaded,
 		replaceTenant(loaded, tenant, (entry) => ({ ...entry, egress: { allow } }))
 	);
 	void target;
