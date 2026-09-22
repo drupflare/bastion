@@ -1,9 +1,6 @@
 import type { Context } from '@drupflare/bastion';
 import {
 	BastionError,
-	LARGE_RANGE_FLAG,
-	MigrationRun,
-	NodeRegistry,
 	buildPlan,
 	capacity,
 	checkRange,
@@ -11,35 +8,56 @@ import {
 	evaluateOffer,
 	expandCidr,
 	installCommands,
+	JOIN_TOKEN_TTL_MS,
+	joinCluster,
+	LARGE_RANGE_FLAG,
+	MembershipStore,
+	MigrationRun,
+	NodeCredentials,
+	NodeRegistry,
+	PlacementStore,
 	planPlacement,
 	planPromotion,
 	preflight,
 	provision,
 	readHost,
 	refusingTransport,
+	reportOf,
+	UNREACHABLE_AFTER_MS,
 	writeConfig,
+	type ClusterNode,
 	type DiscoveredSite,
 	type SiteProgress
 } from '@drupflare/bastion';
 import { kv, table } from '../format';
-import { emit, load, writePath, type Globals } from '../state';
+import { emit, load, writePath, type Globals, type Loaded } from '../state';
+
+/**
+ * Every node, read from wherever this node actually keeps it.
+ *
+ * The control node holds the registry; a child holds the copy its last heartbeat brought back.
+ * Neither is invented here: this command used to build an empty registry, insert only itself, and
+ * print a one-row cluster on every box in it.
+ */
+export function clusterNodes(ctx: Context, loaded: Loaded): ClusterNode[] {
+	if (loaded.config.cluster?.role === 'control') {
+		return new NodeRegistry(ctx, loaded.state).list();
+	}
+	return new MembershipStore(ctx, loaded.state).read()?.nodes ?? [];
+}
 
 export function runClusterNodes(ctx: Context, globals: Globals): void {
 	const loaded = load(ctx, globals);
-	const registry = new NodeRegistry(ctx);
-	const self = loaded.config.cluster?.node;
-	if (self !== undefined) {
-		registry.join(self.id, loaded.config.listeners.management.address, self.labels ?? {});
-	}
-	const nodes = registry.list();
+	const nodes = clusterNodes(ctx, loaded);
 	emit(ctx, globals, { nodes }, () =>
 		nodes.length === 0
 			? 'this node is not in a cluster; run `bastion cluster init`'
 			: table(
-					['node', 'address', 'state', 'last seen'],
+					['node', 'address', 'serves', 'state', 'last seen'],
 					nodes.map((node) => [
 						node.id,
 						node.address,
+						node.serves,
 						node.state,
 						new Date(node.lastSeenAt).toISOString()
 					])
@@ -53,23 +71,40 @@ export function runClusterPlace(
 	site: string
 ): void {
 	const loaded = load(ctx, globals);
-	const registry = new NodeRegistry(ctx);
 	const self = loaded.config.cluster?.node;
 	if (self === undefined) {
 		throw new BastionError('usage', 'this node is not in a cluster', {
 			next: 'bastion cluster init'
 		});
 	}
-	registry.join(self.id, loaded.config.listeners.management.address, self.labels ?? {});
+	if (loaded.config.cluster?.role !== 'control') {
+		throw new BastionError('usage', 'placement is decided by the control node', {
+			next: 'bastion cluster status'
+		});
+	}
+
+	const registry = new NodeRegistry(ctx, loaded.state);
+	// the control node counts itself, because it serves sites like any other node and a cluster of
+	// one would otherwise have nowhere to put anything. Through `reportOf`, so it advertises the
+	// same way a child does: registering its own bind address told every peer to dial `0.0.0.0`
+	const me = reportOf(loaded.config, null);
+	registry.join(me.id, me.address, me.labels, me.serves);
+
 	const tenant =
 		loaded.config.tenants.find((entry) => entry.sites.some((s) => s.host === site))?.name ?? '';
 	if (tenant === '') throw new BastionError('usage', `no tenant holds ${site}`);
+
+	const store = new PlacementStore(ctx, loaded.state);
 	const placed = planPlacement({
 		site,
 		tenant,
 		nodes: registry.list(),
-		replicas: Number(globals.replicas ?? '0')
+		replicas: Number(globals.replicas ?? '0'),
+		existing: store.all()
 	});
+	// written, not just printed: a placement nothing records is one no child ever hears about
+	store.put(placed);
+
 	emit(ctx, globals, placed, () =>
 		kv([
 			['site', placed.site],
@@ -209,11 +244,14 @@ export function runMigratePlan(ctx: Context, globals: Globals, source: string): 
  * Writes the role into the configuration rather than holding it in memory, because a cluster that
  * forgets what it is on restart is one that re-elects itself every boot.
  */
-export function runClusterInit(ctx: Context, globals: Globals & { node?: string }): void {
+export function runClusterInit(
+	ctx: Context,
+	globals: Globals & { node?: string; rotate?: boolean }
+): void {
 	const loaded = load(ctx, globals);
-	if (loaded.config.cluster?.role === 'control') {
+	if (loaded.config.cluster?.role === 'control' && globals.rotate !== true) {
 		throw new BastionError('usage', 'this node is already the control node', {
-			next: 'bastion cluster status'
+			next: 'bastion cluster init --rotate'
 		});
 	}
 	const id = globals.node ?? loaded.config.cluster?.node.id ?? 'node-a';
@@ -225,15 +263,29 @@ export function runClusterInit(ctx: Context, globals: Globals & { node?: string 
 		}
 	};
 	writeConfig(ctx, writePath(ctx, globals, loaded), config);
-	emit(ctx, globals, { role: 'control', node: id }, () =>
+
+	// the token is minted here rather than on demand, because a control node with no outstanding
+	// token accepts no child and nothing would say so until a join failed
+	const token = new NodeCredentials(ctx, loaded.state).mintJoinToken();
+	const address = loaded.config.listeners.management.address;
+	if (globals.json === true) {
+		ctx.io.out(JSON.stringify({ role: 'control', node: id, address }));
+		ctx.io.err(token);
+		return;
+	}
+	ctx.io.out(
 		[
 			kv([
 				['role', 'control'],
 				['node', id],
-				['listening on', loaded.config.listeners.management.address]
+				['listening on', address]
 			]),
 			'',
-			`children join with \`bastion cluster join --control ${loaded.config.listeners.management.address}\``
+			'children join with:',
+			`  bastion cluster join --control ${address} --token ${token}`,
+			'',
+			`that token is spent by the first join and expires in ${Math.round(JOIN_TOKEN_TTL_MS / 60000)} minutes;`,
+			'mint another with `bastion cluster init --rotate`'
 		].join('\n')
 	);
 }
@@ -244,13 +296,18 @@ export function runClusterInit(ctx: Context, globals: Globals & { node?: string 
  * The refusal is the feature: a child that joins degraded makes the cluster report a posture its
  * weakest node does not have.
  */
-export function runClusterJoin(
+export async function runClusterJoin(
 	ctx: Context,
-	globals: Globals & { control?: string; token?: string }
-): number {
+	globals: Globals & { control?: string; token?: string; node?: string }
+): Promise<number> {
 	const loaded = load(ctx, globals);
 	if (globals.control === undefined) {
 		throw new BastionError('usage', 'name the control node with --control <address>');
+	}
+	if (globals.token === undefined) {
+		throw new BastionError('usage', 'a join needs the token `bastion cluster init` printed', {
+			next: 'bastion cluster init --rotate'
+		});
 	}
 
 	const host = readHost(ctx, loaded.state);
@@ -289,19 +346,41 @@ export function runClusterJoin(
 			role: 'child' as const,
 			control: { address: globals.control },
 			node: {
-				id: loaded.config.cluster?.node.id ?? 'node-b',
+				id: globals.node ?? loaded.config.cluster?.node.id ?? 'node-b',
 				labels: loaded.config.cluster?.node.labels ?? {}
 			}
 		}
 	};
+
+	// the configuration is written only after the control node accepts, so a refused join leaves
+	// this box exactly as it was rather than as a child of a cluster it is not in
+	const membership = await joinCluster(ctx, {
+		control: globals.control,
+		token: globals.token,
+		report: reportOf(config, { sites: answer.maximum, memoryBytes: host.memoryBytes }),
+		state: loaded.state
+	});
 	writeConfig(ctx, writePath(ctx, globals, loaded), config);
-	emit(ctx, globals, { ...outcome, control: globals.control }, () =>
-		kv([
-			['joined', globals.control ?? ''],
-			['role', 'child'],
-			['negotiated', JSON.stringify(outcome.countered)],
-			['token', globals.token === undefined ? '(none supplied)' : 'accepted']
-		])
+
+	emit(
+		ctx,
+		globals,
+		{
+			...outcome,
+			control: globals.control,
+			node: membership.node,
+			cluster: membership.cluster,
+			placement: membership.placement
+		},
+		() =>
+			kv([
+				['joined', globals.control ?? ''],
+				['role', 'child'],
+				['node', membership.node],
+				['cluster mode', membership.cluster.mode],
+				['sites placed here', String(membership.placement.length)],
+				['negotiated', JSON.stringify(outcome.countered)]
+			])
 	);
 	return 0;
 }
@@ -347,19 +426,25 @@ export function runClusterStatus(ctx: Context, globals: Globals): number {
 		return 0;
 	}
 
-	const registry = new NodeRegistry(ctx);
-	registry.join(
-		cluster.node.id,
-		loaded.config.listeners.management.address,
-		cluster.node.labels ?? {}
-	);
-	const unreachable = registry.sweep();
+	const control = cluster.role === 'control';
+	const unreachable = control ? new NodeRegistry(ctx, loaded.state).sweep() : [];
+	const held = control ? null : new MembershipStore(ctx, loaded.state).read();
+	const nodes = clusterNodes(ctx, loaded);
+
+	// a child that cannot reach the control node keeps serving what it holds, so the staleness is
+	// the finding rather than the silence
+	const staleMs = held === null ? 0 : ctx.now() - held.lastSyncedAt;
+	const stale = held !== null && staleMs > UNREACHABLE_AFTER_MS;
+
 	const report = {
 		clustered: true,
 		role: cluster.role,
 		node: cluster.node.id,
 		control: cluster.control?.address ?? '(this node)',
-		nodes: registry.list(),
+		nodes,
+		placement: held?.placement ?? [],
+		lastSyncedAt: held?.lastSyncedAt ?? null,
+		stale,
 		unreachable
 	};
 	emit(ctx, globals, report, () =>
@@ -368,12 +453,23 @@ export function runClusterStatus(ctx: Context, globals: Globals): number {
 				['role', report.role],
 				['node', report.node],
 				['control', report.control],
-				['nodes', String(report.nodes.length)]
+				['nodes', String(report.nodes.length)],
+				...(held === null
+					? []
+					: ([
+							['sites placed here', String(held.placement.length)],
+							[
+								'last synced',
+								stale
+									? `${Math.round(staleMs / 1000)}s ago, which is stale`
+									: `${Math.round(staleMs / 1000)}s ago`
+							]
+						] as [string, string][]))
 			]),
 			...(unreachable.length === 0 ? [] : ['', `unreachable: ${unreachable.join(', ')}`])
 		].join('\n')
 	);
-	return unreachable.length === 0 ? 0 : 3;
+	return unreachable.length === 0 && !stale ? 0 : 3;
 }
 
 /**
