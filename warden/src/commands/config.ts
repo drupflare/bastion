@@ -128,7 +128,9 @@ function withValue(config: unknown, key: string, value: unknown): unknown {
 export function runConfigSet(ctx: Context, options: ConfigOptions, key: string, raw: string): void {
 	const loaded = loadConfig(ctx, { path: options.config });
 	const next = withValue(loaded.config, key, coerce(raw)) as typeof loaded.config;
-	const path = writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, next);
+	// `--config` wins over the working directory: writing to `./bastion.yml` because the named file
+	// did not exist yet edits a different box than the one the operator named
+	const path = writeConfig(ctx, loaded.path ?? options.config ?? `${ctx.cwd}/bastion.yml`, next);
 	const value = valueAt(next, key);
 	if (options.json === true) {
 		ctx.io.out(JSON.stringify({ key, value, path }));
@@ -151,7 +153,7 @@ export function runConfigSet(ctx: Context, options: ConfigOptions, key: string, 
  */
 export async function runConfigEdit(ctx: Context, options: ConfigOptions = {}): Promise<void> {
 	const loaded = loadConfig(ctx, { path: options.config });
-	const path = loaded.path ?? `${ctx.cwd}/bastion.yml`;
+	const path = loaded.path ?? options.config ?? `${ctx.cwd}/bastion.yml`;
 	const editor = ctx.env.EDITOR ?? ctx.env.VISUAL;
 	if (editor === undefined || editor === '') {
 		throw new BastionError('usage', 'set $EDITOR to the editor you want', {

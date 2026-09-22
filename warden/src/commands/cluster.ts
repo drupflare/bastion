@@ -22,7 +22,7 @@ import {
 	type SiteProgress
 } from '@drupflare/bastion';
 import { kv, table } from '../format';
-import { emit, load, type Globals } from '../state';
+import { emit, load, writePath, type Globals } from '../state';
 
 export function runClusterNodes(ctx: Context, globals: Globals): void {
 	const loaded = load(ctx, globals);
@@ -224,7 +224,7 @@ export function runClusterInit(ctx: Context, globals: Globals & { node?: string 
 			node: { id, labels: loaded.config.cluster?.node.labels ?? {} }
 		}
 	};
-	writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, config);
+	writeConfig(ctx, writePath(ctx, globals, loaded), config);
 	emit(ctx, globals, { role: 'control', node: id }, () =>
 		[
 			kv([
@@ -294,7 +294,7 @@ export function runClusterJoin(
 			}
 		}
 	};
-	writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, config);
+	writeConfig(ctx, writePath(ctx, globals, loaded), config);
 	emit(ctx, globals, { ...outcome, control: globals.control }, () =>
 		kv([
 			['joined', globals.control ?? ''],
@@ -319,7 +319,7 @@ export function runClusterLeave(ctx: Context, globals: Globals): void {
 	registry.leave(self.id);
 
 	const { cluster: _dropped, ...rest } = loaded.config;
-	writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, rest as typeof loaded.config);
+	writeConfig(ctx, writePath(ctx, globals, loaded), rest as typeof loaded.config);
 	emit(
 		ctx,
 		globals,

@@ -25,11 +25,11 @@ import {
 	retain,
 	writeConfig
 } from '@drupflare/bastion';
-import { kv, table, yesNo } from '../format';
-import { emit, load, type Globals } from '../state';
+import { kv, sizeOrRefuse, table, yesNo } from '../format';
+import { emit, load, writePath, type Globals, type Loaded } from '../state';
 
-function write(ctx: Context, path: string | null, config: BastionConfig): string {
-	return writeConfig(ctx, path ?? `${ctx.cwd}/bastion.yml`, config);
+function write(ctx: Context, globals: Globals, loaded: Loaded, config: BastionConfig): string {
+	return writeConfig(ctx, writePath(ctx, globals, loaded), config);
 }
 
 export function runTenantList(ctx: Context, globals: Globals): void {
@@ -108,12 +108,12 @@ export function runTenantAdd(
 		sites: [],
 		limits: {
 			...(globals.cpu === undefined ? {} : { cpu: globals.cpu }),
-			...(globals.memory === undefined ? {} : { memory: Number(globals.memory) }),
+			...(globals.memory === undefined ? {} : { memory: sizeOrRefuse(globals.memory) }),
 			...(globals.maxSites === undefined ? {} : { maxSites: Number(globals.maxSites) })
 		}
 	};
 	const config = { ...loaded.config, tenants: [...loaded.config.tenants, tenant] };
-	const path = write(ctx, loaded.path, config);
+	const path = write(ctx, globals, loaded, config);
 	emit(ctx, globals, { tenant, wrote: path }, () => `added tenant ${name} to ${path}`);
 }
 
@@ -136,7 +136,7 @@ export function runTenantRm(
 		...loaded.config,
 		tenants: loaded.config.tenants.filter((entry) => entry.name !== name)
 	};
-	const path = write(ctx, loaded.path, config);
+	const path = write(ctx, globals, loaded, config);
 	emit(
 		ctx,
 		globals,
@@ -211,7 +211,7 @@ export async function runSiteAdd(
 			entry.name === name ? { ...entry, sites: [...entry.sites, site] } : entry
 		)
 	};
-	const path = write(ctx, loaded.path, config);
+	const path = write(ctx, globals, loaded, config);
 
 	// a binding that does not carry is named at install time; finding out from a 500 in production
 	// is the failure this whole reader exists to prevent
@@ -300,7 +300,7 @@ export function runSiteRm(ctx: Context, globals: Globals, host: string): void {
 				: tenant
 		)
 	};
-	const path = write(ctx, loaded.path, config);
+	const path = write(ctx, globals, loaded, config);
 	ctx.io.err(
 		`the certificate for ${host} is left in place; remove it with \`bastion cert list\` if it ` +
 			'is no longer wanted'

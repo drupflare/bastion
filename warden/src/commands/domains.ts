@@ -25,7 +25,7 @@ import {
 	type PrimaryDomain
 } from '@drupflare/bastion';
 import { kv, table } from '../format';
-import { emit, load, type Globals } from '../state';
+import { emit, load, writePath, type Globals } from '../state';
 
 function primaryOf(config: {
 	domains?: { primary?: string; reserved?: string[] };
@@ -184,7 +184,7 @@ export function runDomainAdd(
 			};
 		})
 	};
-	writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, config);
+	writeConfig(ctx, writePath(ctx, globals, loaded), config);
 	emit(ctx, globals, { host, tenant: tenantName, alias: alias ?? null }, () =>
 		alias === undefined
 			? `allocated ${host} to ${tenantName}`

@@ -20,8 +20,8 @@ import {
 	selfSigned,
 	writeConfig
 } from '@drupflare/bastion';
-import { kv, table } from '../format';
-import { emit, load, type Globals } from '../state';
+import { kv, sizeOrRefuse, table } from '../format';
+import { emit, load, writePath, type Globals } from '../state';
 import { issueFor } from './domains';
 
 export function runTenantLimits(
@@ -35,7 +35,7 @@ export function runTenantLimits(
 
 	const changes = {
 		...(globals.cpu === undefined ? {} : { cpu: globals.cpu }),
-		...(globals.memory === undefined ? {} : { memory: Number(globals.memory) }),
+		...(globals.memory === undefined ? {} : { memory: sizeOrRefuse(globals.memory) }),
 		...(globals.pids === undefined ? {} : { pids: Number(globals.pids) }),
 		...(globals.maxSites === undefined ? {} : { maxSites: Number(globals.maxSites) })
 	};
@@ -67,7 +67,7 @@ export function runTenantLimits(
 			entry.name === name ? { ...entry, limits } : entry
 		)
 	};
-	writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, config);
+	writeConfig(ctx, writePath(ctx, globals, loaded), config);
 	// the cgroup is rewritten when the tenant next starts; a running tenant keeps its old limits
 	ctx.io.err(`${name} keeps its current limits until it restarts`);
 	emit(ctx, globals, { tenant: name, limits }, () => `set limits on ${name}`);
@@ -270,7 +270,7 @@ export function runUpdateApply(
 			workerd: { ...loaded.config.runtime.workerd, version: globals.to }
 		}
 	};
-	writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, config);
+	writeConfig(ctx, writePath(ctx, globals, loaded), config);
 	emit(ctx, globals, { from: from.version, to: to.version, accepted, plan }, () =>
 		[
 			`pinned workerd ${to.version}`,
