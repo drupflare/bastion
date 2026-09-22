@@ -21,11 +21,11 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 'latest'
       - name: Install Dependencies
         run: bun install --frozen-lockfile
       - name: Start The Dependency Stack
