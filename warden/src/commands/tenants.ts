@@ -468,7 +468,7 @@ export function runTokenCreate(
 	globals: Globals & { tenant?: string; role?: string },
 	name = 'token'
 ): void {
-	const tokens = new TokenStore(ctx);
+	const tokens = new TokenStore(ctx, load(ctx, globals).state);
 	const role = (globals.role ?? 'tenant-viewer') as 'tenant-admin' | 'tenant-viewer';
 	const { token, secret } = tokens.create(name, role, globals.tenant ?? null);
 	// the secret is printed once and never stored; a --json payload carries the id, not the secret

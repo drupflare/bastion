@@ -51,7 +51,7 @@ export function runAccessInvite(
 		);
 	}
 
-	const tokens = new TokenStore(ctx);
+	const tokens = new TokenStore(ctx, load(ctx, globals).state);
 	const { token, secret } = tokens.create(`invite:${tenant}`, role, tenant);
 	if (globals.json === true) {
 		ctx.io.out(JSON.stringify({ id: token.id, role: token.role, tenant: token.tenant }));
@@ -72,7 +72,7 @@ export function runAccessInvite(
 }
 
 export function runAccessList(ctx: Context, globals: Globals): void {
-	const tokens = new TokenStore(ctx);
+	const tokens = new TokenStore(ctx, load(ctx, globals).state);
 	const issued = tokens.list().filter((token) => token.tenant !== null);
 	emit(ctx, globals, { credentials: issued }, () =>
 		issued.length === 0
@@ -91,7 +91,7 @@ export function runAccessList(ctx: Context, globals: Globals): void {
 }
 
 export function runAccessRevoke(ctx: Context, globals: Globals, id: string): number {
-	const tokens = new TokenStore(ctx);
+	const tokens = new TokenStore(ctx, load(ctx, globals).state);
 	const revoked = tokens.revoke(id);
 	emit(ctx, globals, { id, revoked }, () =>
 		revoked ? `${id} is revoked and reaches nothing` : `there is no credential ${id}`
@@ -107,7 +107,7 @@ export function runAccessRevoke(ctx: Context, globals: Globals, id: string): num
  * printed instead.
  */
 export function runAccessRole(ctx: Context, globals: Globals, id: string, role: string): number {
-	const tokens = new TokenStore(ctx);
+	const tokens = new TokenStore(ctx, load(ctx, globals).state);
 	const existing = tokens.list().find((token) => token.id === id);
 	if (existing === undefined) {
 		throw new BastionError('usage', `there is no credential ${id}`, {
@@ -145,7 +145,7 @@ export function runAccessRole(ctx: Context, globals: Globals, id: string, role: 
 // #region api tokens
 
 export function runTokenList(ctx: Context, globals: Globals): void {
-	const tokens = new TokenStore(ctx);
+	const tokens = new TokenStore(ctx, load(ctx, globals).state);
 	const all = tokens.list();
 	emit(ctx, globals, { tokens: all }, () =>
 		all.length === 0
@@ -164,7 +164,7 @@ export function runTokenList(ctx: Context, globals: Globals): void {
 }
 
 export function runTokenRevoke(ctx: Context, globals: Globals, id: string): number {
-	const tokens = new TokenStore(ctx);
+	const tokens = new TokenStore(ctx, load(ctx, globals).state);
 	const revoked = tokens.revoke(id);
 	emit(ctx, globals, { id, revoked }, () =>
 		revoked ? `${id} is revoked` : `there is no token ${id}`

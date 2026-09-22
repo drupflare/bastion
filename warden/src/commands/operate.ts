@@ -440,7 +440,7 @@ export function runDashboardOpen(ctx: Context, globals: Globals): void {
 
 /** the one-time claim token a first run prints, minted again on demand */
 export function runDashboardToken(ctx: Context, globals: Globals): void {
-	const sessions = new SessionStore(ctx);
+	const sessions = new SessionStore(ctx, load(ctx, globals).state);
 	const token = sessions.mintClaimToken();
 	if (globals.json === true) {
 		ctx.io.out(JSON.stringify({ claimed: false }));
