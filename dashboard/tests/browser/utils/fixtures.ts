@@ -1,4 +1,5 @@
 import type { SiteRow } from '../../../src/components/analytics/Summary.vue';
+import type { CapabilityRow } from '../../../src/components/CapabilityTable.vue';
 import type { NodeRow } from '../../../src/components/cluster/Nodes.vue';
 import type { LimitRow } from '../../../src/components/LimitsTable.vue';
 import type { CapacityAnswer, HealthNode, TenantSummary } from '../../../src/shared/api';
@@ -22,6 +23,7 @@ interface Fixtures {
 	'GET /api/health': { tree: HealthNode };
 	'GET /api/capacity': CapacityAnswer;
 	'GET /api/doctor': { limits: LimitRow[] };
+	'GET /api/capabilities': { capabilities: CapabilityRow[] };
 	'GET /api/tenants': TenantSummary[];
 	'GET /api/cluster': { nodes: NodeRow[] };
 	'GET /api/config': Record<string, unknown>;
@@ -115,6 +117,31 @@ export const FIXTURES: Fixtures = {
 				cloudflare: '50 enforced',
 				workerd: 'none',
 				bastion: '50 declared, not enforced'
+			}
+		]
+	},
+
+	// one present and one absent, so the table renders both branches and the install button has
+	// something to be enabled for
+	'GET /api/capabilities': {
+		capabilities: [
+			{
+				slot: 'images',
+				command: 'magick',
+				state: 'present',
+				version: 'Version: ImageMagick 7.1.1-47',
+				approxMb: 120,
+				why: 'decodes, resizes and re-encodes for the Images binding',
+				install: 'apt-get install -y imagemagick'
+			},
+			{
+				slot: 'browser',
+				command: 'chromium',
+				state: 'absent',
+				version: null,
+				approxMb: 450,
+				why: 'renders pages for the Browser binding: screenshots, pdfs and dom captures',
+				install: 'apt-get install -y chromium'
 			}
 		]
 	},

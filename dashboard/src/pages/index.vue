@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import CapabilityTable, { type CapabilityRow } from '../components/CapabilityTable.vue';
 import CapacityCard from '../components/CapacityCard.vue';
 import HealthTree from '../components/HealthTree.vue';
 import LimitsTable, { type LimitRow } from '../components/LimitsTable.vue';
 import Shell from '../components/Shell.vue';
 import StatCard from '../components/StatCard.vue';
+import { useSession } from '../composables/useSession';
 import { call, type CapacityAnswer, type HealthNode, type Severity } from '../shared/api';
+
+const { csrf, isOperator } = useSession();
 
 useHead({ title: 'Overview' });
 
@@ -51,12 +55,43 @@ const enforced = computed(
 		).length
 );
 
+const capabilities = ref<CapabilityRow[]>([]);
+const installing = ref<string | null>(null);
+const installFailure = ref<string | null>(null);
+
+const missing = computed(() => capabilities.value.filter((row) => row.state === 'absent').length);
+
+async function loadCapabilities(): Promise<void> {
+	const answer = await call<{ capabilities: CapabilityRow[] }>('/api/capabilities');
+	capabilities.value = answer.capabilities;
+}
+
+/**
+ * Installs one binding's software, then re-reads rather than assuming it worked.
+ *
+ * A package manager can exit zero having installed something that still does not answer its
+ * probe, so the row's state comes from a fresh probe rather than from the button's own optimism.
+ */
+async function install(slot: string): Promise<void> {
+	installing.value = slot;
+	installFailure.value = null;
+	try {
+		await call(`/api/capabilities/${slot}/install`, { method: 'POST', csrf: csrf.value });
+		await loadCapabilities();
+	} catch (error) {
+		installFailure.value = error instanceof Error ? error.message : String(error);
+	} finally {
+		installing.value = null;
+	}
+}
+
 onMounted(async () => {
 	try {
 		const [tree, answer, doctor] = await Promise.all([
 			call<{ tree: HealthNode }>('/api/health'),
 			call<CapacityAnswer>('/api/capacity'),
-			call<{ limits: LimitRow[] }>('/api/doctor')
+			call<{ limits: LimitRow[] }>('/api/doctor'),
+			loadCapabilities()
 		]);
 		health.value = tree.tree;
 		capacity.value = answer;
@@ -162,6 +197,45 @@ onMounted(async () => {
 				</div>
 			</template>
 			<HealthTree :node="health" />
+		</UCard>
+
+		<UCard v-if="isOperator && capabilities.length">
+			<template #header>
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex items-center gap-2">
+						<UIcon
+							name="i-lucide-puzzle"
+							class="size-5 text-muted"
+						/>
+						<h2 class="font-semibold">Optional Bindings</h2>
+					</div>
+					<UBadge
+						:color="missing === 0 ? 'success' : 'neutral'"
+						variant="subtle"
+						size="sm"
+						data-test="capabilities-missing"
+					>
+						{{ missing === 0 ? 'All Installed' : `${missing} Not Installed` }}
+					</UBadge>
+				</div>
+			</template>
+			<p class="mb-3 text-sm text-muted">
+				These bindings need software this host does not ship. A site that binds one is
+				refused until it is installed.
+			</p>
+			<UAlert
+				v-if="installFailure"
+				color="error"
+				variant="subtle"
+				icon="i-lucide-circle-x"
+				class="mb-3"
+				:description="installFailure"
+			/>
+			<CapabilityTable
+				:rows="capabilities"
+				:busy="installing"
+				@install="install"
+			/>
 		</UCard>
 
 		<UCard v-if="limits.length">
