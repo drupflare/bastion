@@ -1,4 +1,14 @@
 export {
+	aiRouteFor,
+	cloudflareAi,
+	openAiCompatible,
+	parseAiRequest,
+	type AiRequest,
+	type AiStore,
+	type CloudflareAiOptions,
+	type OpenAiCompatibleOptions
+} from './adapters/ai';
+export {
 	ASSET_PROFILES,
 	CONTENT_TYPES,
 	NEVER_SERVED,
@@ -6,6 +16,15 @@ export {
 	type AssetProfile,
 	type AssetResolver
 } from './adapters/assets';
+export {
+	RENDER_TIMEOUT_MS,
+	assertRenderTarget,
+	chromiumArgs,
+	headlessBrowser,
+	type BrowserStore,
+	type HeadlessOptions,
+	type RenderRequest
+} from './adapters/browser';
 export { memoryCacheStore, tieredCache, type CacheEntry, type CacheStore } from './adapters/cache';
 export {
 	CONSERVATIVE,
@@ -13,6 +32,30 @@ export {
 	type Capabilities,
 	type Driver
 } from './adapters/capabilities';
+export {
+	allowsDestination,
+	assertAddress,
+	recordingEmail,
+	smtpEmail,
+	smtpScript,
+	type EmailMessage,
+	type EmailStore,
+	type SmtpOptions,
+	type SmtpTransport
+} from './adapters/email';
+export {
+	IMAGE_TYPES,
+	MAX_IMAGE_BYTES,
+	commandImages,
+	contentTypeFor,
+	magickArgs,
+	readHeader,
+	type ImageInfo,
+	type ImagePipeline,
+	type ImageStore,
+	type OutputOptions,
+	type TransformOptions
+} from './adapters/images';
 export {
 	assertComplete,
 	etagOf,
@@ -45,6 +88,20 @@ export {
 	type PutOptions,
 	type StoredValue
 } from './adapters/store';
+export {
+	matchesFilter,
+	memoryVectors,
+	parseVectorRequest,
+	remoteVectors,
+	score,
+	type MemoryVectorOptions,
+	type RemoteVectorOptions,
+	type VectorMatch,
+	type VectorMetric,
+	type VectorQuery,
+	type VectorRecord,
+	type VectorStore
+} from './adapters/vectors';
 export {
 	GRANTS,
 	ROLES,
@@ -125,7 +182,16 @@ export {
 	type SocketSpec,
 	type WorkerSpec
 } from './capnp/generate';
-export { ADAPTER_SERVICES, planSite, type PlanInput, type TenantPaths } from './capnp/plan';
+export {
+	ADAPTER_SERVICES,
+	ENTRYPOINT_NAMES,
+	WRAPPED_SLOTS,
+	modulesFrom,
+	planSite,
+	type PlanInput,
+	type TenantPaths
+} from './capnp/plan';
+export { AI_SHIM, D1_SHIM, SHIM_MODULES, VECTORIZE_SHIM } from './capnp/shims';
 export {
 	REPLICA_LAG_MS,
 	plan as planPlacement,
@@ -185,11 +251,15 @@ export {
 } from './cluster/scope';
 export {
 	DEFAULT_CAPABILITIES,
+	DEFAULT_COMPATIBILITY_DATE,
+	DEFAULT_COMPATIBILITY_FLAGS,
+	DEFAULT_SITE_WORKER,
 	FLOOR_REASONS,
 	LIMIT_FLOORS,
 	RESIDENT_SITE_BYTES,
 	VERSION_FLOORS,
-	defaultConfig
+	defaultConfig,
+	resolveSiteWorker
 } from './config/defaults';
 export {
 	backupTarget,
@@ -204,6 +274,20 @@ export {
 	type Setting,
 	type SettingOrigin
 } from './config/file';
+export {
+	MAX_GROUP_DEPTH,
+	SLOT_CAPABILITY,
+	groupChain,
+	groupNames,
+	resolve as resolveGroup,
+	type Resolved
+} from './config/groups';
+export {
+	GENERIC_PROFILE,
+	PROBE_PROFILES,
+	probeProfile,
+	type ProbeProfile
+} from './config/profiles';
 export {
 	type AuditConfig,
 	type ClusterConfig,
@@ -225,14 +309,29 @@ export {
 } from './config/types';
 export type {
 	BastionConfig,
+	GroupConfig,
 	LogLevel,
 	Mode,
 	Residency,
 	SiteConfig,
+	SiteWorkerConfig,
 	TenantConfig
 } from './config/types';
 export { validate, type Problem, type ValidationResult } from './config/validate';
 export { defaultContext, type Context } from './context';
+export {
+	MANIFEST_NAMES,
+	MAX_TEMPLATE_BYTES,
+	UNSUPPORTED,
+	parseJsonc,
+	planFromManifest,
+	pullTemplate,
+	readTemplate,
+	refusals,
+	type BindingFinding,
+	type PullOptions,
+	type TemplatePlan
+} from './deploy/template';
 export {
 	VersionStore,
 	pickVersion,
@@ -469,6 +568,16 @@ export {
 	type ModeDescription
 } from './isolation/modes';
 export {
+	OPTIONAL_TOOLS,
+	installTool,
+	packageFamily,
+	probeOptional,
+	probeTool,
+	type OptionalTool,
+	type ToolReport,
+	type ToolState
+} from './isolation/optional';
+export {
 	binaryOnPath,
 	modeAvailable,
 	preflight,
@@ -513,7 +622,10 @@ export {
 } from './migrate/run';
 export {
 	AnalyticsWindow,
+	DATA_POINT_LIMITS,
+	DataPointWindow,
 	scopeFor,
+	type DataPoint,
 	type RequestSample,
 	type SiteAnalytics,
 	type Window
