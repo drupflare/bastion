@@ -1,12 +1,12 @@
 <div style="display: flex; align-items: center; flex-direction: column;" align="center">
     <img align="center" style="align-self: center; max-width: 256px" src="./assets/bastion.png" width="30%" alt="" />
     <h1 style="text-align: center;">bastion</h1>
-    <p style="text-align: center;">A hardened operating environment for self-hosted workerd.</p>
+    <p style="text-align: center;">🏰 A hardened operating environment for self-hosted workerd</p>
     <div align="center">
-        <img src="https://img.shields.io/github/v/release/drupflare/bastion">
-        <img src="https://img.shields.io/github/license/drupflare/bastion">
-        <img src="https://img.shields.io/github/stars/drupflare/bastion?style=flat">
-        <img src="https://img.shields.io/github/commit-activity/t/drupflare/bastion?color=violet">
+        <img src="https://img.shields.io/github/v/release/drupflare/bastion" alt="Latest release" />
+        <img src="https://img.shields.io/github/license/drupflare/bastion" alt="License" />
+        <img src="https://img.shields.io/github/stars/drupflare/bastion?style=flat" alt="Stars" />
+        <img src="https://img.shields.io/github/commit-activity/t/drupflare/bastion?color=violet" alt="Commit activity" />
     </div>
 </div>
 
@@ -198,11 +198,13 @@ Pairing with a hosted control plane. `bastion pair` refuses and names the reason
 
 ```sh
 bun install
-bun run typecheck
-bun run test
-bun run check:reachability
+bun run verify
 bun run build:binary
 ```
+
+`verify` runs the format check, the typecheck, the gate lane and the reachability check in that
+order. Run the formatter on its own with `bun run prettier`: a `--write` chained ahead of the tests
+lets vitest read a file mid-write and report failures that are not real.
 
 The gate lane is hermetic and runs in under two seconds. Anything needing a live dependency is in
 the e2e lane behind an explicit flag:

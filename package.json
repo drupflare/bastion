@@ -22,6 +22,7 @@
 		"build:binary": "bun run --cwd warden build:binary",
 		"prettier": "prettier --write .",
 		"prettier:check": "prettier --check .",
+		"verify": "bun run prettier:check && bun run typecheck && bun run test && bun run check:reachability",
 		"prepare": "husky"
 	},
 	"devDependencies": {
