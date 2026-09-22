@@ -12,6 +12,14 @@ import { HANDLERS, IMPLEMENTED, buildProgram } from '../src/program';
 import { COMMANDS, GLOBAL_OPTIONS, GROUPS, findCommand } from '../src/registry';
 import { run } from '../src/run';
 
+/**
+ * A context with every outward seam substituted, including the two `defaultContext` still holds.
+ *
+ * Spreading it and overriding only files and io leaves `nodeRunner` and the real `fetch` in place,
+ * so a handler that probes the host runs real subprocesses from the gate lane. `capability list`
+ * shells out to six of them, which passes on a laptop that has none and hung past the 5s timeout
+ * on a runner that does.
+ */
 function harness(files: Record<string, string> = {}) {
 	const io = memoryIo();
 	return {
@@ -20,6 +28,8 @@ function harness(files: Record<string, string> = {}) {
 			...defaultContext(),
 			files: memoryFiles({ '/srv/bastion.yml': 'version: 1\nmode: solo\n', ...files }),
 			io,
+			runner: scriptedRunner(),
+			fetch: () => Promise.reject(new Error('the gate lane reaches no network')),
 			env: {},
 			cwd: '/srv'
 		}
