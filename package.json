@@ -19,11 +19,12 @@
 		"docs:cli": "bun run --cwd warden docs:cli",
 		"docs:api": "typedoc",
 		"clean:docs": "rm -rf build-typedoc",
-		"build:binary": "bun run --cwd warden build:binary",
+		"build:binary": "bun run build:dashboard && bun run --cwd warden build:binary",
+		"build:dashboard": "bun run --cwd dashboard build && bun run --cwd warden embed:dashboard",
 		"prettier": "prettier --write .",
 		"prettier:check": "prettier --check .",
 		"verify": "bun run prettier:check && bun run typecheck && bun run test && bun run check:reachability",
-		"prepare": "husky && husky install"
+		"prepare": "husky && husky install && bun warden/scripts/embed-dashboard.ts --if-missing"
 	},
 	"devDependencies": {
 		"husky": "^9.1.7",

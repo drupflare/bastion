@@ -6,3 +6,4 @@ bun.lock
 core/tests/fixtures/
 build-typedoc/
 assets/
+warden/src/dashboard-assets.ts

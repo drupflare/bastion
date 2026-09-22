@@ -32,7 +32,8 @@
 		"build:dist": "bun build src/cli.ts --target=node --outdir dist --format=esm --packages=external",
 		"build:binary": "bun build --compile --minify --outfile dist/bastion src/cli.ts",
 		"prepublishOnly": "bun run build:dist",
-		"docs:cli": "bun scripts/docs-cli.ts"
+		"docs:cli": "bun scripts/docs-cli.ts",
+		"embed:dashboard": "bun scripts/embed-dashboard.ts"
 	},
 	"dependencies": {
 		"@drupflare/bastion": "workspace:*",

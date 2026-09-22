@@ -9,3 +9,5 @@ test-results
 .output
 .nuxt
 build-typedoc
+
+warden/src/dashboard-assets.ts
