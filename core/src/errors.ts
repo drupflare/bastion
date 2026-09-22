@@ -103,6 +103,7 @@ export const CODES: Record<string, { exit: number; retryable: boolean; next: str
 	'preflight-unsupported': { exit: EXIT.FINDING, retryable: false, next: 'bastion doctor' },
 	'multi-tenant-unsafe': { exit: EXIT.USAGE, retryable: false, next: null },
 	'capability-refused': { exit: EXIT.USAGE, retryable: false, next: null },
+	'permission-denied': { exit: EXIT.FAILED, retryable: false, next: null },
 
 	// capacity and placement
 	'capacity-exceeded': { exit: EXIT.USAGE, retryable: false, next: 'bastion capacity' },

@@ -175,7 +175,7 @@ export function firecrackerHypervisor(options: FirecrackerOptions = {}): Hypervi
 		stop: async (ctx, tenant) => {
 			const guest = guests.get(tenant);
 			if (guest === undefined) return;
-			if (guest.pid !== null) await ctx.runner.run('kill', ['-TERM', String(guest.pid)]);
+			if (guest.pid !== null) ctx.runner.signal(guest.pid, 'SIGTERM');
 			guests.set(tenant, { ...guest, state: 'stopped', pid: null });
 		},
 
