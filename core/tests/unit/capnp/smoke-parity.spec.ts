@@ -64,7 +64,7 @@ describe('the measured configuration, read out of the fixture', () => {
 
 	it('the fixture binds KV through a ServiceDesignator, and so does the generator', () => {
 		expect(fixture).toMatch(/kvNamespace = "/);
-		for (const name of input.bindings.kv) {
+		for (const name of input.bindings.kv ?? []) {
 			expect(generated).toContain(
 				`(name = "${name}", kvNamespace = "${ADAPTER_SERVICES.kv}")`
 			);

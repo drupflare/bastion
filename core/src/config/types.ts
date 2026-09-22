@@ -49,6 +49,11 @@ export interface DriversConfig {
 	d1: DriverConfig;
 	queues: DriverConfig;
 	secrets: DriverConfig;
+	/** absent means no inference backing, and a site binding AI gets a 501 rather than a guess */
+	ai?: DriverConfig;
+	vectorize?: DriverConfig;
+	images?: DriverConfig;
+	email?: DriverConfig;
 }
 
 export interface TenantCapabilities {
@@ -57,6 +62,37 @@ export interface TenantCapabilities {
 	diagnosticRoutes: boolean;
 	extensions: string[];
 	adminPhpConsole: boolean;
+	/**
+	 * Whether a binding may be used at all, separate from whether its backing exists.
+	 *
+	 * Two different refusals, and conflating them is how an operator ends up debugging the wrong
+	 * one. A missing primitive is a HARD no: ImageMagick is not installed, so nothing can bind
+	 * Images and no setting changes that. A capability set false here is a POLICY no: the box can
+	 * do it and this tenant may not, which is what lets one node serve a department that renders
+	 * PDFs beside a student tier that does not.
+	 */
+	images: boolean;
+	browser: boolean;
+	ai: boolean;
+	vectorize: boolean;
+	email: boolean;
+	analytics: boolean;
+}
+
+/**
+ * A named set of settings several tenants share.
+ *
+ * A cluster is where this earns itself: a group defines the student tier once and every node's
+ * configuration names it, so raising a quota or withdrawing a capability is one edit rather than
+ * one per tenant per node. Resolution is group, then the tenant's own block, then the site's, and
+ * each layer overrides field by field rather than wholesale.
+ */
+export interface GroupConfig {
+	capabilities?: Partial<TenantCapabilities>;
+	limits?: TenantLimits;
+	egress?: { allow: string[] };
+	/** a group may extend another, so a tier is a narrowing of the one above it */
+	extends?: string;
 }
 
 export interface HeaderRuleConfig {
@@ -65,10 +101,63 @@ export interface HeaderRuleConfig {
 	remove?: string[];
 }
 
+/**
+ * What the bundle exports and what it expects to be bound.
+ *
+ * Absent means the drupflare shape, which is what every site carried before this block existed. A
+ * site that states it is declaring an arbitrary worker: the entrypoint, the object class where
+ * there is one, and the binding name per adapter slot. A slot with no name gets no binding and no
+ * service, so a worker that wants none of them generates a config with none of them in it.
+ */
+export interface SiteWorkerConfig {
+	/** entry module inside the bundle; inferred when the bundle names one conventionally */
+	main?: string;
+	/** the class the bundle exports, or null for a worker with no Durable Object */
+	durableObjectClass?: string | null;
+	/** the binding the object is reached by */
+	durableObject?: string;
+	/** the binding static assets are served through, or absent to serve none */
+	assets?: string;
+	kv?: string[];
+	r2?: string[];
+	queues?: string[];
+	/** D1 bindings; workerd has no d1Database field, so each is a wrapped binding over the sql adapter */
+	d1?: string[];
+	/** Vectorize bindings, served by whatever index `drivers.vectorize` names */
+	vectorize?: string[];
+	/** Images bindings, served natively by whatever `drivers.images` names */
+	images?: string[];
+	/** send_email bindings, served by the smtp server `drivers.email` names */
+	email?: string[];
+	/** Analytics Engine bindings, served without the flag its native binding is gated behind */
+	analytics?: string[];
+	/** hyperdrive bindings; a real workerd group, so workerd pools and caches them itself */
+	hyperdrive?: {
+		name: string;
+		database: string;
+		user: string;
+		password: string;
+		scheme: string;
+	}[];
+	/** the binding a bundle reads version metadata from */
+	versionMetadata?: string;
+	/** Workers AI bindings, served by whatever inference endpoint `drivers.ai` names */
+	ai?: string[];
+	compatibilityDate?: string;
+	compatibilityFlags?: string[];
+}
+
 export interface SiteConfig {
 	host: string;
 	bundle: string;
-	probe: string;
+	/** the profile that proves a boot; absent for a worker with no CMS behind it */
+	probe?: string;
+	/** what the bundle exports and expects; absent means the drupflare shape */
+	worker?: SiteWorkerConfig;
+	/** a group whose settings this site starts from, narrowing whatever the tenant resolved to */
+	group?: string;
+	/** capabilities withdrawn for this site alone, over whatever the tenant allows */
+	capabilities?: Partial<TenantCapabilities>;
 	primary?: string;
 	replicas?: string[];
 	bindings?: Record<string, string>;
@@ -96,6 +185,8 @@ export interface TenantConfig {
 	limits?: TenantLimits;
 	egress?: { allow: string[] };
 	capabilities?: Partial<TenantCapabilities>;
+	/** a group in `groups`, whose settings this tenant starts from */
+	group?: string;
 	/**
 	 * Stopped, with its state kept.
 	 *
@@ -161,5 +252,7 @@ export interface BastionConfig {
 	audit: AuditConfig;
 	logs: LogsConfig;
 	backup?: Record<string, unknown>;
+	/** named settings a tenant or a site starts from, so a cluster states a tier once */
+	groups?: Record<string, GroupConfig>;
 	tenants: TenantConfig[];
 }

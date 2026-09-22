@@ -1,4 +1,4 @@
-import type { BastionConfig, TenantCapabilities } from './types';
+import type { BastionConfig, SiteWorkerConfig, TenantCapabilities } from './types';
 
 /**
  * Cloudflare's own limits, which are DEFAULTS and FLOORS here.
@@ -43,13 +43,73 @@ export const FLOOR_REASONS: Record<string, string> = {
  */
 export const RESIDENT_SITE_BYTES = 92.69 * 1024 * 1024;
 
+/**
+ * Every capability off.
+ *
+ * The optional bindings default to true rather than false, and the distinction is worth stating:
+ * `codegen` and the diagnostic routes are declined because granting them is a security decision,
+ * while Images or Browser are simply unavailable until an operator installs the primitive. Making
+ * those default false would mean an operator who installed ImageMagick still had to turn it on in
+ * two places, and a second switch that must agree with the first is a second thing to get wrong.
+ * The install IS the opt-in; this block is how an operator withdraws it afterwards.
+ */
 export const DEFAULT_CAPABILITIES: TenantCapabilities = {
 	codegen: false,
 	workerLoader: false,
 	diagnosticRoutes: false,
 	extensions: [],
-	adminPhpConsole: false
+	adminPhpConsole: false,
+	images: true,
+	browser: true,
+	ai: true,
+	vectorize: true,
+	email: true,
+	analytics: true
 };
+
+/** what a site gets when it names no date of its own; the smoke lane booted on this one */
+export const DEFAULT_COMPATIBILITY_DATE = '2026-08-01';
+
+export const DEFAULT_COMPATIBILITY_FLAGS = ['nodejs_compat'];
+
+/**
+ * The shape a site carries when it declares no `worker` block.
+ *
+ * These names are the drupflare bundle's, and they are a DEFAULT rather than a requirement: a site
+ * that states its own block overrides every one of them, and a `durableObjectClass: null` drops the
+ * object entirely. Keeping them here rather than in the generator is what lets the generator stay
+ * free of any bundle's vocabulary.
+ */
+export const DEFAULT_SITE_WORKER: Required<
+	Pick<
+		SiteWorkerConfig,
+		'durableObjectClass' | 'durableObject' | 'assets' | 'kv' | 'r2' | 'queues'
+	>
+> = {
+	durableObjectClass: 'SitePhpDurableObject',
+	durableObject: 'SITE',
+	assets: 'ASSETS',
+	kv: ['CONFIG_KV', 'PAGE_KV'],
+	r2: [],
+	queues: []
+};
+
+/**
+ * Folds a site's own declaration over the default, so an absent block means the drupflare shape.
+ *
+ * An explicit `durableObjectClass: null` drops the binding with it. Inheriting the default binding
+ * there would leave the site half-declared and refused by the validator, which turns "this worker
+ * has no object" into two lines that have to agree instead of the one that says it.
+ */
+export function resolveSiteWorker(worker?: SiteWorkerConfig): SiteWorkerConfig {
+	const resolved = { ...DEFAULT_SITE_WORKER, ...(worker ?? {}) };
+	// only the INHERITED binding clears: a site that names both a null class and a binding is
+	// contradicting itself, and the validator says so rather than quietly picking a half
+	if (worker?.durableObjectClass === null && worker.durableObject === undefined) {
+		return { ...resolved, durableObjectClass: null, durableObject: undefined };
+	}
+	return resolved;
+}
 
 export function defaultConfig(): BastionConfig {
 	return {
