@@ -32,7 +32,11 @@ export const CONTENT_TYPES: Record<string, string> = {
 	'.otf': 'font/otf',
 	'.eot': 'application/vnd.ms-fontobject',
 	'.pdf': 'application/pdf',
-	'.wasm': 'application/wasm'
+	'.wasm': 'application/wasm',
+	// the drupflare payload ships its per-file pack as `drupal-pf/core.pf.bin`, and a site cannot
+	// boot without it: the worker reads the json and the bin together and refuses the pair when
+	// either is missing
+	'.bin': 'application/octet-stream'
 };
 
 /**

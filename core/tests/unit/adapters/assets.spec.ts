@@ -9,6 +9,7 @@ const files = () =>
 		[`${ROOT}/core/style.css`]: 'body{}',
 		[`${ROOT}/core/app.js`]: 'x',
 		[`${ROOT}/logo.png`]: new Uint8Array([137, 80]),
+		[`${ROOT}/drupal-pf/core.pf.bin`]: new Uint8Array([9, 9]),
 		[`${ROOT}/drupal/site.sqlite`]: new Uint8Array([1, 2, 3]),
 		[`${ROOT}/drupal/site.sqlite-wal`]: new Uint8Array([4]),
 		[`${ROOT}/.env`]: 'SECRET=1',
@@ -58,6 +59,20 @@ describe('serving', () => {
 	// guessing a type is how a database becomes a download
 	it('refuses a file whose extension it does not know', async () => {
 		expect(await resolver()('/README')).toBe(null);
+	});
+
+	/**
+	 * `.bin` was not in the table, so the payload could not boot at all.
+	 *
+	 * The worker reads `drupal-pf/core.pf.json` and `drupal-pf/core.pf.bin` as a pair and refuses
+	 * the pair when either is missing: `per-file pack not reachable: core.pf.json 200, core.pf.bin
+	 * 404`. Every other extension the release ships was already covered, which is how one missing
+	 * row stopped every request rather than one.
+	 */
+	it('serves the per-file pack, which the payload cannot boot without', async () => {
+		const found = await resolver()('/drupal-pf/core.pf.bin');
+		expect(found?.contentType).toBe('application/octet-stream');
+		expect(found?.bytes.length).toBe(2);
 	});
 
 	it('answers null for an absent path', async () => {
