@@ -207,7 +207,7 @@ Versions are content addressed, so two identical uploads are one version and a
 rollback is a pointer move rather than a re-upload.
 
     bastion deploy www.example.edu ./payload-1.0.2.tar.gz
-    bastion version list www.example.edu
+    bastion versions list www.example.edu
     bastion rollout www.example.edu --version <id> --percent 10
     bastion rollback www.example.edu
 

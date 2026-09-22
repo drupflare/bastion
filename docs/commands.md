@@ -59,6 +59,12 @@ stop and start, keeping the configuration
 
 Documented in `bastion manual running`.
 
+### `bastion reload`
+
+restart only the tenants whose generated capnp changed
+
+Documented in `bastion manual running`.
+
 ### `bastion serve`
 
 run in the foreground; what a unit file calls
@@ -127,6 +133,16 @@ read the structured logs
 
 Documented in `bastion manual observing`.
 
+### `bastion tail`
+
+follow the logs as they are written
+
+| flag              | meaning         |
+| ----------------- | --------------- |
+| `--tenant <name>` | one tenant only |
+
+Documented in `bastion manual observing`.
+
 ### `bastion capacity`
 
 what this host holds, with each input s provenance
@@ -153,6 +169,27 @@ every value the file set, and where it came from
 
 Documented in `bastion manual configuration`.
 
+### `bastion config get <key>`
+
+print the value of one key
+
+| argument | required | meaning       |
+| -------- | -------- | ------------- |
+| `key`    | yes      | a dotted path |
+
+Documented in `bastion manual configuration`.
+
+### `bastion config set <key> <value>`
+
+write one key back through the validator the UI uses
+
+| argument | required | meaning       |
+| -------- | -------- | ------------- |
+| `key`    | yes      | a dotted path |
+| `value`  | yes      | the new value |
+
+Documented in `bastion manual configuration`.
+
 ### `bastion config validate`
 
 check the file and report the path of every rejection
@@ -162,6 +199,12 @@ Documented in `bastion manual configuration`.
 ### `bastion config schema`
 
 print the JSON Schema an editor completes from
+
+Documented in `bastion manual configuration`.
+
+### `bastion config edit`
+
+open the file in $EDITOR and validate on save
 
 Documented in `bastion manual configuration`.
 
@@ -213,6 +256,26 @@ remove a tenant
 
 Documented in `bastion manual tenants`.
 
+### `bastion tenant suspend <name>`
+
+stop a tenant and serve a maintenance page
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `name`   | yes      | the tenant name |
+
+Documented in `bastion manual tenants`.
+
+### `bastion tenant resume <name>`
+
+bring a suspended tenant back
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `name`   | yes      | the tenant name |
+
+Documented in `bastion manual tenants`.
+
 ### `bastion tenant limits <name>`
 
 read or set a tenant s cgroup limits
@@ -229,6 +292,16 @@ read or set a tenant s cgroup limits
 | `--max-sites <n>`  | the provisioning ceiling |
 
 Documented in `bastion manual tenants`.
+
+### `bastion tenant egress <name>`
+
+read or set a tenant s egress allow list
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `name`   | yes      | the tenant name |
+
+Documented in `bastion manual egress`.
 
 ## Sites
 
@@ -253,6 +326,16 @@ add a site to a tenant
 
 Documented in `bastion manual sites`.
 
+### `bastion site show <host>`
+
+one site, with its placement and its meters
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `host`   | yes      | the hostname |
+
+Documented in `bastion manual sites`.
+
 ### `bastion site rm <host>`
 
 remove a site
@@ -262,6 +345,102 @@ remove a site
 | `host`   | yes      | the hostname |
 
 Documented in `bastion manual sites`.
+
+### `bastion site probe <host>`
+
+render the probe path and report what came back
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `host`   | yes      | the hostname |
+
+Documented in `bastion manual sites`.
+
+## Delivery
+
+### `bastion deploy <host> <bundle>`
+
+upload a bundle and point the site at it
+
+| argument | required | meaning               |
+| -------- | -------- | --------------------- |
+| `host`   | yes      | the hostname          |
+| `bundle` | yes      | the payload to upload |
+
+Documented in `bastion manual deploying`.
+
+### `bastion versions list <host>`
+
+every version of a site
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `host`   | yes      | the hostname |
+
+Documented in `bastion manual deploying`.
+
+### `bastion versions show <host> <id>`
+
+one version
+
+| argument | required | meaning        |
+| -------- | -------- | -------------- |
+| `host`   | yes      | the hostname   |
+| `id`     | yes      | the version id |
+
+Documented in `bastion manual deploying`.
+
+### `bastion versions diff <host> <from> <to>`
+
+what changed between two versions
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `host`   | yes      | the hostname |
+| `from`   | yes      | a version id |
+| `to`     | yes      | a version id |
+
+Documented in `bastion manual deploying`.
+
+### `bastion versions pin <host> <id>`
+
+hold a version so retention cannot remove it
+
+| argument | required | meaning        |
+| -------- | -------- | -------------- |
+| `host`   | yes      | the hostname   |
+| `id`     | yes      | the version id |
+
+Documented in `bastion manual deploying`.
+
+### `bastion rollout <host>`
+
+send a share of traffic to a version
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `host`   | yes      | the hostname |
+
+| flag             | meaning                        |
+| ---------------- | ------------------------------ |
+| `--version <id>` | the version to send traffic to |
+| `--percent <n>`  | the share, 0 to 100            |
+
+Documented in `bastion manual deploying`.
+
+### `bastion rollback <host>`
+
+move the pointer back
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `host`   | yes      | the hostname |
+
+| flag        | meaning                               |
+| ----------- | ------------------------------------- |
+| `--to <id>` | a version other than the previous one |
+
+Documented in `bastion manual deploying`.
 
 ## Repair
 
@@ -296,6 +475,16 @@ bring a quarantined tenant back
 
 Documented in `bastion manual repairing`.
 
+### `bastion recycle <tenant>`
+
+restart a tenant s runtime
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `tenant` | yes      | the tenant name |
+
+Documented in `bastion manual repairing`.
+
 ## Backup
 
 ### `bastion backup now`
@@ -311,6 +500,16 @@ Documented in `bastion manual backups`.
 ### `bastion backup list`
 
 every version held
+
+Documented in `bastion manual backups`.
+
+### `bastion backup show <site>`
+
+one backup and its manifest
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `site`   | yes      | the hostname |
 
 Documented in `bastion manual backups`.
 
@@ -330,6 +529,21 @@ apply the retention policy
 
 Documented in `bastion manual backups`.
 
+### `bastion backup restore <site>`
+
+restore a version
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `site`   | yes      | the hostname |
+
+| flag             | meaning                         |
+| ---------------- | ------------------------------- |
+| `--to <tenant>`  | restore into another tenant     |
+| `--at <version>` | a version other than the newest |
+
+Documented in `bastion manual backups`.
+
 ### `bastion backup drill`
 
 restore into a scratch tenant and render a page from it
@@ -337,6 +551,16 @@ restore into a scratch tenant and render a page from it
 | flag            | meaning                         |
 | --------------- | ------------------------------- |
 | `--site <host>` | one site rather than every site |
+
+Documented in `bastion manual backups`.
+
+### `bastion backup estimate <site>`
+
+what the next backup would cost
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `site`   | yes      | the hostname |
 
 Documented in `bastion manual backups`.
 
@@ -457,6 +681,22 @@ install an institutional chain, after checking it
 
 Documented in `bastion manual tls`.
 
+### `bastion cert trust <cert>`
+
+install a CA certificate into this host s trust store
+
+| argument | required | meaning                         |
+| -------- | -------- | ------------------------------- |
+| `cert`   | yes      | the CA certificate; never a key |
+
+Documented in `bastion manual tls`.
+
+### `bastion cert untrust`
+
+reverse a trust install
+
+Documented in `bastion manual tls`.
+
 ### `bastion cert plan <host>`
 
 which issuance path a name would take, and why
@@ -542,6 +782,28 @@ the computed policy and the live table
 
 Documented in `bastion manual egress`.
 
+### `bastion egress allow <tenant> <target>`
+
+add a host:port to a tenant s allow list
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `tenant` | yes      | the tenant name |
+| `target` | yes      | host:port       |
+
+Documented in `bastion manual egress`.
+
+### `bastion egress deny <tenant> <target>`
+
+remove an entry
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `tenant` | yes      | the tenant name |
+| `target` | yes      | host:port       |
+
+Documented in `bastion manual egress`.
+
 ### `bastion egress test <tenant> <target>`
 
 answer from the live policy whether a target is reachable
@@ -574,11 +836,28 @@ move to a pin, verifying the binary by digest
 
 Documented in `bastion manual updating`.
 
+### `bastion update rollback`
+
+return to the previous pin
+
+Documented in `bastion manual updating`.
+
 ## Audit
 
 ### `bastion audit tail`
 
 follow the audit log
+
+Documented in `bastion manual auditing`.
+
+### `bastion audit export`
+
+write the log for a SIEM
+
+| flag       | meaning                  |
+| ---------- | ------------------------ |
+| `--syslog` | RFC 5424 lines           |
+| `--ndjson` | one JSON object per line |
 
 Documented in `bastion manual auditing`.
 
@@ -592,6 +871,64 @@ walk the hash chain
 
 Documented in `bastion manual auditing`.
 
+### `bastion audit profile`
+
+read or set the audit profile
+
+Documented in `bastion manual auditing`.
+
+## Stores
+
+### `bastion kv <operation>`
+
+inspect the KV adapter
+
+| argument    | required | meaning                     |
+| ----------- | -------- | --------------------------- |
+| `operation` | yes      | get, put, list, rm or stats |
+
+Documented in `bastion manual adapters`.
+
+### `bastion r2 <operation>`
+
+inspect the object adapter
+
+| argument    | required | meaning                     |
+| ----------- | -------- | --------------------------- |
+| `operation` | yes      | get, put, list, rm or stats |
+
+Documented in `bastion manual adapters`.
+
+### `bastion d1 <operation>`
+
+inspect the SQL adapter
+
+| argument    | required | meaning                     |
+| ----------- | -------- | --------------------------- |
+| `operation` | yes      | get, put, list, rm or stats |
+
+Documented in `bastion manual adapters`.
+
+### `bastion queues <operation>`
+
+inspect the queue adapter
+
+| argument    | required | meaning                     |
+| ----------- | -------- | --------------------------- |
+| `operation` | yes      | get, put, list, rm or stats |
+
+Documented in `bastion manual adapters`.
+
+### `bastion cache <operation>`
+
+inspect the cache adapter
+
+| argument    | required | meaning                     |
+| ----------- | -------- | --------------------------- |
+| `operation` | yes      | get, put, list, rm or stats |
+
+Documented in `bastion manual adapters`.
+
 ## Vm
 
 ### `bastion vm list`
@@ -600,7 +937,60 @@ every guest; refuses by name outside isolated
 
 Documented in `bastion manual isolation`.
 
+### `bastion vm show <tenant>`
+
+one guest
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `tenant` | yes      | the tenant name |
+
+Documented in `bastion manual isolation`.
+
+### `bastion vm console <tenant>`
+
+attach to a guest console
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `tenant` | yes      | the tenant name |
+
+Documented in `bastion manual isolation`.
+
+### `bastion vm stop <tenant>`
+
+stop a guest
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `tenant` | yes      | the tenant name |
+
+Documented in `bastion manual isolation`.
+
 ## Cluster
+
+### `bastion cluster init`
+
+make this node the control node
+
+Documented in `bastion manual clustering`.
+
+### `bastion cluster join`
+
+dial out to a control node and join
+
+| flag                  | meaning                 |
+| --------------------- | ----------------------- |
+| `--control <address>` | the control node        |
+| `--token <token>`     | the one-time join token |
+
+Documented in `bastion manual clustering`.
+
+### `bastion cluster leave`
+
+leave the cluster
+
+Documented in `bastion manual clustering`.
 
 ### `bastion cluster nodes`
 
@@ -633,6 +1023,12 @@ promote a replica, naming the worst-case write loss first
 
 Documented in `bastion manual clustering`.
 
+### `bastion cluster status`
+
+the cluster as the control node sees it
+
+Documented in `bastion manual clustering`.
+
 ### `bastion cluster provision <target>`
 
 install bastion on hosts over SSH and join them
@@ -651,7 +1047,83 @@ install bastion on hosts over SSH and join them
 
 Documented in `bastion manual clustering`.
 
+## Access
+
+### `bastion access invite <tenant>`
+
+issue a tenant credential
+
+| argument | required | meaning         |
+| -------- | -------- | --------------- |
+| `tenant` | yes      | the tenant name |
+
+| flag            | meaning                       |
+| --------------- | ----------------------------- |
+| `--role <role>` | tenant-admin or tenant-viewer |
+
+Documented in `bastion manual access`.
+
+### `bastion access list`
+
+every credential issued
+
+Documented in `bastion manual access`.
+
+### `bastion access revoke <id>`
+
+revoke a credential
+
+| argument | required | meaning           |
+| -------- | -------- | ----------------- |
+| `id`     | yes      | the credential id |
+
+Documented in `bastion manual access`.
+
+### `bastion access role <id> <role>`
+
+change a credential s role
+
+| argument | required | meaning           |
+| -------- | -------- | ----------------- |
+| `id`     | yes      | the credential id |
+| `role`   | yes      | the new role      |
+
+Documented in `bastion manual access`.
+
+## Portability
+
+### `bastion export <host>`
+
+write the portable artifact for a site
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `host`   | yes      | the hostname |
+
+Documented in `bastion manual migrating`.
+
+### `bastion import <host> <artifact>`
+
+read a portable artifact into a site
+
+| argument   | required | meaning            |
+| ---------- | -------- | ------------------ |
+| `host`     | yes      | the hostname       |
+| `artifact` | yes      | the export to read |
+
+Documented in `bastion manual migrating`.
+
 ## Migrate
+
+### `bastion migrate survey <source>`
+
+find every site on a source
+
+| argument | required | meaning                               |
+| -------- | -------- | ------------------------------------- |
+| `source` | yes      | an ssh target, a URL, or --cloudflare |
+
+Documented in `bastion manual migrating`.
 
 ### `bastion migrate plan <source>`
 
@@ -660,6 +1132,32 @@ what would move and what will not carry
 | argument | required | meaning                               |
 | -------- | -------- | ------------------------------------- |
 | `source` | yes      | an ssh target, a URL, or --cloudflare |
+
+Documented in `bastion manual migrating`.
+
+### `bastion migrate run <source>`
+
+execute the plan, resumable per site
+
+| argument | required | meaning                               |
+| -------- | -------- | ------------------------------------- |
+| `source` | yes      | an ssh target, a URL, or --cloudflare |
+
+| flag    | meaning                       |
+| ------- | ----------------------------- |
+| `--yes` | act; the default is a dry run |
+
+Documented in `bastion manual migrating`.
+
+### `bastion migrate resume`
+
+continue an interrupted migration
+
+Documented in `bastion manual migrating`.
+
+### `bastion migrate status`
+
+where a migration got to
 
 Documented in `bastion manual migrating`.
 
@@ -676,7 +1174,49 @@ issue a scoped API token
 
 Documented in `bastion manual access`.
 
+### `bastion api token list`
+
+every token, when it was last used, and whether it is revoked
+
+Documented in `bastion manual access`.
+
+### `bastion api token revoke <id>`
+
+revoke a token
+
+| argument | required | meaning      |
+| -------- | -------- | ------------ |
+| `id`     | yes      | the token id |
+
+Documented in `bastion manual access`.
+
+## Pairing
+
+### `bastion pair`
+
+pair with the drupflare control plane
+
+Documented in `bastion manual pairing`.
+
+### `bastion unpair`
+
+stop pairing
+
+Documented in `bastion manual pairing`.
+
 ## Misc
+
+### `bastion dashboard open`
+
+open the dashboard in a browser
+
+Documented in `bastion manual dashboard`.
+
+### `bastion dashboard token`
+
+print a one-time dashboard claim token
+
+Documented in `bastion manual dashboard`.
 
 ### `bastion manual [topic]`
 
