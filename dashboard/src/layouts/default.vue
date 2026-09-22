@@ -2,10 +2,11 @@
 import type { NavigationMenuItem } from '@nuxt/ui';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import SignIn from '../components/SignIn.vue';
 import ThemeToggle from '../components/ThemeToggle.vue';
 import { useSession } from '../composables/useSession';
 
-const { principal, isOperator, ensure } = useSession();
+const { principal, isOperator, ready, ensure, signOut } = useSession();
 const route = useRoute();
 void ensure();
 
@@ -49,7 +50,12 @@ const ROLE_LABEL: Record<string, string> = {
 </script>
 
 <template>
-	<UDashboardGroup unit="rem">
+	<SignIn v-if="ready && principal === null" />
+
+	<UDashboardGroup
+		v-else
+		unit="rem"
+	>
 		<!-- off-screen rather than sr-only, whose `padding: 0` fights the padding that gives this a
 		real target size once it is focused -->
 		<ULink
@@ -119,7 +125,18 @@ const ROLE_LABEL: Record<string, string> = {
 							>
 						</span>
 					</UBadge>
-					<ThemeToggle :class="collapsed ? '' : 'ml-auto'" />
+					<UButton
+						v-if="principal"
+						icon="i-lucide-log-out"
+						color="neutral"
+						variant="ghost"
+						size="xs"
+						aria-label="Sign Out"
+						data-test="sign-out"
+						:class="collapsed ? '' : 'ml-auto'"
+						@click="signOut"
+					/>
+					<ThemeToggle :class="collapsed && principal ? '' : 'ml-auto'" />
 				</div>
 			</template>
 		</UDashboardSidebar>

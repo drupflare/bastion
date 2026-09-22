@@ -12,6 +12,7 @@ export interface Principal {
 const principal = ref<Principal | null>(null);
 const csrf = ref<string>('');
 const tenants = ref<TenantSummary[]>([]);
+const ready = ref(false);
 let bootstrap: Promise<void> | null = null;
 
 /**
@@ -49,10 +50,38 @@ export function useSession() {
 				csrf.value = answer.csrf ?? '';
 			})
 			.catch(() => {
-				// a signed-out browser is not an error; the nav says so and every call answers 401
+				// a signed-out browser is not an error; it gets the sign-in form
 				bootstrap = null;
+			})
+			.finally(() => {
+				ready.value = true;
 			});
 		await bootstrap;
+	}
+
+	/**
+	 * Exchanges the claim token for a session.
+	 *
+	 * The operator credential is the token `bastion dashboard token` prints rather than a
+	 * password: bastion stores no accounts, so there is nothing to leak and nothing to reset, and
+	 * re-minting needs a shell on the box, which is the access a password reset would prove anyway.
+	 */
+	async function signIn(claim: string): Promise<void> {
+		const answer = await call<Principal & { csrf: string }>('/api/session', {
+			method: 'POST',
+			body: { claim }
+		});
+		adopt({ id: answer.id, role: answer.role, tenant: answer.tenant }, answer.csrf);
+		ready.value = true;
+		await load();
+	}
+
+	async function signOut(): Promise<void> {
+		await call('/api/session', { method: 'DELETE', csrf: csrf.value }).catch(() => undefined);
+		principal.value = null;
+		csrf.value = '';
+		tenants.value = [];
+		bootstrap = null;
 	}
 
 	async function load(): Promise<void> {
@@ -66,5 +95,18 @@ export function useSession() {
 		csrf.value = token;
 	}
 
-	return { principal, csrf, tenants, isOperator, canWrite, visibleTenants, ensure, load, adopt };
+	return {
+		principal,
+		csrf,
+		tenants,
+		ready,
+		isOperator,
+		canWrite,
+		visibleTenants,
+		ensure,
+		load,
+		adopt,
+		signIn,
+		signOut
+	};
 }
