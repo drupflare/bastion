@@ -1,43 +1,103 @@
 import type { Context } from '@drupflare/bastion';
 import {
 	BastionError,
-	HealthLedger,
-	LogWriter,
-	Registry,
-	TRIPWIRES,
 	capacity,
 	defaultCostModel,
 	diagnose,
+	HealthLedger,
 	installTool,
+	LogWriter,
 	preflight,
 	probeOptional,
 	readHost,
-	renderTree
+	Registry,
+	renderTree,
+	RUNTIME_PIDFILE,
+	TRIPWIRES
 } from '@drupflare/bastion';
 import { kv, table } from '../format';
 import { emit, load, type Globals } from '../state';
 import { VERSION } from '../version';
 
+/**
+ * Whether this box is serving, and what each tenant is doing.
+ *
+ * `status` printed the configured tenants and nothing else, so it read identically on a running box
+ * and a stopped one and exited 0 either way. It is the first command after `up` and the first
+ * command when a site is down, and it answered neither question.
+ *
+ * Read off the pidfile and the tenant sockets rather than the management API, so it works with no
+ * credential, with the network down, and against a process that is wedged: a wedged bastion still
+ * has a pid, which is the whole reason `down` uses a pidfile too.
+ */
 export function runStatus(ctx: Context, globals: Globals): void {
 	const loaded = load(ctx, globals);
 	const report = preflight(ctx);
+
+	/** whether the process a pidfile names is still there; an absent file is not running */
+	const alive = (file: string): boolean => {
+		if (!ctx.files.exists(file)) return false;
+		const pid = Number(ctx.files.readText(file).trim());
+		return Number.isFinite(pid) && ctx.runner.signal(pid, 0) !== 'gone';
+	};
+
+	const pidfile = `${loaded.state}/bastion.pid`;
+	const recorded = ctx.files.exists(pidfile) ? Number(ctx.files.readText(pidfile).trim()) : null;
+	const running = alive(pidfile);
+
 	const tenants = loaded.config.tenants.map((tenant) => ({
 		tenant: tenant.name,
 		sites: tenant.sites.length,
-		limits: tenant.limits ?? {}
+		limits: tenant.limits ?? {},
+		suspended: tenant.suspended === true,
+		// the pid, never the socket file: a socket outlives the process that bound it, so a tenant
+		// whose workerd was killed read as `up` from a box that was itself still running, with
+		// every request answering 502
+		listening: running && alive(`${loaded.state}/tenants/${tenant.name}/${RUNTIME_PIDFILE}`)
 	}));
-	emit(ctx, globals, { mode: loaded.config.mode, platform: report.platform, tenants }, () =>
-		tenants.length === 0
-			? 'no tenants are configured'
-			: table(
-					['tenant', 'sites', 'cpu', 'memory'],
-					tenants.map((t) => [
-						t.tenant,
-						String(t.sites),
-						String(t.limits.cpu ?? 'max'),
-						String(t.limits.memory ?? 'max')
-					])
-				)
+
+	const listeners: [string, string][] = Object.entries(loaded.config.listeners).map(
+		([which, listener]) => [which, (listener as { address: string }).address]
+	);
+
+	emit(
+		ctx,
+		globals,
+		{
+			running,
+			pid: running ? recorded : null,
+			mode: loaded.config.mode,
+			platform: report.platform,
+			tenants
+		},
+		() =>
+			[
+				kv([
+					['running', running ? `yes, pid ${String(recorded)}` : 'no'],
+					['mode', loaded.config.mode],
+					['state', loaded.state],
+					...(running ? listeners : [])
+				]),
+				'',
+				tenants.length === 0
+					? 'no tenants are configured'
+					: table(
+							['tenant', 'sites', 'cpu', 'memory', 'state'],
+							tenants.map((t) => [
+								t.tenant,
+								String(t.sites),
+								String(t.limits.cpu ?? 'max'),
+								String(t.limits.memory ?? 'max'),
+								t.suspended ? 'suspended' : t.listening ? 'up' : 'down'
+							])
+						),
+				...(running || recorded === null
+					? []
+					: [
+							'',
+							`pid ${recorded} is in the pidfile and is not running; \`bastion up\` clears it`
+						])
+			].join('\n')
 	);
 }
 
