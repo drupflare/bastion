@@ -274,11 +274,24 @@ describe.skipIf(reason !== null)(`cluster flow (${reason ?? 'enabled'})`, () => 
 	});
 
 	describe('placing a site', () => {
+		/**
+		 * Placement routes reads; it does not copy data.
+		 *
+		 * Exit 3 rather than 0, and the command says so: the replica starts receiving reads it
+		 * would answer from an empty object. Copying needs the site's own owner token, which
+		 * bastion mints at claim and does not keep.
+		 */
 		it('places it on the control node with a replica on the child', async () => {
 			const answer = await bastion('node-a', `cluster place ${SITE} --replicas 1`);
-			expect(answer.code).toBe(0);
+			expect(answer.code).toBe(3);
 			expect(answer.out).toMatch(/primary\s+node-a/);
 			expect(answer.out).toMatch(/replicas\s+node-b/);
+		});
+
+		it('says the data was not copied, and names the flag that copies it', async () => {
+			const answer = await bastion('node-a', `cluster place ${SITE} --replicas 1`);
+			expect(answer.out).toContain('NOT copied');
+			expect(answer.out).toContain('--owner-token');
 		});
 
 		it('reaches the child on its next heartbeat', async () => {
