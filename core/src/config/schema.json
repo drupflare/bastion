@@ -1,0 +1,446 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://bastion.drupflare.dev/schema.json",
+	"title": "bastion.yml",
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"version": {
+			"const": 1
+		},
+		"mode": {
+			"enum": ["solo", "hardened", "isolated"]
+		},
+		"state": {
+			"type": "string"
+		},
+		"listeners": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"http": {
+					"$ref": "#/$defs/listener"
+				},
+				"https": {
+					"$ref": "#/$defs/listener"
+				},
+				"management": {
+					"$ref": "#/$defs/listener"
+				}
+			}
+		},
+		"front": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"rateLimit": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"perIp": {
+							"type": "integer",
+							"minimum": 1
+						},
+						"perTenant": {
+							"type": "integer",
+							"minimum": 1
+						}
+					}
+				},
+				"maxBodyBytes": {
+					"$ref": "#/$defs/size"
+				},
+				"headerTimeoutMs": {
+					"type": "integer",
+					"minimum": 1
+				},
+				"maxConnectionsPerIp": {
+					"type": "integer",
+					"minimum": 1
+				},
+				"http2": {
+					"type": "boolean"
+				},
+				"http3": {
+					"type": "boolean"
+				},
+				"compression": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"encodings": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"minBytes": {
+							"$ref": "#/$defs/size"
+						}
+					}
+				},
+				"trustedProxies": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"runtime": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"workerd": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"version": {
+							"type": "string"
+						},
+						"verify": {
+							"enum": ["sha256", "none"]
+						}
+					}
+				},
+				"floors": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"workerd": {
+							"type": "string"
+						},
+						"firecracker": {
+							"type": "string"
+						}
+					}
+				},
+				"residency": {
+					"enum": ["evict", "pin"]
+				},
+				"limits": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"isolateMemory": {
+							"$ref": "#/$defs/isolateMemory"
+						},
+						"startupMs": {
+							"type": "integer",
+							"minimum": 1000
+						},
+						"subrequests": {
+							"type": "integer",
+							"minimum": 50
+						},
+						"alarmMs": {
+							"type": "integer",
+							"minimum": 900000
+						}
+					}
+				},
+				"unsafeEval": {
+					"type": "boolean"
+				}
+			}
+		},
+		"drivers": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"cache": {
+					"$ref": "#/$defs/driver"
+				},
+				"kv": {
+					"$ref": "#/$defs/driver"
+				},
+				"r2": {
+					"$ref": "#/$defs/driver"
+				},
+				"d1": {
+					"$ref": "#/$defs/driver"
+				},
+				"queues": {
+					"$ref": "#/$defs/driver"
+				},
+				"secrets": {
+					"$ref": "#/$defs/driver"
+				}
+			}
+		},
+		"tls": {
+			"type": "object"
+		},
+		"cluster": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["role", "node"],
+			"properties": {
+				"role": {
+					"enum": ["control", "child"]
+				},
+				"control": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["address"],
+					"properties": {
+						"address": {
+							"type": "string"
+						}
+					}
+				},
+				"node": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["id"],
+					"properties": {
+						"id": {
+							"$ref": "#/$defs/name"
+						},
+						"labels": {
+							"type": "object",
+							"additionalProperties": {
+								"type": "string"
+							}
+						}
+					}
+				}
+			},
+			"if": {
+				"properties": {
+					"role": {
+						"const": "child"
+					}
+				}
+			},
+			"then": {
+				"required": ["control"]
+			}
+		},
+		"audit": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"profile": {
+					"enum": ["minimal", "balanced", "everything"]
+				},
+				"level": {
+					"$ref": "#/$defs/level"
+				},
+				"events": {
+					"type": "object",
+					"additionalProperties": {
+						"type": "boolean"
+					}
+				},
+				"sinks": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": ["type"],
+						"properties": {
+							"type": {
+								"type": "string"
+							}
+						}
+					}
+				},
+				"retention": {
+					"$ref": "#/$defs/retention"
+				}
+			}
+		},
+		"logs": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"level": {
+					"$ref": "#/$defs/level"
+				},
+				"retention": {
+					"$ref": "#/$defs/retention"
+				},
+				"debugRetention": {
+					"$ref": "#/$defs/retention"
+				}
+			}
+		},
+		"backup": {
+			"type": "object"
+		},
+		"tenants": {
+			"type": "array",
+			"items": {
+				"$ref": "#/$defs/tenant"
+			}
+		}
+	},
+	"$defs": {
+		"listener": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["address"],
+			"properties": {
+				"address": {
+					"type": "string"
+				}
+			}
+		},
+		"size": {
+			"type": ["integer", "string"],
+			"pattern": "^\\d+(\\.\\d+)?\\s*([KMGT]i?)?B?$"
+		},
+		"name": {
+			"type": "string",
+			"pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+		},
+		"level": {
+			"enum": ["debug", "info", "warn", "error", "critical"]
+		},
+		"driver": {
+			"type": "object",
+			"required": ["driver"],
+			"properties": {
+				"driver": {
+					"type": "string",
+					"minLength": 1
+				}
+			}
+		},
+		"retention": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"maxBytes": {
+					"$ref": "#/$defs/size"
+				},
+				"maxAge": {
+					"type": "string"
+				},
+				"rotate": {
+					"enum": ["hourly", "daily", "weekly"]
+				}
+			}
+		},
+		"capabilities": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"codegen": {
+					"type": "boolean"
+				},
+				"workerLoader": {
+					"type": "boolean"
+				},
+				"diagnosticRoutes": {
+					"type": "boolean"
+				},
+				"extensions": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"adminPhpConsole": {
+					"type": "boolean"
+				}
+			}
+		},
+		"site": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["host", "bundle"],
+			"properties": {
+				"host": {
+					"type": "string",
+					"minLength": 1
+				},
+				"bundle": {
+					"type": "string",
+					"minLength": 1
+				},
+				"probe": {
+					"type": "string"
+				},
+				"primary": {
+					"$ref": "#/$defs/name"
+				},
+				"replicas": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/name"
+					}
+				},
+				"bindings": {
+					"type": "object",
+					"additionalProperties": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"tenant": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["name", "sites"],
+			"properties": {
+				"name": {
+					"$ref": "#/$defs/name"
+				},
+				"sites": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/site"
+					}
+				},
+				"limits": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"cpu": {
+							"type": "string"
+						},
+						"memory": {
+							"$ref": "#/$defs/size"
+						},
+						"pids": {
+							"type": "integer",
+							"minimum": 1
+						},
+						"maxSites": {
+							"type": "integer",
+							"minimum": 0
+						}
+					}
+				},
+				"egress": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"allow": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						}
+					}
+				},
+				"capabilities": {
+					"$ref": "#/$defs/capabilities"
+				}
+			}
+		},
+		"isolateMemory": {
+			"anyOf": [
+				{
+					"type": "integer",
+					"minimum": 134217728
+				},
+				{
+					"type": "string",
+					"pattern": "^\\d+(\\.\\d+)?\\s*([KMGT]i?)?B?$"
+				}
+			]
+		}
+	}
+}
