@@ -204,7 +204,28 @@ export {
 	type TenantPaths
 } from './capnp/plan';
 export { AI_SHIM, D1_SHIM, SHIM_MODULES, VECTORIZE_SHIM } from './capnp/shims';
+export { handleCluster, settingsOf, type ControlDeps } from './cluster/control';
 export {
+	JOIN_PREFIX,
+	JOIN_TOKEN_TTL_MS,
+	NODE_FILE,
+	NODE_PREFIX,
+	NodeCredentials,
+	nodeBearer,
+	type NodeCredential
+} from './cluster/credentials';
+export { forward, forwardTarget, placementFor, type ForwardTarget } from './cluster/forward';
+export {
+	MEMBERSHIP_FILE,
+	MembershipStore,
+	heartbeat as clusterHeartbeat,
+	join as joinCluster,
+	reportOf,
+	type Membership
+} from './cluster/membership';
+export {
+	PLACEMENT_FILE,
+	PlacementStore,
 	REPLICA_LAG_MS,
 	plan as planPlacement,
 	planPromotion,
@@ -213,6 +234,23 @@ export {
 	type PlacementInput,
 	type PromotionPlan
 } from './cluster/placement';
+export {
+	CLUSTER_PATHS,
+	CLUSTER_PREFIX,
+	CLUSTER_PROTOCOL,
+	HOP_HEADER,
+	clusterPathOf,
+	type ClusterEnvelope,
+	type ClusterPath,
+	type ClusterSettings,
+	type HeartbeatAnswer,
+	type HeartbeatRequest,
+	type JoinAnswer,
+	type JoinRequest,
+	type NodeReport,
+	type NodesAnswer,
+	type ReplicaRequest
+} from './cluster/protocol';
 export {
 	LARGE_RANGE_FLAG,
 	checkRange,
@@ -232,6 +270,7 @@ export {
 export {
 	HEARTBEAT_MS,
 	NodeRegistry,
+	REGISTRY_FILE,
 	UNREACHABLE_AFTER_MS,
 	type ClusterNode,
 	type NodeState
@@ -706,6 +745,17 @@ export {
 	type Account,
 	type Session
 } from './serve/session';
+export {
+	ABSENT_PAGE,
+	INDEX,
+	bundleFrom,
+	resolveAsset,
+	serveStatic,
+	staticTypeFor,
+	withNonce,
+	type AssetBundle,
+	type StaticAsset
+} from './serve/static';
 export { TOKEN_PREFIX, TokenStore, bearer, type ApiToken } from './serve/tokens';
 export {
 	DEFAULT_BACKOFF,
