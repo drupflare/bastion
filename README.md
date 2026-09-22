@@ -25,6 +25,9 @@ as a single binary you run on your own hardware.
 - [Isolation Modes](#isolation-modes)
 - [Platform Limits](#platform-limits)
 - [Configuration](#configuration)
+- [Custom Workers](#custom-workers)
+- [Bindings](#bindings)
+- [Groups](#groups)
 - [Clustering](#clustering)
 - [Drivers](#drivers)
 - [Out of Scope](#out-of-scope)
@@ -142,6 +145,92 @@ tenants:
 
 Secrets never appear in this file. `bastion config where` prints where each resolved value came
 from, and `bastion config set` writes back through the same validator the dashboard uses.
+
+## Custom Workers
+
+bastion hosts workerd, not one application. A site declares what its bundle exports and what it
+expects to be bound, so an ordinary Worker runs beside a CMS under the same tenant boundary.
+
+```yaml
+sites:
+  - host: api.example.edu
+    bundle: ./worker.tar.gz
+    worker:
+      main: server.js
+      durableObjectClass: null
+      kv: [SESSIONS]
+      queues: [JOBS]
+```
+
+An adapter slot with no binding name gets no binding and no service. A worker with no Durable
+Object gets no namespace and no storage mount. The cache is always attached, because workerd
+answers 500 to every request without it.
+
+Leaving the block out gives the drupflare shape. The entrypoint is inferred when the bundle names
+it conventionally or holds one script, and a bundle with several scripts and no stated entrypoint
+is refused rather than guessed.
+
+`bastion site add --template <url>` reads a Worker's own `wrangler.jsonc` and derives the block
+from it. Every binding it carries and every binding it cannot are both named before anything is
+written.
+
+## Bindings
+
+workerd ships the KV, R2 and Queues designators and no stores, so bastion supplies them. D1,
+Vectorize and Workers AI have no field in workerd's schema at all; each is bound through
+`wrapped`, which instantiates a module against bastion's adapter socket and makes its return value
+the binding.
+
+| binding    | backed by                                               |
+| ---------- | ------------------------------------------------------- |
+| KV         | SQLite, Redis or Valkey                                 |
+| R2         | disk, S3, R2, B2, GCS, Azure Blob, SFTP or FTP          |
+| Queues     | SQLite                                                  |
+| D1         | SQLite, Postgres, MySQL or MariaDB                      |
+| Vectorize  | an in-process exact index, or a vector database         |
+| Workers AI | any OpenAI-compatible endpoint: ollama, vLLM, llama.cpp |
+
+Workers AI runs on your hardware. Cloudflare's catalogue is open-weight models, so a box with a
+GPU serves the same weights. Offloading to Cloudflare's endpoint is configurable and opt-in, with
+no automatic failover to it and a per-deployment allow list that bounds both the policy and the
+spend.
+
+Images and Browser need software no server image ships. bastion installs nothing on its own:
+
+```sh
+bastion capability list
+bastion capability install images
+```
+
+A site binding one whose software is absent is refused at validation, naming the install rather
+than failing on the first request. The dashboard offers the same install as a button.
+
+## Groups
+
+A group is a named set of limits, capabilities and egress rules that tenants and sites start
+from, so a tier is stated once rather than once per tenant per node.
+
+```yaml
+groups:
+  campus:
+    limits: { cpu: '4', memory: 8Gi }
+  students:
+    extends: campus
+    limits: { cpu: '1', memory: 1Gi, maxSites: 3 }
+    capabilities: { codegen: false, browser: false, ai: false }
+
+tenants:
+  - name: undergrads
+    group: students
+```
+
+Resolution is group, then tenant, then site, each overriding field by field. Capabilities only
+ever narrow: a tenant cannot turn on what its group turned off, and a site cannot turn on what its
+tenant turned off. A tenant-admin can edit their own block, so a capability that could be widened
+from below would be a suggestion rather than a control.
+
+A capability withdrawn here and a primitive that is not installed are different refusals, and the
+validator says which one you hit.
 
 ## Clustering
 

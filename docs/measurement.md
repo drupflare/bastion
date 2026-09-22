@@ -90,3 +90,17 @@ database with one changed frame writes one frame and reuses seven.
 That dedups across versions the way a delta would, and additionally across sites, which a
 per-version dictionary could not. Revisit if node exposes `ZSTD_CCtx_loadDictionary`; the fixed
 framing is already the input a dictionary delta would want.
+
+**A `scheduled()` handler is not reachable** from a plane driving `workerd serve`. `workerd.capnp`
+carries no cron, schedule or trigger field anywhere in the schema, and `server.c++` serves no path
+that reaches `runScheduled`, which is a C++ method on `WorkerInterface` with no configuration
+surface. Miniflare's `/cdn-cgi/handler/scheduled` is injected by a wrapper worker miniflare writes
+itself, not by workerd. A `service` binding yields a Fetcher, which exposes `fetch()` and not
+`scheduled()`, so the wrapped-module mechanism that carries D1, Vectorize and Workers AI does not
+reach this one either.
+
+The objective, periodic work on a self-hosted node, is met by a Durable Object alarm, which workerd
+does run and which the smoke lane already exercised across a 75-chunk replay. `workforce`'s
+`workerd` plane declares `schedules: cannot(...)` naming the runtime limit rather than the product,
+and `site add --template` prints the cron expressions a manifest declares rather than accepting
+them silently. Revisit only if workerd grows a trigger in its own schema.
