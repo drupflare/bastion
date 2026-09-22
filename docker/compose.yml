@@ -1,0 +1,115 @@
+services:
+  redis:
+    image: redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    ports:
+      - '127.0.0.1:16379:6379'
+
+  valkey:
+    image: valkey/valkey@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507
+    command: ['valkey-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    ports:
+      - '127.0.0.1:16380:6379'
+
+  minio:
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: bastion
+      MINIO_ROOT_PASSWORD: bastion-e2e-secret
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 3s
+      timeout: 5s
+      retries: 40
+    ports:
+      - '127.0.0.1:19000:9000'
+
+  postgres:
+    image: postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_PASSWORD: bastion
+      POSTGRES_USER: bastion
+      POSTGRES_DB: bastion
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U bastion']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    ports:
+      - '127.0.0.1:15432:5432'
+
+  mariadb:
+    image: mariadb@sha256:79d59758afc91b89b120b0a8904d637f5a3b3e1c4900f29b740d6d46c72fef68
+    environment:
+      MARIADB_ROOT_PASSWORD: bastion
+      MARIADB_DATABASE: bastion
+      MARIADB_USER: bastion
+      MARIADB_PASSWORD: bastion
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 3s
+      timeout: 5s
+      retries: 40
+    ports:
+      - '127.0.0.1:13306:3306'
+
+  sshd:
+    image: linuxserver/openssh-server@sha256:946fa26105e0ec212fdf821b9ddc59aab65f2c2d07c02b25ff0f5001fc332ff0
+    environment:
+      PUID: '1000'
+      PGID: '1000'
+      USER_NAME: bastion
+      SUDO_ACCESS: 'true'
+      PASSWORD_ACCESS: 'true'
+      USER_PASSWORD: bastion-e2e-secret
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z localhost 2222']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    ports:
+      - '127.0.0.1:12222:2222'
+
+  stepca:
+    image: smallstep/step-ca@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270
+    environment:
+      DOCKER_STEPCA_INIT_NAME: bastion-e2e
+      DOCKER_STEPCA_INIT_DNS_NAMES: localhost,stepca
+      DOCKER_STEPCA_INIT_ACME: 'true'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'step ca health --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt || exit 1'
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+    ports:
+      - '127.0.0.1:19443:9000'
+
+  node-b:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ['serve', '--mode', 'hardened']
+    environment:
+      BASTION_CONFIG: /etc/bastion/bastion.yml
+    healthcheck:
+      test: ['CMD', 'bastion', 'doctor', '--json']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - '127.0.0.1:18787:8787'
