@@ -1,0 +1,10 @@
+.remember
+node_modules
+dist
+coverage
+*.tsbuildinfo
+playwright-results
+playwright-report
+test-results
+.output
+.nuxt

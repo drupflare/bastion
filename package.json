@@ -1,0 +1,45 @@
+{
+	"name": "bastion-workspace",
+	"version": "1.0.0",
+	"type": "module",
+	"private": true,
+	"description": "A hardened operating environment for self-hosted workerd",
+	"workspaces": [
+		"core",
+		"warden",
+		"dashboard"
+	],
+	"scripts": {
+		"typecheck": "bun run --cwd core typecheck && bun run --cwd warden typecheck",
+		"test": "bun run --cwd core test && bun run --cwd warden test",
+		"test:dashboard": "bun run --cwd dashboard test:unit",
+		"test:coverage": "bun run --cwd core test:coverage",
+		"test:e2e": "bun run --cwd core test:e2e",
+		"check:reachability": "bun core/scripts/check-reachability.ts",
+		"docs:cli": "bun run --cwd warden docs:cli",
+		"build:binary": "bun run --cwd warden build:binary",
+		"prettier": "prettier --write .",
+		"prettier:check": "prettier --check .",
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"husky": "^9.1.7",
+		"lint-staged": "^17.3.0",
+		"prettier": "^3.9.6",
+		"prettier-plugin-organize-imports": "^4.3.0",
+		"prettier-plugin-sh": "^0.19.0",
+		"typescript": "^5.9.3"
+	},
+	"author": "Gregory Mitchell <me@gmitch215.xyz>",
+	"homepage": "https://github.com/drupflare/bastion",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/drupflare/bastion.git"
+	},
+	"bugs": {
+		"url": "https://github.com/drupflare/bastion/issues"
+	},
+	"lint-staged": {
+		"*.{ts,js,mjs,css,md,json,jsonc,yml,yaml,sh}": "prettier --write"
+	}
+}

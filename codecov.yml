@@ -1,0 +1,72 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 2%
+    patch:
+      default:
+        target: 60%
+        threshold: 5%
+
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: unit
+      paths:
+        - core/src
+        - warden/src
+    - name: e2e
+      paths:
+        - core/src
+    - name: dashboard
+      paths:
+        - dashboard
+
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        informational: true
+  individual_components:
+    - component_id: adapters
+      paths: [core/src/adapters/**, core/src/drivers/**]
+    - component_id: api
+      paths: [core/src/api/**, core/src/serve/**]
+    - component_id: backup
+      paths: [core/src/backup/**]
+    - component_id: capacity
+      paths: [core/src/capacity/**]
+    - component_id: cluster
+      paths: [core/src/cluster/**]
+    - component_id: config
+      paths: [core/src/config/**, core/src/capnp/**]
+    - component_id: egress
+      paths: [core/src/egress/**]
+    - component_id: front
+      paths: [core/src/front/**]
+    - component_id: health
+      paths: [core/src/health/**]
+    - component_id: isolation
+      paths: [core/src/isolation/**, core/src/supervise/**]
+    - component_id: migrate
+      paths: [core/src/migrate/**]
+    - component_id: observe
+      paths: [core/src/observe/**, core/src/audit/**]
+    - component_id: tls
+      paths: [core/src/tls/**, core/src/secrets/**]
+    - component_id: cli
+      paths: [warden/src/**]
+
+ignore:
+  - tests/**
+  - coverage/**
+  - '**/*.spec.ts'
+  - docker/**
+  - dist/**
+  - dashboard/**
+
+comment:
+  layout: reach, diff, flags, components
+  require_changes: true
