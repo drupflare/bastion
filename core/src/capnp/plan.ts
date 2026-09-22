@@ -40,13 +40,45 @@ function kindOf(name: string): ModuleSpec['kind'] | null {
 }
 
 /**
+ * A path `embed` will accept, which is one relative to the file holding it.
+ *
+ * Cap'n Proto resolves an `embed` against the directory of the capnp it appears in and refuses an
+ * absolute path outright: `Couldn't read file for embed: /work/bundle/index.js`. The generated
+ * config lives under the tenant's state and the bundle lives wherever the operator put it, so the
+ * two are only ever the same directory by accident. They were in the first rig that booted, which
+ * is why this held until a config was written somewhere real.
+ */
+export function embedPath(from: string, to: string): string {
+	const fromParts = from.replace(/\/+$/, '').split('/').filter(Boolean);
+	const toParts = to.replace(/\/+$/, '').split('/').filter(Boolean);
+	let shared = 0;
+	while (
+		shared < fromParts.length &&
+		shared < toParts.length &&
+		fromParts[shared] === toParts[shared]
+	) {
+		shared += 1;
+	}
+	const up = Array(fromParts.length - shared).fill('..');
+	const down = toParts.slice(shared);
+	const relative = [...up, ...down].join('/');
+	return relative === '' ? '.' : relative;
+}
+
+/**
  * Reads a bundle directory into the module list `planSite` takes.
  *
  * The entrypoint has to come first, and it is only guessed where the answer is unambiguous: a
  * bundle carrying three scripts and naming none of them is a caller mistake, and picking one would
  * deploy a worker that starts and serves the wrong module.
  */
-export function modulesFrom(ctx: Context, bundle: string, main?: string): ModuleSpec[] {
+export function modulesFrom(
+	ctx: Context,
+	bundle: string,
+	main?: string,
+	/** the directory the generated config will be written to; embeds are resolved against it */
+	configDir = bundle
+): ModuleSpec[] {
 	const names = ctx.files
 		.readDir(bundle)
 		.filter((entry) => !entry.directory)
@@ -81,10 +113,11 @@ export function modulesFrom(ctx: Context, bundle: string, main?: string): Module
 	}
 
 	const ordered = [entry, ...names.filter((name) => name !== entry)];
+	const prefix = embedPath(configDir, bundle);
 	return ordered.map((name) => ({
 		name,
 		kind: kindOf(name) as ModuleSpec['kind'],
-		embed: name
+		embed: prefix === '.' ? name : `${prefix}/${name}`
 	}));
 }
 
@@ -96,8 +129,16 @@ export interface TenantPaths {
 	storage: string;
 	/** the site's static assets */
 	assets: string;
-	/** the unix socket bastion listens on for this tenant's adapter traffic */
-	adapterSocket: string;
+	/**
+	 * Where this tenant's adapter sockets live, one file per slot.
+	 *
+	 * One socket per adapter rather than one shared socket, because workerd addresses an `external`
+	 * service by its ADDRESS and sends whatever path the runtime generates: a KV read arrives as
+	 * `GET /<key>`, with nothing naming the slot it came from. Sharing a socket made every native
+	 * designator indistinguishable from the others, and the smoke rig never caught it because it
+	 * backed KV with a worker instead of a socket.
+	 */
+	adapterDir: string;
 	/** the unix socket workerd listens on; the front door proxies to it */
 	listenSocket: string;
 }
@@ -149,6 +190,26 @@ export interface PlanInput {
 	};
 	/** plain text bindings the bundle reads as vars */
 	vars: Record<string, string>;
+}
+
+/**
+ * The socket one adapter service listens on.
+ *
+ * Derived from the service name so the generator and whatever binds the socket cannot disagree
+ * about where it is. A path over 100 bytes is refused by the kernel on both Linux and macOS
+ * (`sun_path` is 108 and 104 bytes), and a tenant name plus a state directory reaches that sooner
+ * than it looks, so the caller is told rather than left with a bind that fails at startup.
+ */
+export function socketFor(paths: Pick<TenantPaths, 'adapterDir'>, service: string): string {
+	const path = `${paths.adapterDir}/${service.replace(/^bastion_/, '')}.sock`;
+	if (path.length > 100) {
+		throw new BastionError(
+			'usage',
+			`the adapter socket path is ${path.length} bytes and the kernel accepts 100; shorten \`state\``,
+			{ next: 'bastion config set state' }
+		);
+	}
+	return path;
 }
 
 /** the adapter services bastion attaches to every tenant worker */
@@ -376,7 +437,7 @@ export function planSite(input: PlanInput): CapnpConfig {
 	}
 	if (input.bindings.assets !== undefined) attached.push(ADAPTER_SERVICES.assets);
 	for (const name of attached) {
-		services.push({ kind: 'external', name, address: `unix:${input.paths.adapterSocket}` });
+		services.push({ kind: 'external', name, address: `unix:${socketFor(input.paths, name)}` });
 	}
 	if (object !== null) {
 		services.push({
@@ -386,12 +447,16 @@ export function planSite(input: PlanInput): CapnpConfig {
 			writable: true
 		});
 	}
-	// deny by default: the config layer of the two-layer egress rule, with the netns underneath it
+	// Deny by default: the config layer of the two-layer egress rule, with the netns underneath it.
+	//
+	// An empty `allow` is how workerd spells "reach nothing". `deny = ["public"]` reads like the
+	// same thing and workerd refuses to start on it: `don't deny 'public', allow 'private' instead`.
+	// bastion emitted that form from the first commit and no configuration it generated could boot
+	// until a real workerd was pointed at one.
 	services.push({
 		kind: 'network',
 		name: ADAPTER_SERVICES.outbound,
-		allow: [],
-		deny: ['public']
+		allow: []
 	});
 
 	const sockets: SocketSpec[] = [

@@ -34,7 +34,17 @@ export function unixUpstream(ctx: Context, paths: UpstreamPaths) {
 	};
 }
 
-/** where each tenant's socket lives, derived from the state directory rather than configured */
+/** the file name both halves agree on: the generator writes it and the front door dials it */
+export const TENANT_SOCKET = 'http.sock';
+
+/**
+ * Where each tenant's socket lives, derived from the state directory rather than configured.
+ *
+ * The name has to match what `planSite` writes into `sockets[0].address`, which is `http.sock`.
+ * This said `workerd.sock`, so the front door dialled a path nothing ever bound and answered 502
+ * `the site is not answering` for every request, with workerd running correctly the whole time.
+ * Two names for one socket, neither of them wrong on its own.
+ */
 export function socketPaths(state: string): UpstreamPaths {
-	return { socketFor: (tenant) => `${state}/tenants/${tenant}/workerd.sock` };
+	return { socketFor: (tenant) => `${state}/tenants/${tenant}/${TENANT_SOCKET}` };
 }

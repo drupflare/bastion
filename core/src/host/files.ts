@@ -24,6 +24,8 @@ export interface FileHost {
 	writeText(path: string, contents: string): void;
 	writeBytes(path: string, contents: Uint8Array): void;
 	readDir(path: string): FileEntry[];
+	/** whether the path is a directory; false for a file and for one that is not there */
+	isDirectory(path: string): boolean;
 	mkdirp(path: string): void;
 	/** removes one file; a missing path is not an error, so a delete is idempotent */
 	remove(path: string): void;
@@ -52,6 +54,13 @@ export function nodeFiles(): FileHost {
 			fs
 				.readdirSync(p, { withFileTypes: true })
 				.map((e: Dirent) => ({ name: e.name, directory: e.isDirectory() })),
+		isDirectory: (p) => {
+			try {
+				return fs.statSync(p).isDirectory();
+			} catch {
+				return false;
+			}
+		},
 		mkdirp: (p) => {
 			fs.mkdirSync(p, { recursive: true });
 		},
@@ -121,6 +130,9 @@ export function memoryFiles(
 			store.set(norm(p), c);
 			addParents(p);
 		},
+		// a path is a directory when something was written under it, which is the only way the
+		// memory host learns one exists
+		isDirectory: (p) => dirs.has(norm(p)),
 		readDir: (p) => {
 			const base = norm(p);
 			const prefix = base === '/' ? '/' : `${base}/`;
