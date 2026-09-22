@@ -12,7 +12,7 @@
 <h1>Interface FrontDeps</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">FrontDeps</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#compression">compression</a><span class="tsd-signature-symbol">:</span> <a href="CompressionPolicy.html" class="tsd-signature-type tsd-kind-interface">CompressionPolicy</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#connections">connections</a><span class="tsd-signature-symbol">?:</span> <a href="../classes/ConnectionCounter.html" class="tsd-signature-type tsd-kind-class">ConnectionCounter</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#hsts">hsts</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxbodybytes">maxBodyBytes</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#perip">perIp</a><span class="tsd-signature-symbol">:</span> <a href="../classes/RateLimiter.html" class="tsd-signature-type tsd-kind-class">RateLimiter</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#pertenant">perTenant</a><span class="tsd-signature-symbol">:</span> <a href="../classes/RateLimiter.html" class="tsd-signature-type tsd-kind-class">RateLimiter</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#table">table</a><span class="tsd-signature-symbol">:</span> <a href="RouteTable.html" class="tsd-signature-type tsd-kind-interface">RouteTable</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#trust">trust</a><span class="tsd-signature-symbol">:</span> <a href="TrustPolicy.html" class="tsd-signature-type tsd-kind-interface">TrustPolicy</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#now-1">now</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#upstream-1">upstream</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">route</span><span class="tsd-signature-symbol">:</span> <a href="Route.html" class="tsd-signature-type tsd-kind-interface">Route</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">request</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Request</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">client</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Response</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L8">core/src/front/handler.ts:8</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L8">core/src/front/handler.ts:8</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -41,44 +41,44 @@
 <h3 class="tsd-anchor-link" id="compression"><span>compression</span><a href="#compression" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">compression</span><span class="tsd-signature-symbol">:</span> <a href="CompressionPolicy.html" class="tsd-signature-type tsd-kind-interface">CompressionPolicy</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L14">core/src/front/handler.ts:14</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L14">core/src/front/handler.ts:14</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="connections"><code class="tsd-tag">Optional</code><span>connections</span><a href="#connections" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">connections</span><span class="tsd-signature-symbol">?:</span> <a href="../classes/ConnectionCounter.html" class="tsd-signature-type tsd-kind-class">ConnectionCounter</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L13">core/src/front/handler.ts:13</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L13">core/src/front/handler.ts:13</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="hsts"><code class="tsd-tag">Optional</code><span>hsts</span><a href="#hsts" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">hsts</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>set on the public listener only; an internal hop must not advertise it</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L20">core/src/front/handler.ts:20</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L20">core/src/front/handler.ts:20</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="maxbodybytes"><span>max<wbr/>Body<wbr/>Bytes</span><a href="#maxbodybytes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">maxBodyBytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L15">core/src/front/handler.ts:15</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L15">core/src/front/handler.ts:15</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="perip"><span>per<wbr/>Ip</span><a href="#perip" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">perIp</span><span class="tsd-signature-symbol">:</span> <a href="../classes/RateLimiter.html" class="tsd-signature-type tsd-kind-class">RateLimiter</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L11">core/src/front/handler.ts:11</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L11">core/src/front/handler.ts:11</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="pertenant"><span>per<wbr/>Tenant</span><a href="#pertenant" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">perTenant</span><span class="tsd-signature-symbol">:</span> <a href="../classes/RateLimiter.html" class="tsd-signature-type tsd-kind-class">RateLimiter</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L12">core/src/front/handler.ts:12</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L12">core/src/front/handler.ts:12</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="table"><span>table</span><a href="#table" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">table</span><span class="tsd-signature-symbol">:</span> <a href="RouteTable.html" class="tsd-signature-type tsd-kind-interface">RouteTable</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L9">core/src/front/handler.ts:9</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L9">core/src/front/handler.ts:9</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="trust"><span>trust</span><a href="#trust" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">trust</span><span class="tsd-signature-symbol">:</span> <a href="TrustPolicy.html" class="tsd-signature-type tsd-kind-interface">TrustPolicy</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L10">core/src/front/handler.ts:10</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L10">core/src/front/handler.ts:10</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -90,7 +90,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L16">core/src/front/handler.ts:16</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L16">core/src/front/handler.ts:16</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="upstream"><span>upstream</span><a href="#upstream" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -107,7 +107,7 @@
 <li><span><span class="tsd-kind-parameter">client</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Response</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/front/handler.ts#L18">core/src/front/handler.ts:18</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/front/handler.ts#L18">core/src/front/handler.ts:18</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

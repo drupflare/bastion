@@ -12,7 +12,7 @@
 <h1>Interface DomainsConfig</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">DomainsConfig</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#addresses">addresses</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#allowcustomroots">allowCustomRoots</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#primary">primary</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#provider">provider</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">driver</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;cloudflare&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;none&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">unknown</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#reserved">reserved</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/config/types.ts#L204">core/src/config/types.ts:204</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/config/types.ts#L204">core/src/config/types.ts:204</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -35,33 +35,33 @@
 <div class="tsd-comment tsd-typography"><p>the addresses this node answers on, which a DNS check compares against</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/config/types.ts#L210">core/src/config/types.ts:210</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/config/types.ts#L210">core/src/config/types.ts:210</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="allowcustomroots"><code class="tsd-tag">Optional</code><span>allow<wbr/>Custom<wbr/>Roots</span><a href="#allowcustomroots" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">allowCustomRoots</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>whether a name outside the primary domain may be added at all</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/config/types.ts#L212">core/src/config/types.ts:212</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/config/types.ts#L212">core/src/config/types.ts:212</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="primary"><code class="tsd-tag">Optional</code><span>primary</span><a href="#primary" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">primary</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>the zone every allocated subdomain sits under</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/config/types.ts#L206">core/src/config/types.ts:206</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/config/types.ts#L206">core/src/config/types.ts:206</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="provider"><code class="tsd-tag">Optional</code><span>provider</span><a href="#provider" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">provider</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">driver</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;cloudflare&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;none&quot;</span><span class="tsd-signature-symbol">;</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">unknown</span> <span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/config/types.ts#L213">core/src/config/types.ts:213</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/config/types.ts#L213">core/src/config/types.ts:213</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="reserved"><code class="tsd-tag">Optional</code><span>reserved</span><a href="#reserved" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">reserved</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>labels an operator reserves beyond bastion's own list</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/config/types.ts#L208">core/src/config/types.ts:208</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/config/types.ts#L208">core/src/config/types.ts:208</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

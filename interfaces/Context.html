@@ -17,7 +17,7 @@ test contacts a network, a host, a cgroup or a hypervisor.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Context</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#cwd">cwd</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#env">env</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">ProcessEnv</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#fetch">fetch</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">input</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">URL</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Request</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">init</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">RequestInit</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Response</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#files">files</a><span class="tsd-signature-symbol">:</span> <a href="FileHost.html" class="tsd-signature-type tsd-kind-interface">FileHost</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#io">io</a><span class="tsd-signature-symbol">:</span> <a href="Io.html" class="tsd-signature-type tsd-kind-interface">Io</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#platform">platform</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#runner">runner</a><span class="tsd-signature-symbol">:</span> <a href="CommandRunner.html" class="tsd-signature-type tsd-kind-interface">CommandRunner</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#now-1">now</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L11">core/src/context.ts:11</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L11">core/src/context.ts:11</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -44,27 +44,27 @@ test contacts a network, a host, a cgroup or a hypervisor.</p>
 <h3 class="tsd-anchor-link" id="cwd"><span>cwd</span><a href="#cwd" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">cwd</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L17">core/src/context.ts:17</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L17">core/src/context.ts:17</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="env"><span>env</span><a href="#env" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">env</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">ProcessEnv</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L16">core/src/context.ts:16</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L16">core/src/context.ts:16</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="fetch"><span>fetch</span><a href="#fetch" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">fetch</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">input</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">URL</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Request</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">init</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">RequestInit</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Response</span><span class="tsd-signature-symbol">&gt;</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L15">core/src/context.ts:15</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L15">core/src/context.ts:15</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="files"><span>files</span><a href="#files" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">files</span><span class="tsd-signature-symbol">:</span> <a href="FileHost.html" class="tsd-signature-type tsd-kind-interface">FileHost</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L13">core/src/context.ts:13</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L13">core/src/context.ts:13</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="io"><span>io</span><a href="#io" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">io</span><span class="tsd-signature-symbol">:</span> <a href="Io.html" class="tsd-signature-type tsd-kind-interface">Io</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L12">core/src/context.ts:12</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L12">core/src/context.ts:12</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="platform"><span>platform</span><a href="#platform" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">platform</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
@@ -74,12 +74,12 @@ drive both sides of a refusal that only fires on one kind of host. Reading <code
 directly left the linux paths reachable only from a linux runner.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L25">core/src/context.ts:25</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L25">core/src/context.ts:25</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="runner"><span>runner</span><a href="#runner" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">runner</span><span class="tsd-signature-symbol">:</span> <a href="CommandRunner.html" class="tsd-signature-type tsd-kind-interface">CommandRunner</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L14">core/src/context.ts:14</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L14">core/src/context.ts:14</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -93,7 +93,7 @@ directly left the linux paths reachable only from a linux runner.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/28ee2583a406f19c01cd9ecee2f32ff66cf2aa9e/core/src/context.ts#L27">core/src/context.ts:27</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/7e77890ea90742681e0cbe153c24827f24318618/core/src/context.ts#L27">core/src/context.ts:27</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
