@@ -31,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: bun install --frozen-lockfile
       - name: Start The Dependency Stack
-        run: docker compose -f docker/compose.yml up -d --wait redis valkey minio postgres mariadb sshd
+        run: docker compose -f docker/compose.yml up -d --wait redis valkey minio postgres mariadb sshd chromium
       - name: End-to-End Tests
         run: REQUIRE_DOCKER=1 bun run test:e2e
       - name: Dump The Stack Logs
