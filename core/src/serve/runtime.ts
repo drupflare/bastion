@@ -4,7 +4,15 @@ import { ADAPTER_SLOTS, handleSlot, type AdapterSet } from '../adapters/server';
 import { handleApi, type ApiDeps, type ApiHandler } from '../api/server';
 import { renderConfig, type CapnpConfig } from '../capnp/generate';
 import { modulesFrom, planSite, socketFor } from '../capnp/plan';
+import { handleCluster } from '../cluster/control';
+import { NodeCredentials } from '../cluster/credentials';
+import { forward, forwardTarget, type ForwardTarget } from '../cluster/forward';
+import { MembershipStore } from '../cluster/membership';
+import { PlacementStore, type Placement } from '../cluster/placement';
+import { CLUSTER_PREFIX, type ReplicaRequest } from '../cluster/protocol';
+import { NodeRegistry, type ClusterNode } from '../cluster/registry';
 import {
+	DEFAULT_CAPABILITIES,
 	DEFAULT_COMPATIBILITY_DATE,
 	DEFAULT_COMPATIBILITY_FLAGS,
 	resolveSiteWorker
@@ -35,6 +43,8 @@ import { AnalyticsWindow, DataPointWindow } from '../observe/analytics';
 import { TenantSupervisor } from '../supervise/tenant';
 import { ACME_CHALLENGE_PREFIX, httpResponder } from '../tls/acme';
 import { CertificateStore } from '../tls/store';
+import { nonce, securityHeaders } from './security';
+import { serveStatic, type AssetBundle } from './static';
 
 export interface RuntimeOptions {
 	config: BastionConfig;
@@ -42,6 +52,12 @@ export interface RuntimeOptions {
 	/** proxies a sanitised request to the tenant's workerd over its unix socket */
 	upstream(route: Route, request: Request, client: string): Promise<Response>;
 	api?: Record<string, ApiHandler>;
+	/** the built dashboard, served from memory; an empty bundle answers with a page saying so */
+	dashboard?: AssetBundle;
+	/** the placement table, on the control node; a child reads its own from the membership file */
+	placement?: Placement[];
+	/** the nodes a forward can dial, likewise */
+	nodes?: ClusterNode[];
 	sessions?: ApiDeps['sessions'];
 	tokens?: ApiDeps['tokens'];
 	/** the resolved workerd binary; absent means do not start tenants */
@@ -166,6 +182,19 @@ export class Runtime {
 		this.options = options;
 		this.ledger = new HealthLedger(ctx, options.config.state);
 		this.startedAt = ctx.now();
+	}
+
+	/**
+	 * Supplies the management handlers after construction.
+	 *
+	 * They are attached rather than passed in because several of them read this runtime's own
+	 * state, and a handler map that closes over the runtime cannot be built before it exists.
+	 */
+	attachApi(
+		handlers: Record<string, ApiHandler>,
+		deps?: Pick<RuntimeOptions, 'sessions' | 'tokens' | 'dashboard'>
+	): void {
+		this.options = { ...this.options, api: handlers, ...deps };
 	}
 
 	get challengeResponder() {
@@ -441,6 +470,14 @@ export class Runtime {
 				hsts: this.options.config.listeners.https !== undefined
 			});
 		}
+
+		// a site this node does not hold is answered by the node that does, before the front door
+		// spends anything on a request it cannot serve
+		const elsewhere = this.forwardFor(request);
+		if (elsewhere !== null) {
+			return forward(this.ctx, elsewhere, request, this.nodeId);
+		}
+
 		const startedAt = this.ctx.now();
 		const outcome = await handleRequest(request, peer, this.front);
 
@@ -469,9 +506,129 @@ export class Runtime {
 		return outcome.response;
 	}
 
+	/** this node's id, which is what a forward stamps on a request so it is not forwarded twice */
+	get nodeId(): string {
+		return this.options.config.cluster?.node.id ?? 'local';
+	}
+
+	/**
+	 * The node that should answer this request, or null to answer it here.
+	 *
+	 * Reads the placement table off disk rather than asking the control node, so a partitioned
+	 * node keeps serving what it already holds. A node in no cluster has no membership file and
+	 * every request is local, which is the single-node case costing one `exists` check.
+	 */
+	private forwardFor(request: Request): ForwardTarget | null {
+		const cluster = this.options.config.cluster;
+		if (cluster === undefined) return null;
+		const state = this.options.config.state;
+		const control = cluster.role === 'control';
+		const held = control ? null : new MembershipStore(this.ctx, state).read();
+		const placement = control
+			? new PlacementStore(this.ctx, state).all()
+			: (held?.placement ?? this.options.placement ?? []);
+		const nodes = control
+			? new NodeRegistry(this.ctx, state).list()
+			: (held?.nodes ?? this.options.nodes ?? []);
+		if (placement.length === 0 || nodes.length === 0) return null;
+
+		const site = (request.headers.get('host') ?? '').split(':')[0] ?? '';
+		return forwardTarget({
+			request,
+			site,
+			localNode: this.nodeId,
+			placement,
+			nodes
+		});
+	}
+
+	/**
+	 * Drives a local site's `/replica` route for a peer that holds a node credential.
+	 *
+	 * Straight to the tenant's workerd rather than through the front door, because the front door
+	 * refuses the whole diagnostic set including `/replica` and that refusal is what keeps a
+	 * compromised site from reaching it. This is the authenticated way past it, and the credential
+	 * has already been checked by the time this runs.
+	 */
+	private async driveReplica(
+		ask: ReplicaRequest,
+		from: string
+	): Promise<{ ok: boolean; detail: string }> {
+		const tenant = this.options.config.tenants.find((entry) =>
+			entry.sites.some((site) => site.host === ask.site)
+		);
+		if (tenant === undefined) {
+			return { ok: false, detail: `this node holds no site called ${ask.site}` };
+		}
+		const url = new URL(`http://${ask.site}/replica`);
+		url.searchParams.set('action', ask.action);
+		if (ask.lane !== undefined) url.searchParams.set('lane', String(ask.lane));
+		// the site's own token, which its route checks; the node credential got the caller this
+		// far and says nothing to the worker about who owns the site
+		const owner = (ask as { ownerToken?: string }).ownerToken ?? '';
+
+		const route: Route = {
+			host: ask.site,
+			tenant: tenant.name,
+			site: ask.site,
+			capabilities: { ...DEFAULT_CAPABILITIES, ...(tenant.capabilities ?? {}) },
+			primary: null,
+			replicas: [],
+			names: [ask.site],
+			canonical: null,
+			forceHttps: false
+		};
+		try {
+			const answer = await this.options.upstream(
+				route,
+				new Request(url, {
+					method: 'POST',
+					headers: { host: ask.site, 'x-cfw-owner-token': owner }
+				}),
+				from
+			);
+			return {
+				ok: answer.ok,
+				detail: `${answer.status} ${await answer.text()}`.slice(0, 500)
+			};
+		} catch (error) {
+			return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
 	/** the management listener, which is a different origin from every tenant's site */
 	async serveManagement(request: Request): Promise<Response> {
 		const { sessions, tokens } = this.options;
+		const url = new URL(request.url);
+
+		// node to node, on the same port and a different prefix. Checked before the api, because a
+		// node credential must never reach the operator authz table
+		if (url.pathname.startsWith(CLUSTER_PREFIX)) {
+			const state = this.options.config.state;
+			const answered = await handleCluster(this.ctx, request, {
+				config: this.options.config,
+				registry: new NodeRegistry(this.ctx, state),
+				credentials: new NodeCredentials(this.ctx, state),
+				placement: () => new PlacementStore(this.ctx, state).all(),
+				replica: (ask, from) => this.driveReplica(ask, from)
+			});
+			if (answered !== null) return answered;
+		}
+
+		// the app itself is unauthenticated, because the sign-in screen has to render before there
+		// is a session to check. Nothing here carries data; the api behind it is the boundary
+		if (!url.pathname.startsWith('/api/') && request.method === 'GET') {
+			const scriptNonce = nonce();
+			const page = serveStatic(this.options.dashboard ?? {}, url.pathname, {
+				nonce: scriptNonce,
+				headers: {
+					...securityHeaders(scriptNonce, url.protocol === 'https:'),
+					'x-bastion-nonce': scriptNonce
+				}
+			});
+			if (page !== null) return page;
+		}
+
 		if (sessions === undefined || tokens === undefined) {
 			return new Response('the management API is not configured', { status: 503 });
 		}
@@ -485,16 +642,68 @@ export class Runtime {
 	}
 
 	/** binds or rebinds a listener; a cert change comes through here rather than through a reload */
-	async bind(which: 'http' | 'https', tls?: TlsMaterial[]): Promise<Listener> {
+	async bind(which: 'http' | 'https' | 'management', tls?: TlsMaterial[]): Promise<Listener> {
 		const spec = listenerSpec(this.options.config, which, tls);
 		const next = await swapListener(
 			this.options.host,
 			this.listeners.get(which) ?? null,
 			spec,
-			(request, peer) => this.serve(request, peer)
+			which === 'management'
+				? (request) => this.serveManagement(request)
+				: (request, peer) => this.serve(request, peer)
 		);
 		this.listeners.set(which, next);
 		return next;
+	}
+
+	/**
+	 * Brings up the console and its API.
+	 *
+	 * **Plaintext is allowed on loopback and refused anywhere else.** The session cookie carries
+	 * the `__Host-` prefix, which a browser only accepts over TLS, so a plaintext listener serves
+	 * the app and answers a bearer token and cannot be signed into. That is a usable first run and
+	 * a warning, rather than a box that refuses to start because its console has no certificate;
+	 * on any other address it is a console exposed in cleartext, which is not.
+	 */
+	private async bindManagement(): Promise<{ listener: Listener; warnings: string[] }> {
+		const address = this.options.config.listeners.management?.address ?? '127.0.0.1:8787';
+		const host = address.slice(0, address.lastIndexOf(':'));
+		const material = this.material().filter((entry) => entry.serverName === host);
+		if (material.length > 0) {
+			return { listener: await this.bind('management', material), warnings: [] };
+		}
+
+		const loopback = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+		const clustered = this.options.config.cluster !== undefined;
+		if (!loopback && !clustered) {
+			throw new BastionError(
+				'config-invalid',
+				`the management listener is on ${address} with no certificate for ${host}, and ` +
+					'binding it would serve the console in cleartext off this machine',
+				{ next: `bastion cert self-sign ${host}` }
+			);
+		}
+		if (!loopback) {
+			// a cluster needs this listener reachable by construction: a child dials it. What that
+			// costs is stated rather than refused, because refusing would make a cluster
+			// unbuildable, and the cost is real -- a join token and a node credential cross it
+			return {
+				listener: await this.bind('management'),
+				warnings: [
+					`the cluster wire on ${address} has no certificate, so node-to-node traffic is ` +
+						'plaintext and carries a bearer credential. Put the cluster on a private ' +
+						`network, or issue a certificate with \`bastion cert self-sign ${host}\`.`
+				]
+			};
+		}
+		return {
+			listener: await this.bind('management'),
+			warnings: [
+				`the console on ${address} has no certificate, so it serves plaintext on loopback. ` +
+					'The API answers a token, and browser sign-in needs tls because the session ' +
+					`cookie is __Host- prefixed. Run \`bastion cert self-sign ${host}\` to fix it.`
+			]
+		};
 	}
 
 	/** the SNI table, rebuilt from the certificate store so a renewal is a rebind */
@@ -539,11 +748,20 @@ export class Runtime {
 				const listener = await this.bind('https', material);
 				bound.push({ which: 'https', address: `${listener.hostname}:${listener.port}` });
 			}
+
+			// the console and its api, which nothing bound for as long as they existed: `status`
+			// printed the configured address and no process was listening on it
+			const management = await this.bindManagement();
+			bound.push({
+				which: 'management',
+				address: `${management.listener.hostname}:${management.listener.port}`
+			});
+
 			return {
 				mode,
 				tenants: [...this.supervisors.keys()],
 				listeners: bound,
-				warnings
+				warnings: [...warnings, ...management.warnings]
 			};
 		} catch (error) {
 			await this.down();

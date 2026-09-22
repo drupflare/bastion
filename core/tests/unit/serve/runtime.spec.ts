@@ -9,6 +9,9 @@ import { memoryFiles } from '../../../src/host/files';
 import { memoryIo } from '../../../src/io';
 import { cgroupPath } from '../../../src/isolation/cgroups';
 import { Runtime } from '../../../src/serve/runtime';
+import { SessionStore } from '../../../src/serve/session';
+import { bundleFrom } from '../../../src/serve/static';
+import { TokenStore } from '../../../src/serve/tokens';
 
 /** an absolute path, because a relative one resolves against the process working directory */
 const BUNDLE = '/srv/bundle';
@@ -518,7 +521,7 @@ describe('Runtime.up and down', () => {
 		return h;
 	}
 
-	it('binds both listeners and reports what it bound', async () => {
+	it('binds the front door and the console, and reports what it bound', async () => {
 		const h = withCertificate();
 		const runtime = new Runtime(h.ctx, {
 			config: h.config,
@@ -527,7 +530,41 @@ describe('Runtime.up and down', () => {
 			platform: 'linux'
 		});
 		const state = await runtime.up();
-		expect(state.listeners.map((l) => l.which)).toEqual(['http', 'https']);
+		expect(state.listeners.map((l) => l.which)).toEqual(['http', 'https', 'management']);
+	});
+
+	/**
+	 * The console was configured and never bound.
+	 *
+	 * `status` printed `management 127.0.0.1:8787` from the configuration and nothing was
+	 * listening there, so every management route and the whole dashboard were unreachable on a
+	 * running box while `serveManagement` passed its own unit tests.
+	 */
+	it('says plainly that a console with no certificate is plaintext on loopback', async () => {
+		const h = withCertificate();
+		const runtime = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			platform: 'linux'
+		});
+		const state = await runtime.up();
+		expect(state.warnings.join(' ')).toContain('has no certificate');
+		expect(state.warnings.join(' ')).toContain('cert self-sign');
+	});
+
+	it('refuses a console off this machine with no certificate for it', async () => {
+		const h = withCertificate();
+		const runtime = new Runtime(h.ctx, {
+			config: {
+				...h.config,
+				listeners: { ...h.config.listeners, management: { address: '0.0.0.0:8787' } }
+			},
+			host: h.host,
+			upstream: h.upstream,
+			platform: 'linux'
+		});
+		await expect(runtime.up()).rejects.toThrow(/cleartext off this machine/);
 	});
 
 	/**
@@ -591,7 +628,7 @@ describe('Runtime.up and down', () => {
 		expect(h.host.stopped).toEqual([0]);
 	});
 
-	it('still binds http alone when no https listener is configured', async () => {
+	it('still binds http and the console when no https listener is configured', async () => {
 		const h = harness({ tenants: [], listeners: { ...defaultConfig().listeners } });
 		delete (h.config.listeners as { https?: unknown }).https;
 		const runtime = new Runtime(h.ctx, {
@@ -601,7 +638,7 @@ describe('Runtime.up and down', () => {
 			platform: 'linux'
 		});
 		const state = await runtime.up();
-		expect(state.listeners.map((l) => l.which)).toEqual(['http']);
+		expect(state.listeners.map((l) => l.which)).toEqual(['http', 'management']);
 	});
 
 	it('stops every listener and every tenant', async () => {
@@ -917,5 +954,87 @@ describe('Runtime.startTenant prepares the tenant directory', () => {
 			platform: 'linux'
 		});
 		await expect(runtime.startTenant('acme')).rejects.toThrow(/has no bundle at/);
+	});
+});
+
+describe('Runtime.serveManagement', () => {
+	const shell = '<!doctype html><script>1</script><div id="__nuxt"></div>';
+	const dashboard = bundleFrom({
+		'index.html': new TextEncoder().encode(shell),
+		'_nuxt/app.js': new TextEncoder().encode('export default 1')
+	});
+
+	const runtime = () => {
+		const h = harness();
+		const built = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			platform: 'linux'
+		});
+		built.attachApi(
+			{},
+			{ dashboard, sessions: new SessionStore(h.ctx), tokens: new TokenStore(h.ctx) }
+		);
+		return built;
+	};
+
+	const get = (path: string) =>
+		runtime().serveManagement(new Request(`https://127.0.0.1:8787${path}`));
+
+	it('serves the app at the root', async () => {
+		const response = await get('/');
+		expect(response.status).toBe(200);
+		expect(await response.text()).toContain('__nuxt');
+	});
+
+	it('serves a page route from the same shell, since the router is in the browser', async () => {
+		expect(await (await get('/tenants')).text()).toContain('__nuxt');
+	});
+
+	it('nonces the shell with the value its own header announces', async () => {
+		const response = await get('/');
+		const announced = response.headers.get('x-bastion-nonce');
+		expect(announced).toBeTruthy();
+		expect(await response.text()).toContain(`<script nonce="${announced as string}"`);
+	});
+
+	it('carries the security headers rather than serving the console bare', async () => {
+		const response = await get('/');
+		expect(response.headers.get('content-security-policy')).toContain('nonce-');
+		expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+	});
+
+	it('serves a built asset with its own type', async () => {
+		const response = await get('/_nuxt/app.js');
+		expect(response.headers.get('content-type')).toContain('javascript');
+		expect(response.headers.get('cache-control')).toContain('immutable');
+	});
+
+	it('leaves /api to the api, which answers json rather than serving the app', async () => {
+		const response = await get('/api/status');
+		expect(response.headers.get('content-type')).toContain('application/json');
+		// no credential on the request, so the api refuses it; the point is that the api saw it
+		expect(response.status).toBe(401);
+	});
+
+	/** a GET is the app; anything else on a non-api path is not a page request */
+	it('does not answer a POST with the app', async () => {
+		const response = await runtime().serveManagement(
+			new Request('https://127.0.0.1:8787/tenants', { method: 'POST' })
+		);
+		expect(response.headers.get('content-type')).not.toContain('text/html');
+	});
+
+	it('says so plainly when no dashboard was built into this binary', async () => {
+		const h = harness();
+		const bare = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			platform: 'linux'
+		});
+		const response = await bare.serveManagement(new Request('https://127.0.0.1:8787/'));
+		expect(await response.text()).toContain('carries no dashboard');
 	});
 });

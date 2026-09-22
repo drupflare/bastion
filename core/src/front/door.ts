@@ -47,14 +47,20 @@ export function buildFront(ctx: Context, config: BastionConfig, options: DoorOpt
  * 443 turns that into one failed QUIC attempt per client, cached for a day. WebSocket over h3 is
  * also unsupported, and bastion needs WebSockets for live logs and `tail`.
  */
+const FALLBACK_ADDRESS = {
+	http: '0.0.0.0:80',
+	https: '0.0.0.0:443',
+	management: '127.0.0.1:8787'
+} as const;
+
 export function listenerSpec(
 	config: BastionConfig,
-	which: 'http' | 'https',
+	which: 'http' | 'https' | 'management',
 	tls?: TlsMaterial[]
 ): ListenerSpec & { http2: boolean; http3: boolean; headerTimeoutMs: number } {
-	const listener = which === 'https' ? config.listeners.https : config.listeners.http;
+	const listener = config.listeners[which];
 	return {
-		address: listener?.address ?? (which === 'https' ? '0.0.0.0:443' : '0.0.0.0:80'),
+		address: listener?.address ?? FALLBACK_ADDRESS[which],
 		reusePort: true,
 		http2: config.front.http2,
 		http3: config.front.http3,
