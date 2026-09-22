@@ -25,6 +25,12 @@ export {
 	type HeadlessOptions,
 	type RenderRequest
 } from './adapters/browser';
+export {
+	buildAdapters,
+	memoryAdapters,
+	type AdapterClients,
+	type AdapterInput
+} from './adapters/build';
 export { memoryCacheStore, tieredCache, type CacheEntry, type CacheStore } from './adapters/cache';
 export {
 	CONSERVATIVE,
@@ -59,6 +65,7 @@ export {
 export {
 	assertComplete,
 	etagOf,
+	objectKv,
 	type ByteRange,
 	type ObjectBody,
 	type ObjectMeta,
@@ -67,7 +74,12 @@ export {
 	type PutObjectOptions
 } from './adapters/objects';
 export { CACHE_STATUS, STORE_STATUS, keyFromPath, pathFromKey } from './adapters/protocol';
-export { handleAdapterRequest, type AdapterSet } from './adapters/server';
+export {
+	ADAPTER_SLOTS,
+	handleAdapterRequest,
+	handleSlot,
+	type AdapterSet
+} from './adapters/server';
 export {
 	SQL_DIALECTS,
 	parseSqlRequest,
@@ -317,7 +329,7 @@ export type {
 	SiteWorkerConfig,
 	TenantConfig
 } from './config/types';
-export { validate, type Problem, type ValidationResult } from './config/validate';
+export { parseSize, validate, type Problem, type ValidationResult } from './config/validate';
 export { defaultContext, type Context } from './context';
 export {
 	MANIFEST_NAMES,
@@ -496,7 +508,7 @@ export {
 	type RouteOutcome,
 	type RouteTable
 } from './front/router';
-export { socketPaths, unixUpstream, type UpstreamPaths } from './front/upstream';
+export { TENANT_SOCKET, socketPaths, unixUpstream, type UpstreamPaths } from './front/upstream';
 export { drill, type DrillOptions, type DrillResult } from './health/drill';
 export {
 	AUTOMATIC,
@@ -644,7 +656,14 @@ export {
 	type SecretRef,
 	type SecretStore
 } from './secrets/store';
-export { Runtime, type RuntimeOptions, type RuntimeState } from './serve/runtime';
+export {
+	RUNTIME_DIGEST,
+	RUNTIME_PIDFILE,
+	Runtime,
+	tenantDigest,
+	type RuntimeOptions,
+	type RuntimeState
+} from './serve/runtime';
 export {
 	CSRF_HEADER,
 	SESSION_COOKIE,

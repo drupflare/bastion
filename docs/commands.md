@@ -40,10 +40,11 @@ Documented in `bastion manual getting-started`.
 
 start every tenant, the front door and the dashboard
 
-| flag             | meaning                              |
-| ---------------- | ------------------------------------ |
-| `--no-dashboard` | do not start the management listener |
-| `--mode <mode>`  | solo, hardened or isolated           |
+| flag                                           | meaning                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `--no-dashboard`                               | do not start the management listener                            |
+| `--mode <mode>`                                | solo, hardened or isolated                                      |
+| `--i-understand-this-is-not-multi-tenant-safe` | accept that this mode puts no security boundary between tenants |
 
 Documented in `bastion manual running`.
 
@@ -57,11 +58,15 @@ Documented in `bastion manual running`.
 
 stop and start, keeping the configuration
 
+| flag                                           | meaning                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `--i-understand-this-is-not-multi-tenant-safe` | accept that this mode puts no security boundary between tenants |
+
 Documented in `bastion manual running`.
 
 ### `bastion reload`
 
-restart only the tenants whose generated capnp changed
+report which tenants are running an older configuration
 
 Documented in `bastion manual running`.
 
@@ -69,9 +74,10 @@ Documented in `bastion manual running`.
 
 run in the foreground; what a unit file calls
 
-| flag            | meaning                    |
-| --------------- | -------------------------- |
-| `--mode <mode>` | solo, hardened or isolated |
+| flag                                           | meaning                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `--mode <mode>`                                | solo, hardened or isolated                                      |
+| `--i-understand-this-is-not-multi-tenant-safe` | accept that this mode puts no security boundary between tenants |
 
 Documented in `bastion manual running`.
 
@@ -376,11 +382,15 @@ Documented in `bastion manual sites`.
 
 ### `bastion site probe <host>`
 
-render the probe path and report what came back
+ask this box to serve the site and report what came back
 
 | argument | required | meaning      |
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
+
+| flag       | meaning                                                            |
+| ---------- | ------------------------------------------------------------------ |
+| `--public` | resolve the hostname instead, checking dns and the certificate too |
 
 Documented in `bastion manual sites`.
 
