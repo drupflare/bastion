@@ -9,6 +9,7 @@ import { run } from '../src/run';
  * and throws on invocation fails here rather than the first time an operator types it. The point
  * is coverage of the wiring: the deep behaviour of each engine is covered in `core`.
  */
+
 const CONFIG = `
 version: 1
 mode: solo
@@ -53,6 +54,7 @@ function harness(files: Record<string, string> = {}): Harness {
  * one's memory is gone by the second. Reusing the store rather than copying it is what makes that
  * real: a command that forgot to persist fails here.
  */
+
 function withDisk(store: ReturnType<typeof memoryFiles>): Harness {
 	const io = memoryIo();
 	return {
@@ -65,6 +67,7 @@ function withDisk(store: ReturnType<typeof memoryFiles>): Harness {
 			fetch: () => Promise.reject(new Error('no network in the gate lane')),
 			env: { BASTION_TEST: '1' },
 			cwd: '/srv',
+			platform: 'linux',
 			now: () => Date.UTC(2026, 8, 22)
 		}
 	};
@@ -112,6 +115,7 @@ describe('tenant suspend, resume and egress', () => {
 	it('suspends a tenant and keeps its sites', async () => {
 		const { ctx, files } = harness();
 		expect(await run(ctx, ['tenant', 'suspend', 'acme'])).toBe(EXIT.OK);
+
 		const written = files.readText('/srv/bastion.yml');
 		expect(written).toContain('suspended');
 		expect(written).toContain('www.example.edu');
@@ -158,6 +162,59 @@ describe('site show and probe', () => {
 		const { ctx } = harness();
 		expect(await run(ctx, ['site', 'probe', 'www.example.edu'])).toBe(EXIT.FINDING);
 	});
+
+	/**
+	 * The probe dials THIS box, never the hostname.
+	 *
+	 * It built the url out of the host and let DNS choose the destination, so on a box with no
+	 * record yet `bastion site probe www.example.edu` reached IANA's example server over the public
+	 * internet, read its 200 and reported the site answering. During a migration the name still
+	 * points at the machine being migrated off, which is the one answer the command must not give.
+	 */
+
+	it('dials the configured listener rather than resolving the hostname', async () => {
+		const asked: string[] = [];
+
+		const { ctx } = harness();
+		ctx.fetch = (input) => {
+			asked.push(String(input));
+			return Promise.resolve(new Response('ok'));
+		};
+		await run(ctx, ['site', 'probe', 'www.example.edu']);
+		expect(asked[0]).toBe('http://0.0.0.0:80/');
+	});
+
+	it('sends the hostname as a header, so the front door still routes by it', async () => {
+		const seen: string[] = [];
+
+		const { ctx } = harness();
+		ctx.fetch = (_input, init) => {
+			seen.push(String((init?.headers as Record<string, string>).host));
+			return Promise.resolve(new Response('ok'));
+		};
+		await run(ctx, ['site', 'probe', 'www.example.edu']);
+		expect(seen[0]).toBe('www.example.edu');
+	});
+
+	it('says which box answered, so a green result cannot be read as a dns check', async () => {
+		const { ctx, io } = harness();
+		ctx.fetch = () => Promise.resolve(new Response('ok'));
+		await run(ctx, ['site', 'probe', 'www.example.edu']);
+		expect(io.outText()).toContain('this box');
+	});
+
+	it('resolves the hostname under --public, and says the answer may be another box', async () => {
+		const asked: string[] = [];
+
+		const { ctx, io } = harness();
+		ctx.fetch = (input) => {
+			asked.push(String(input));
+			return Promise.resolve(new Response('ok'));
+		};
+		await run(ctx, ['site', 'probe', 'www.example.edu', '--public']);
+		expect(asked[0]).toBe('https://www.example.edu/');
+		expect(io.outText()).toContain('not necessarily from this box');
+	});
 });
 
 describe('egress allow and deny', () => {
@@ -198,6 +255,7 @@ describe('delivery', () => {
 	it('survives into a second process, because the store is on disk', async () => {
 		const { ctx, io, files } = harness(withBundle);
 		await run(ctx, ['deploy', 'www.example.edu', '/srv/payload.tar.gz']);
+
 		const second = withDisk(files);
 		expect(await run(second.ctx, ['versions', 'list', 'www.example.edu'])).toBe(EXIT.OK);
 		expect(second.io.outText()).toContain('live');
@@ -227,13 +285,17 @@ describe('delivery', () => {
 	it('reports two identical bundles as one version, and diffs them as identical', async () => {
 		const { ctx, files } = harness(withBundle);
 		await run(ctx, ['deploy', 'www.example.edu', '/srv/payload.tar.gz']);
+
 		const second = withDisk(files);
 		await run(second.ctx, ['--json', 'versions', 'list', 'www.example.edu']);
+
 		const listed = JSON.parse(second.io.outText().split('\n').pop() as string) as {
 			versions: { id: string }[];
 		};
 		expect(listed.versions).toHaveLength(1);
+
 		const id = listed.versions[0]?.id as string;
+
 		const third = withDisk(files);
 		expect(await run(third.ctx, ['versions', 'diff', 'www.example.edu', id, id])).toBe(EXIT.OK);
 	});
@@ -298,6 +360,7 @@ describe('cluster lifecycle', () => {
 	it('refuses a second init rather than re-electing itself', async () => {
 		const { ctx, files } = harness();
 		await run(ctx, ['cluster', 'init']);
+
 		const second = withDisk(files);
 		expect(await run(second.ctx, ['cluster', 'init'])).toBe(EXIT.USAGE);
 	});
@@ -321,6 +384,7 @@ describe('cluster lifecycle', () => {
 	it('leaves a cluster it did join', async () => {
 		const { ctx, files } = harness();
 		await run(ctx, ['cluster', 'init']);
+
 		const second = withDisk(files);
 		expect(await run(second.ctx, ['cluster', 'leave'])).toBe(EXIT.OK);
 	});
@@ -425,17 +489,51 @@ describe('guests', () => {
 });
 
 describe('lifecycle and operations', () => {
-	it('reload restarts nothing when nothing changed', async () => {
+	/**
+	 * `reload` compares against what is RUNNING, not against its own last answer.
+	 *
+	 * It wrote the baseline digest itself, so the first run on any box reported every tenant as
+	 * changed and the second reported none: the answer depended on whether `reload` had been run
+	 * before rather than on whether anything moved. The runtime records the digest when it starts a
+	 * tenant, so an unstarted tenant is correctly out of date.
+	 */
+
+	it('reads a tenant nothing has started as out of date', async () => {
+		const { ctx, io } = harness();
+		expect(await run(ctx, ['reload'])).toBe(EXIT.FINDING);
+		expect(io.outText()).toContain('acme');
+	});
+
+	it('does not write the baseline itself, so a second run says the same thing', async () => {
 		const { ctx, files } = harness();
-		expect(await run(ctx, ['reload'])).toBe(EXIT.OK);
+		await run(ctx, ['reload']);
+
 		const second = withDisk(files);
-		expect(await run(second.ctx, ['reload'])).toBe(EXIT.OK);
-		expect(second.io.outText()).toContain('already matches');
+		expect(await run(second.ctx, ['reload'])).toBe(EXIT.FINDING);
+	});
+
+	// "a tenant running the current configuration reads as unchanged" needs something to have
+	// actually started, since the runtime is what records the baseline; it is in the serving lane
+	/**
+	 * It said `1 tenant will restart`, exited 0, and restarted nothing.
+	 *
+	 * Measured in a container: raise a tenant's memory limit, run `reload`, and `memory.max` is
+	 * still the old value with the same pid serving. Reaching the running `serve` from a separate
+	 * CLI process is a mechanism bastion does not have, so the command must not imply the swap.
+	 */
+
+	it('does not claim a restart it cannot perform, and names what applies it', async () => {
+		const { ctx, io } = harness();
+		await run(ctx, ['reload']);
+		expect(io.outText()).not.toContain('will restart');
+		expect(io.outText()).toContain('Nothing has been restarted');
+		expect(io.outText()).toContain('bastion restart');
 	});
 
 	it('reload leaves a suspended tenant alone', async () => {
 		const { ctx, files } = harness();
 		await run(ctx, ['tenant', 'suspend', 'acme']);
+
 		const second = withDisk(files);
 		await run(second.ctx, ['reload']);
 		expect(second.io.outText()).toContain('acme');
@@ -449,6 +547,7 @@ describe('lifecycle and operations', () => {
 	it('recycle exits 3 on a suspended tenant', async () => {
 		const { ctx, files } = harness();
 		await run(ctx, ['tenant', 'suspend', 'acme']);
+
 		const second = withDisk(files);
 		expect(await run(second.ctx, ['recycle', 'acme'])).toBe(EXIT.FINDING);
 	});
@@ -523,11 +622,124 @@ describe('the dashboard and pairing', () => {
  * These modules were covered through their engines in `core` but never driven through the CLI, so
  * a handler that threw on a shape the engine never produces would have reached an operator first.
  */
+
 describe('inspecting', () => {
 	it('status reports what is configured', async () => {
 		const { ctx, io } = harness();
 		await run(ctx, ['status']);
 		expect(io.outText()).toContain('acme');
+	});
+
+	/**
+	 * `status` printed the tenant table and nothing else.
+	 *
+	 * It read identically on a running box and a stopped one, and exited 0 either way. It is the
+	 * first command after `up` and the first command when a site is down, and it answered neither.
+	 */
+
+	it('says the box is not running when there is no pidfile', async () => {
+		const { ctx, io } = harness();
+		await run(ctx, ['status']);
+		expect(io.outText()).toMatch(/running\s+no/);
+	});
+
+	it('says it is running, with the pid, when the recorded process is alive', async () => {
+		const { ctx, io } = harness({ '/var/lib/bastion/bastion.pid': '4242' });
+		await run(ctx, ['status']);
+		expect(io.outText()).toContain('4242');
+	});
+
+	it('names the listeners only once something is behind them', async () => {
+		const stopped = harness();
+		await run(stopped.ctx, ['status']);
+		expect(stopped.io.outText()).not.toContain('management');
+
+		const started = harness({ '/var/lib/bastion/bastion.pid': '4242' });
+		await run(started.ctx, ['status']);
+		expect(started.io.outText()).toContain('management');
+	});
+
+	/** a pidfile a crash left behind reads as running until something checks the pid */
+
+	it('reports a stale pidfile as stopped, and names what clears it', async () => {
+		const { ctx, io } = harness({ '/var/lib/bastion/bastion.pid': '4242' });
+		ctx.runner = scriptedRunner({ signal: { code: 1, stdout: '', stderr: '' } });
+		await run(ctx, ['status']);
+		expect(io.outText()).toMatch(/running\s+no/);
+		expect(io.outText()).toContain('bastion up');
+	});
+
+	it('marks a tenant up when its runtime is there and down when it is not', async () => {
+		const { ctx, io } = harness({
+			'/var/lib/bastion/bastion.pid': '4242',
+			'/var/lib/bastion/tenants/acme/workerd.pid': '4343'
+		});
+		await run(ctx, ['status']);
+
+		const rows = io.outText().split('\n');
+		expect(rows.find((line) => line.startsWith('acme'))).toContain('up');
+		expect(rows.find((line) => line.startsWith('beta'))).toContain('down');
+	});
+
+	/**
+	 * A killed workerd read as `up` from a box that was itself still running.
+	 *
+	 * The socket file outlives the process that bound it, so the only honest answer is a pid that
+	 * can be signalled. Measured in a container: `kill -9` the tenant's workerd and every request
+	 * answered 502 while `status` said the tenant was up.
+	 */
+
+	it('marks a tenant down once its runtime is gone, whatever socket is left', async () => {
+		const { ctx, io } = harness({
+			'/var/lib/bastion/bastion.pid': '4242',
+			'/var/lib/bastion/tenants/acme/http.sock': ''
+		});
+		await run(ctx, ['status']);
+		expect(
+			io
+				.outText()
+				.split('\n')
+				.find((line) => line.startsWith('acme'))
+		).toContain('down');
+	});
+
+	it('marks it down when the recorded runtime pid is no longer there', async () => {
+		const { ctx, io } = harness({
+			'/var/lib/bastion/bastion.pid': '4242',
+			'/var/lib/bastion/tenants/acme/workerd.pid': '4343'
+		});
+		ctx.runner = scriptedRunner({ 'signal 0 4343': { code: 1, stdout: '', stderr: '' } });
+		await run(ctx, ['status']);
+		expect(
+			io
+				.outText()
+				.split('\n')
+				.find((line) => line.startsWith('acme'))
+		).toContain('down');
+	});
+
+	/**
+	 * A socket file outlives the process that bound it, and it read as `up` on a stopped box.
+	 *
+	 * The same fact bastion already removes a stale socket for, pointing the other way: a tenant
+	 * whose socket is on disk was started at some point, which is not the same as serving now.
+	 */
+
+	it('marks no tenant up while the box itself is down, whatever is on disk', async () => {
+		const { ctx, io } = harness({ '/var/lib/bastion/tenants/acme/http.sock': '' });
+		await run(ctx, ['status']);
+		expect(
+			io
+				.outText()
+				.split('\n')
+				.find((line) => line.startsWith('acme'))
+		).toContain('down');
+	});
+
+	it('carries the same answer under --json, so a monitor can branch on it', async () => {
+		const { ctx, io } = harness({ '/var/lib/bastion/bastion.pid': '4242' });
+		await run(ctx, ['status', '--json']);
+		expect(JSON.parse(io.outText())).toMatchObject({ running: true, pid: 4242 });
 	});
 
 	it('health renders the tree', async () => {
@@ -586,6 +798,7 @@ describe('tenants and sites', () => {
 	it('adds a tenant and refuses a duplicate', async () => {
 		const { ctx, files } = harness();
 		expect(await run(ctx, ['tenant', 'add', 'gamma'])).toBe(EXIT.OK);
+
 		const second = withDisk(files);
 		expect(await run(second.ctx, ['tenant', 'add', 'gamma'])).toBe(EXIT.USAGE);
 	});
@@ -828,7 +1041,6 @@ describe('the manual and completion', () => {
 		expect(await run(ctx, ['manual'])).toBe(EXIT.OK);
 		expect(io.outText()).toContain('tls');
 	});
-
 	for (const shell of ['bash', 'zsh', 'fish']) {
 		it(`emits ${shell} completion`, async () => {
 			const { ctx, io } = harness();
@@ -898,6 +1110,7 @@ describe('maintenance', () => {
 		expect(await run(ctx, ['tenant', 'limits', 'acme', '--cpu', '4', '--pids', '1024'])).toBe(
 			EXIT.OK
 		);
+
 		const written = files.readText('/srv/bastion.yml');
 		expect(written).toContain('1024');
 	});
@@ -931,6 +1144,7 @@ describe('maintenance', () => {
  * probe and bundle path into every new site whatever the tenant was hosting. Both made bastion
  * report a working arbitrary worker as broken.
  */
+
 describe('a tenant hosting an arbitrary worker', () => {
 	const PLAIN = `
 version: 1
@@ -971,8 +1185,10 @@ tenants:
 
 	it('inherits the sibling bundle and worker block when a domain is allocated', async () => {
 		const store = memoryFiles({ '/srv/bastion.yml': PLAIN });
+
 		const { ctx } = withDisk(store);
 		expect(await run(ctx, ['domain', 'add', 'beta', '--tenant', 'api'])).toBe(EXIT.OK);
+
 		const written = store.readText('/srv/bastion.yml');
 		expect(written).toContain('./worker.tar.gz');
 		expect(written).not.toContain('drupflare');
@@ -985,8 +1201,152 @@ tenants:
 				'domains:\n  primary: apps.example.edu\ntenants:'
 			)
 		});
+
 		const { ctx } = withDisk(store);
 		expect(await run(ctx, ['domain', 'add', 'extra', '--tenant', 'acme'])).toBe(EXIT.OK);
 		expect(store.readText('/srv/bastion.yml')).toContain('drupflare');
+	});
+});
+
+/**
+ * `--config` decides where a write lands, not just where a read comes from.
+ *
+ * A writer that fell back to `${cwd}/bastion.yml` whenever the named file did not exist yet took
+ * `tenant add acme --config /etc/bastion/prod.yml`, wrote `./bastion.yml`, and reported success
+ * naming the path it had actually used. The operator believed they had edited production and had
+ * edited whatever directory they were standing in; the next read came back without the change.
+ */
+
+describe('a command that writes honours --config', () => {
+	const empty = () => withDisk(memoryFiles({}));
+
+	it('creates the named file rather than one in the working directory', async () => {
+		const { ctx, files } = empty();
+		expect(await run(ctx, ['tenant', 'add', 'acme', '--config', '/etc/bastion/prod.yml'])).toBe(
+			EXIT.OK
+		);
+		expect(files.exists('/etc/bastion/prod.yml')).toBe(true);
+		expect(files.exists('/srv/bastion.yml')).toBe(false);
+	});
+
+	it('reports the path it actually wrote', async () => {
+		const { ctx, io } = empty();
+		await run(ctx, ['tenant', 'add', 'acme', '--config', '/etc/bastion/prod.yml']);
+		expect(io.outText()).toContain('/etc/bastion/prod.yml');
+	});
+
+	it('reads back what it wrote, so two commands agree on one file', async () => {
+		const store = memoryFiles({});
+
+		const first = withDisk(store);
+		await run(first.ctx, ['tenant', 'add', 'acme', '--config', '/etc/bastion/prod.yml']);
+
+		const second = withDisk(store);
+		await run(second.ctx, ['tenant', 'list', '--config', '/etc/bastion/prod.yml', '--json']);
+		expect(second.io.outText()).toContain('acme');
+	});
+
+	it('still writes beside the working directory when no --config is given', async () => {
+		const { ctx, files } = empty();
+		await run(ctx, ['tenant', 'add', 'acme']);
+		expect(files.exists('/srv/bastion.yml')).toBe(true);
+	});
+
+	it('holds for site add, which is the other command a first install runs', async () => {
+		const store = memoryFiles({});
+
+		const first = withDisk(store);
+		await run(first.ctx, ['tenant', 'add', 'acme', '--config', '/etc/bastion/prod.yml']);
+
+		const second = withDisk(store);
+		await run(second.ctx, [
+			'site',
+			'add',
+			'www.example.edu',
+			'--tenant',
+			'acme',
+			'--config',
+			'/etc/bastion/prod.yml'
+		]);
+		expect(store.readText('/etc/bastion/prod.yml')).toContain('www.example.edu');
+	});
+
+	it('holds for config set', async () => {
+		const { ctx, files } = empty();
+		await run(ctx, ['config', 'set', 'mode', 'hardened', '--config', '/etc/bastion/prod.yml']);
+		expect(files.exists('/etc/bastion/prod.yml')).toBe(true);
+		expect(files.exists('/srv/bastion.yml')).toBe(false);
+	});
+
+	it('holds for domain add, which writes through a different helper', async () => {
+		const store = memoryFiles({});
+
+		const first = withDisk(store);
+		await run(first.ctx, ['tenant', 'add', 'acme', '--config', '/etc/bastion/prod.yml']);
+
+		const second = withDisk(store);
+		await run(second.ctx, [
+			'config',
+			'set',
+			'domains.primary',
+			'sites.example.edu',
+			'--config',
+			'/etc/bastion/prod.yml'
+		]);
+
+		const third = withDisk(store);
+		await run(third.ctx, [
+			'domain',
+			'add',
+			'alice',
+			'--tenant',
+			'acme',
+			'--config',
+			'/etc/bastion/prod.yml'
+		]);
+		expect(store.readText('/etc/bastion/prod.yml')).toContain('alice');
+		expect(store.exists('/srv/bastion.yml')).toBe(false);
+	});
+});
+
+/**
+ * `--memory 4Gi` is the value the manual and the README both use.
+ *
+ * `Number('4Gi')` is `NaN`, and that NaN reached the configuration, then `String(NaN)` reached the
+ * kernel and the cgroup write failed with EINVAL during startup. The tenant ran with no memory
+ * limit at all while `tenant list` printed `NaN` in the column meant to prove it had one.
+ */
+
+describe('a memory limit written the way the manual writes it', () => {
+	const empty = () => withDisk(memoryFiles({}));
+
+	it('parses a binary suffix rather than storing NaN', async () => {
+		const { ctx, files } = empty();
+		expect(await run(ctx, ['tenant', 'add', 'acme', '--memory', '4Gi'])).toBe(EXIT.OK);
+		expect(files.readText('/srv/bastion.yml')).toContain(String(4 * 1024 ** 3));
+	});
+
+	it('parses the decimal suffix too, which is a different number', async () => {
+		const { ctx, files } = empty();
+		await run(ctx, ['tenant', 'add', 'acme', '--memory', '4G']);
+		expect(files.readText('/srv/bastion.yml')).toContain(String(4 * 1000 ** 3));
+	});
+
+	it('still takes a plain byte count', async () => {
+		const { ctx, files } = empty();
+		await run(ctx, ['tenant', 'add', 'acme', '--memory', '536870912']);
+		expect(files.readText('/srv/bastion.yml')).toContain('536870912');
+	});
+
+	it('refuses something that is not a size rather than writing NaN', async () => {
+		const { ctx, io } = empty();
+		expect(await run(ctx, ['tenant', 'add', 'acme', '--memory', 'lots'])).toBe(EXIT.USAGE);
+		expect(io.errText()).toMatch(/not a size/);
+	});
+
+	it('leaves a configuration that still validates', async () => {
+		const store = memoryFiles({});
+		await run(withDisk(store).ctx, ['tenant', 'add', 'acme', '--memory', '512Mi']);
+		expect(await run(withDisk(store).ctx, ['config', 'validate'])).toBe(EXIT.OK);
 	});
 });
