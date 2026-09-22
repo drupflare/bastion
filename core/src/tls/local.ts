@@ -23,7 +23,8 @@ export interface LocalTrustOptions {
  */
 export async function trustLocalCa(
 	ctx: Context,
-	options: LocalTrustOptions
+	options: LocalTrustOptions,
+	platform: string = process.platform
 ): Promise<{ command: string; args: string[] }> {
 	if (!ctx.files.exists(options.caCertPath)) {
 		throw new BastionError('usage', `${options.caCertPath} is not there`);
@@ -46,10 +47,10 @@ export async function trustLocalCa(
 	// the update tools read a directory rather than a path, so the certificate is copied in
 	// FIRST. Running the refresh without copying is a no-op that reports success, and `untrust`
 	// already removes from exactly this path
-	if (process.platform !== 'darwin') {
+	if (platform !== 'darwin') {
 		ctx.files.writeText(`${ANCHOR_DIR}/${basename(options.caCertPath)}`, text);
 	}
-	const invocation = platformTrustCommand(ctx, options.caCertPath);
+	const invocation = platformTrustCommand(ctx, options.caCertPath, platform);
 	await ctx.runner.run(invocation.command, invocation.args);
 	return invocation;
 }
@@ -59,9 +60,10 @@ export const ANCHOR_DIR = '/usr/local/share/ca-certificates';
 
 export function platformTrustCommand(
 	ctx: Context,
-	caCertPath: string
+	caCertPath: string,
+	platform: string = process.platform
 ): { command: string; args: string[] } {
-	if (process.platform === 'darwin') {
+	if (platform === 'darwin') {
 		return {
 			command: 'security',
 			args: [
@@ -81,13 +83,17 @@ export function platformTrustCommand(
 	return { command: 'update-ca-trust', args: ['extract'] };
 }
 
-export async function untrustLocalCa(ctx: Context, caCertPath: string): Promise<void> {
+export async function untrustLocalCa(
+	ctx: Context,
+	caCertPath: string,
+	platform: string = process.platform
+): Promise<void> {
 	const mkcert = binaryOnPath(ctx, 'mkcert');
 	if (mkcert !== null) {
 		await ctx.runner.run(mkcert, ['-uninstall']);
 		return;
 	}
-	if (process.platform === 'darwin') {
+	if (platform === 'darwin') {
 		await ctx.runner.run('security', ['remove-trusted-cert', '-d', caCertPath]);
 		return;
 	}
@@ -114,9 +120,10 @@ function basename(path: string): string {
  */
 export function mdnsCommand(
 	name: string,
-	port: number
+	port: number,
+	platform: string = process.platform
 ): { command: string; args: string[]; available: 'avahi' | 'dns-sd' } {
-	if (process.platform === 'darwin') {
+	if (platform === 'darwin') {
 		return {
 			command: 'dns-sd',
 			args: ['-P', name, '_http._tcp', 'local', String(port), `${name}.local`, '127.0.0.1'],
