@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { memoryAdapters } from '../../../src/adapters/build';
 import { defaultConfig } from '../../../src/config/defaults';
 import type { BastionConfig, SiteConfig } from '../../../src/config/types';
 import { defaultContext } from '../../../src/context';
@@ -8,6 +9,9 @@ import { memoryFiles } from '../../../src/host/files';
 import { memoryIo } from '../../../src/io';
 import { cgroupPath } from '../../../src/isolation/cgroups';
 import { Runtime } from '../../../src/serve/runtime';
+
+/** an absolute path, because a relative one resolves against the process working directory */
+const BUNDLE = '/srv/bundle';
 
 const LINUX = {
 	'/sys/fs/cgroup/cgroup.controllers': 'cpu memory pids',
@@ -100,6 +104,7 @@ describe('Runtime.startTenant', () => {
 				host: h.host,
 				upstream: h.upstream,
 				binary: '/usr/local/bin/workerd',
+				adapters: memoryAdapters,
 				platform: 'linux'
 			})
 		};
@@ -110,6 +115,59 @@ describe('Runtime.startTenant', () => {
 		await runtime.startTenant('acme');
 		expect(h.files.readText(`${cgroupPath('acme')}/memory.max`)).toBe('4096');
 		expect(h.files.readText(`${cgroupPath('acme')}/cgroup.procs`)).toBe('4242');
+	});
+
+	/**
+	 * The supervisor's restart loop had no caller.
+	 *
+	 * `startTenant` called `start()`, which spawns once and returns, so `run()` -- the loop with the
+	 * backoff, the jitter and the crash-loop breaker -- was dead code and `runtime.workerd_restart`
+	 * and `runtime.crash_loop` could never fire. Measured in a container: `kill -9` the tenant's
+	 * workerd and eight seconds later nothing was running and every request answered 502.
+	 */
+	/**
+	 * A tenant that stays up.
+	 *
+	 * The scripted spawn resolves `exited` at once, so the loop reads a clean exit, resets the
+	 * attempt count and clears the pid before an assertion can see any of it. A workerd that keeps
+	 * running is what every one of these is about.
+	 */
+	function serving(mode: BastionConfig['mode'] = 'solo') {
+		const made = runtimeFor(mode);
+		const spawn = made.h.runner.spawn;
+		made.h.runner.spawn = (command, args, options) => ({
+			...spawn(command, args, options),
+			exited: new Promise<number>(() => {})
+		});
+		return made;
+	}
+
+	it('drives the restart loop rather than spawning once and walking away', async () => {
+		const { h, runtime } = serving();
+		await runtime.startTenant('acme');
+		expect(runtime.supervisorFor('acme')?.snapshot().state).toBe('running');
+		expect(h.runner.calls.filter((call) => call.mode === 'spawn')).toHaveLength(1);
+	});
+
+	it('records the runtime pid, which is the only honest answer status can read', async () => {
+		const { h, runtime } = serving();
+		await runtime.startTenant('acme');
+		expect(h.files.readText('/var/lib/bastion/tenants/acme/workerd.pid')).toBe('4242');
+	});
+
+	it('forgets that pid once the tenant stops, so nothing reads a dead one as alive', async () => {
+		const { h, runtime } = runtimeFor('solo');
+		await runtime.startTenant('acme');
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		expect(h.files.exists('/var/lib/bastion/tenants/acme/workerd.pid')).toBe(false);
+	});
+
+	/** workerd refuses to bind over a socket the dead process still holds */
+	it('clears the listen socket before the spawn, not once per startTenant', async () => {
+		const { h, runtime } = runtimeFor('solo');
+		h.files.writeText('/var/lib/bastion/tenants/acme/http.sock', '');
+		await runtime.startTenant('acme');
+		expect(h.files.exists('/var/lib/bastion/tenants/acme/http.sock')).toBe(false);
 	});
 
 	it('wraps the process in hardened and leaves it bare in solo', async () => {
@@ -160,12 +218,19 @@ describe('Runtime.startTenant', () => {
  * `up` spawned workerd against a path that did not exist. These read the file off the seam.
  */
 describe('Runtime.startTenant writes the config workerd is pointed at', () => {
+	/**
+	 * The bundle goes where the SITE says it is.
+	 *
+	 * This once wrote it to `${state}/tenants/<name>/bundle`, which nothing populates, and the
+	 * runtime read from there too, so both halves agreed on a directory that is empty on a real
+	 * box. Every `bastion up` spawned a child that died on ENOENT while the parent reported a pid.
+	 */
 	function withSite(site: SiteConfig) {
 		const h = harness({
 			state: '/var/lib/bastion',
 			tenants: [{ name: 'acme', sites: [site] }]
 		});
-		h.files.writeText('/var/lib/bastion/tenants/acme/bundle/index.js', 'export default {}');
+		h.files.writeText(`${BUNDLE}/index.js`, 'export default {}');
 		return {
 			h,
 			runtime: new Runtime(h.ctx, {
@@ -173,6 +238,7 @@ describe('Runtime.startTenant writes the config workerd is pointed at', () => {
 				host: h.host,
 				upstream: h.upstream,
 				binary: '/usr/local/bin/workerd',
+				adapters: memoryAdapters,
 				platform: 'linux'
 			})
 		};
@@ -181,7 +247,7 @@ describe('Runtime.startTenant writes the config workerd is pointed at', () => {
 	const CAPNP = '/var/lib/bastion/tenants/acme/config.capnp';
 
 	it('writes it before the process is spawned', async () => {
-		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: './w' });
+		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: BUNDLE });
 		await runtime.startTenant('acme');
 		expect(h.files.exists(CAPNP)).toBe(true);
 		expect(h.files.readText(CAPNP)).toContain('sockets = [');
@@ -190,7 +256,7 @@ describe('Runtime.startTenant writes the config workerd is pointed at', () => {
 	it('generates an arbitrary worker with no object when the site says so', async () => {
 		const { h, runtime } = withSite({
 			host: 'api.example.edu',
-			bundle: './w',
+			bundle: BUNDLE,
 			worker: {
 				durableObjectClass: null,
 				durableObject: undefined,
@@ -207,7 +273,7 @@ describe('Runtime.startTenant writes the config workerd is pointed at', () => {
 	it('keeps the drupflare shape for a site that declares no worker block', async () => {
 		const { h, runtime } = withSite({
 			host: 'www.example.edu',
-			bundle: './p',
+			bundle: BUNDLE,
 			probe: 'drupflare'
 		});
 		await runtime.startTenant('acme');
@@ -217,16 +283,16 @@ describe('Runtime.startTenant writes the config workerd is pointed at', () => {
 	});
 
 	it('takes the entrypoint from the bundle rather than from a fixed name', async () => {
-		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: './w' });
-		h.files.writeText('/var/lib/bastion/tenants/acme/bundle/lib.wasm', 'x');
+		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: BUNDLE });
+		h.files.writeText(`${BUNDLE}/lib.wasm`, 'x');
 		await runtime.startTenant('acme');
 		const config = h.files.readText(CAPNP);
 		expect(config.indexOf('index.js')).toBeLessThan(config.indexOf('lib.wasm'));
 	});
 
 	it('refuses a bundle with no entrypoint instead of writing an unstartable config', async () => {
-		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: './w' });
-		h.files.remove('/var/lib/bastion/tenants/acme/bundle/index.js');
+		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: BUNDLE });
+		h.files.remove(`${BUNDLE}/index.js`);
 		await expect(runtime.startTenant('acme')).rejects.toThrow(/no modules/);
 	});
 });
@@ -237,7 +303,7 @@ describe('Runtime.serve', () => {
 			tenants: [
 				{
 					name: 'acme',
-					sites: [{ host: 'www.example.edu', bundle: './p', probe: 'drupflare' }]
+					sites: [{ host: 'www.example.edu', bundle: BUNDLE, probe: 'drupflare' }]
 				}
 			]
 		});
@@ -327,8 +393,26 @@ describe('Runtime.bind', () => {
 });
 
 describe('Runtime.up and down', () => {
+	/** a keypair in the store, which is what an https listener needs before it may bind */
+	function withCertificate(over: Partial<BastionConfig> = {}) {
+		const h = harness({ tenants: [], ...over });
+		const dir = `${h.config.state}/certs/www.example.edu`;
+		h.files.writeText(`${dir}/key.pem`, 'KEY');
+		h.files.writeText(`${dir}/fullchain.pem`, 'CERT');
+		h.files.writeText(
+			`${dir}/meta.json`,
+			JSON.stringify({
+				hosts: ['www.example.edu'],
+				issuedAt: 0,
+				expiresAt: 86_400_000,
+				source: 'self-signed'
+			})
+		);
+		return h;
+	}
+
 	it('binds both listeners and reports what it bound', async () => {
-		const h = harness({ tenants: [] });
+		const h = withCertificate();
 		const runtime = new Runtime(h.ctx, {
 			config: h.config,
 			host: h.host,
@@ -337,6 +421,80 @@ describe('Runtime.up and down', () => {
 		});
 		const state = await runtime.up();
 		expect(state.listeners.map((l) => l.which)).toEqual(['http', 'https']);
+	});
+
+	/**
+	 * An https listener with no keypair used to bind PLAINTEXT and report itself as https.
+	 *
+	 * A visitor typing the url got cleartext on the port that exists to encrypt it, and the
+	 * operator read `https on 0.0.0.0:443` and believed otherwise. Nothing anywhere said so.
+	 */
+	it('refuses to bind https with no certificate rather than serving plaintext', async () => {
+		const h = harness({ tenants: [] });
+		const runtime = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			platform: 'linux'
+		});
+		await expect(runtime.up()).rejects.toThrow(/no certificate/);
+	});
+
+	it('names the command that produces one', async () => {
+		const h = harness({ tenants: [] });
+		const runtime = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			platform: 'linux'
+		});
+		await expect(runtime.up()).rejects.toMatchObject({ next: 'bastion cert issue' });
+	});
+
+	/**
+	 * The refusal above fires after the tenants have already started, and they used to stay up.
+	 *
+	 * workerd kept its unix socket, so the parent could not exit, the startup grace read the live
+	 * child as a healthy start and reported a pid, and the next `up` met `Address already in use`.
+	 */
+	function refusedStart() {
+		const h = harness({ tenants: [{ name: 'acme', sites: [] }] });
+		return {
+			h,
+			runtime: new Runtime(h.ctx, {
+				config: h.config,
+				host: h.host,
+				upstream: h.upstream,
+				binary: '/usr/local/bin/workerd',
+				adapters: memoryAdapters,
+				platform: 'linux'
+			})
+		};
+	}
+
+	it('takes the tenants back down when a listener refuses', async () => {
+		const { runtime } = refusedStart();
+		await expect(runtime.up()).rejects.toThrow(/no certificate/);
+		expect(runtime.running).toEqual([]);
+	});
+
+	it('stops the listener it had already bound before the refusal', async () => {
+		const { h, runtime } = refusedStart();
+		await expect(runtime.up()).rejects.toThrow(/no certificate/);
+		expect(h.host.stopped).toEqual([0]);
+	});
+
+	it('still binds http alone when no https listener is configured', async () => {
+		const h = harness({ tenants: [], listeners: { ...defaultConfig().listeners } });
+		delete (h.config.listeners as { https?: unknown }).https;
+		const runtime = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			platform: 'linux'
+		});
+		const state = await runtime.up();
+		expect(state.listeners.map((l) => l.which)).toEqual(['http']);
 	});
 
 	it('stops every listener and every tenant', async () => {
@@ -376,7 +534,7 @@ describe('Runtime records what it served', () => {
 			tenants: [
 				{
 					name: 'acme',
-					sites: [{ host: 'www.example.edu', bundle: './p', probe: 'drupflare' }]
+					sites: [{ host: 'www.example.edu', bundle: BUNDLE, probe: 'drupflare' }]
 				}
 			]
 		});
@@ -409,7 +567,7 @@ describe('Runtime records what it served', () => {
 			tenants: [
 				{
 					name: 'acme',
-					sites: [{ host: 'www.example.edu', bundle: './p', probe: 'drupflare' }]
+					sites: [{ host: 'www.example.edu', bundle: BUNDLE, probe: 'drupflare' }]
 				}
 			]
 		});
@@ -453,7 +611,7 @@ describe('Runtime records what it served', () => {
 			tenants: [
 				{
 					name: 'acme',
-					sites: [{ host: 'www.example.edu', bundle: './p', probe: 'drupflare' }]
+					sites: [{ host: 'www.example.edu', bundle: BUNDLE, probe: 'drupflare' }]
 				}
 			]
 		});
@@ -469,5 +627,188 @@ describe('Runtime records what it served', () => {
 		await runtime.serve(request(), '203.0.113.7');
 		await runtime.serve(request(), '203.0.113.7');
 		expect(runtime.unattributed.get('rate-limit-ip')).toBe(1);
+	});
+});
+
+/**
+ * What `up` has to put on disk before workerd will start.
+ *
+ * Each of these was found by booting a real workerd against a generated configuration, and each
+ * was invisible to every hermetic test because the rig that passed happened to satisfy it.
+ */
+describe('Runtime.startTenant prepares the tenant directory', () => {
+	const BUNDLE_DIR = '/srv/bundle';
+
+	function ready(over: Partial<SiteConfig> = {}) {
+		const h = harness({
+			state: '/var/lib/bastion',
+			tenants: [
+				{ name: 'acme', sites: [{ host: 'a.example.edu', bundle: BUNDLE_DIR, ...over }] }
+			]
+		});
+		h.files.writeText(`${BUNDLE_DIR}/index.js`, 'export default {}');
+		return {
+			h,
+			runtime: new Runtime(h.ctx, {
+				config: h.config,
+				host: h.host,
+				upstream: h.upstream,
+				binary: '/usr/local/bin/workerd',
+				adapters: memoryAdapters,
+				platform: 'linux'
+			})
+		};
+	}
+
+	const TENANT = '/var/lib/bastion/tenants/acme';
+
+	// `Directory named "bastion_storage" not found` -- workerd refuses a disk service whose
+	// directory is absent and creates none of them itself
+	it('creates the directories workerd refuses to start without', async () => {
+		const { h, runtime } = ready();
+		await runtime.startTenant('acme');
+		for (const dir of ['storage', 'assets', 'adapters']) {
+			expect(h.files.isDirectory(`${TENANT}/${dir}`)).toBe(true);
+		}
+	});
+
+	/**
+	 * A unix socket outlives the process that bound it.
+	 *
+	 * workerd answers `Address already in use` rather than replacing one, so a kill, an OOM or a
+	 * power loss left a file that stopped the tenant ever starting again.
+	 */
+	it('removes a stale listen socket left by an unclean stop', async () => {
+		const { h, runtime } = ready();
+		h.files.writeText(`${TENANT}/http.sock`, '');
+		await runtime.startTenant('acme');
+		expect(h.files.exists(`${TENANT}/http.sock`)).toBe(false);
+	});
+
+	it('removes stale adapter sockets too', async () => {
+		const { h, runtime } = ready();
+		h.files.writeText(`${TENANT}/adapters/kv.sock`, '');
+		h.files.writeText(`${TENANT}/adapters/cache.sock`, '');
+		await runtime.startTenant('acme');
+		expect(h.files.exists(`${TENANT}/adapters/kv.sock`)).toBe(false);
+		expect(h.files.exists(`${TENANT}/adapters/cache.sock`)).toBe(false);
+	});
+
+	/** every unix address the generated config names under `adapters/`, in bind order */
+	function adapterSockets(bound: { unix?: string }[]): string[] {
+		return bound
+			.map((spec) => spec.unix)
+			.filter((path): path is string => path !== undefined && path.includes('/adapters/'));
+	}
+
+	/**
+	 * The generator wrote the adapter addresses and nothing ever bound them.
+	 *
+	 * So the capnp declared `external` services at sockets that did not exist, workerd started
+	 * anyway because it dials one lazily, and a bundle met a connection error on its first KV read,
+	 * D1 query or Cache API lookup. A worker with no bindings served perfectly, which is what let
+	 * it through: the tenant came up, answered a request, and the smoke assertion passed.
+	 */
+	it('binds a socket for every adapter address the generated config names', async () => {
+		const { h, runtime } = ready({
+			worker: { kv: ['KV'], d1: ['DB'], ai: ['AI'], main: 'index.js' }
+		});
+		await runtime.startTenant('acme');
+		const capnp = h.files.readText(`${TENANT}/config.capnp`);
+		const declared = [...capnp.matchAll(/unix:([^"]*\/adapters\/[^"]+)/g)].map((m) => m[1]);
+		expect(declared.length).toBeGreaterThan(0);
+		expect(adapterSockets(h.host.bound).sort()).toEqual([...new Set(declared)].sort());
+	});
+
+	// a tenant that beats its own adapters up answers its first request out of an error path
+	it('binds them before the process that dials them is spawned', async () => {
+		const { h, runtime } = ready();
+		let boundAtSpawn = -1;
+		const spawn = h.runner.spawn;
+		h.runner.spawn = (command, args, options) => {
+			boundAtSpawn = h.host.bound.length;
+			return spawn(command, args, options);
+		};
+		await runtime.startTenant('acme');
+		expect(boundAtSpawn).toBeGreaterThan(0);
+		expect(boundAtSpawn).toBe(h.host.bound.length);
+	});
+
+	/**
+	 * The slot is the SOCKET, never the path.
+	 *
+	 * workerd addresses an `external` service by its address and then sends whatever path the
+	 * runtime generates, so a KV read arrives as `GET /<key>` with nothing naming the adapter. One
+	 * shared socket made every native designator indistinguishable, and a handler routing on the
+	 * first path segment answered a cache lookup out of the KV store.
+	 */
+	it('answers each socket out of the adapter that socket belongs to', async () => {
+		const { h, runtime } = ready({ worker: { kv: ['KV'], main: 'index.js' } });
+		await runtime.startTenant('acme');
+		const at = adapterSockets(h.host.bound).findIndex((path) => path.endsWith('/kv.sock'));
+		expect(at).toBeGreaterThanOrEqual(0);
+
+		const handler =
+			h.host.handlers[h.host.bound.findIndex((s) => s.unix?.endsWith('/kv.sock'))];
+		await handler?.(new Request('http://unix/greeting', { method: 'PUT', body: 'hi' }), 'unix');
+		const read = await handler?.(new Request('http://unix/greeting'), 'unix');
+		expect(await read?.text()).toBe('hi');
+	});
+
+	/**
+	 * Cap'n Proto resolves `embed` against the directory of the capnp holding it.
+	 *
+	 * An absolute path is refused outright, and a bare name only resolves when the config happens
+	 * to sit beside the bundle. The generated config lives under the tenant state and the bundle
+	 * lives wherever the operator put it, so the two are the same directory only by accident.
+	 */
+	it('writes embeds relative to the config rather than to the bundle', async () => {
+		const { h, runtime } = ready();
+		await runtime.startTenant('acme');
+		const config = h.files.readText(`${TENANT}/config.capnp`);
+		expect(config).toContain('embed "../../../../../srv/bundle/index.js"');
+		expect(config).not.toContain('embed "/srv');
+	});
+
+	it('names the socket the front door dials, not a second name for the same file', async () => {
+		const { h, runtime } = ready();
+		await runtime.startTenant('acme');
+		const config = h.files.readText(`${TENANT}/config.capnp`);
+		expect(config).toContain(`unix:${TENANT}/http.sock`);
+	});
+
+	// a `worker` block naming a d1 or an ai binding validated, generated nothing, and the bundle
+	// found the binding missing at runtime
+	it('carries every binding slot the site declared, not the first five', async () => {
+		const { h, runtime } = ready({
+			worker: {
+				durableObjectClass: null,
+				d1: ['DB'],
+				ai: ['AI'],
+				vectorize: ['INDEX'],
+				analytics: ['AE']
+			}
+		});
+		await runtime.startTenant('acme');
+		const config = h.files.readText(`${TENANT}/config.capnp`);
+		for (const name of ['DB', 'AI', 'INDEX', 'AE']) {
+			expect(config).toContain(`(name = "${name}", wrapped =`);
+		}
+	});
+
+	it('refuses a site whose bundle is not there rather than generating a config for it', async () => {
+		const h = harness({
+			state: '/var/lib/bastion',
+			tenants: [{ name: 'acme', sites: [{ host: 'a.example.edu', bundle: '/srv/absent' }] }]
+		});
+		const runtime = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			binary: '/usr/local/bin/workerd',
+			adapters: memoryAdapters,
+			platform: 'linux'
+		});
+		await expect(runtime.startTenant('acme')).rejects.toThrow(/has no bundle at/);
 	});
 });
