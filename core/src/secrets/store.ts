@@ -65,8 +65,15 @@ export function envSecrets(ctx: Context, prefix = 'BASTION_SECRET_'): SecretStor
  * that is locked answers an error rather than an empty string, which is why `get` distinguishes a
  * missing entry from a failed call instead of collapsing both onto null.
  */
-export function keyringSecrets(ctx: Context, service = 'bastion'): SecretStore {
-	const darwin = process.platform === 'darwin';
+export function keyringSecrets(
+	ctx: Context,
+	service = 'bastion',
+	platform: string = process.platform
+): SecretStore {
+	// a parameter rather than a direct `process.platform` read, matching `preflight`: the helper
+	// differs per platform, so a test that scripts one of them passes on the machine that ships it
+	// and answers the stub's empty default on the other
+	const darwin = platform === 'darwin';
 	return {
 		id: () => 'keyring',
 		sealed: () => false,

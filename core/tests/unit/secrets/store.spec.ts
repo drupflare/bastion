@@ -105,23 +105,40 @@ describe('fileSecrets', () => {
 	});
 });
 
-describe('keyringSecrets', () => {
-	it('answers null for a missing entry and raises for a locked keyring', async () => {
+/**
+ * Both helpers, driven explicitly.
+ *
+ * The platform is a parameter here rather than whatever the build machine happens to be, because
+ * the two branches call different binaries: a suite that scripts only `security` passes on macOS
+ * and, on Linux, gets `scriptedRunner`'s unscripted default of exit 0 with empty stdout, which the
+ * driver reads as an entry that exists and is empty. That failed only in CI.
+ */
+describe.each([
+	['darwin', 'security'],
+	['linux', 'secret-tool']
+])('keyringSecrets on %s', (platform, helper) => {
+	it('answers null for a missing entry', async () => {
 		const missing = keyringSecrets(
 			ctx({
 				runner: scriptedRunner({
-					security: { code: 1, stdout: '', stderr: 'could not be found' }
+					[helper]: { code: 1, stdout: '', stderr: 'could not be found' }
 				})
-			})
+			}),
+			'bastion',
+			platform
 		);
 		expect(await missing.get('a')).toBe(null);
+	});
 
+	it('raises rather than answering null for a locked keyring', async () => {
 		const locked = keyringSecrets(
 			ctx({
 				runner: scriptedRunner({
-					security: { code: 1, stdout: '', stderr: 'interaction required' }
+					[helper]: { code: 1, stdout: '', stderr: 'interaction required' }
 				})
-			})
+			}),
+			'bastion',
+			platform
 		);
 		await expect(locked.get('a')).rejects.toThrow(/keyring answered/);
 	});
@@ -130,14 +147,25 @@ describe('keyringSecrets', () => {
 		const store = keyringSecrets(
 			ctx({
 				runner: scriptedRunner({
-					security: { code: 0, stdout: 'hunter2\n', stderr: '' },
-					'secret-tool': { code: 0, stdout: 'hunter2\n', stderr: '' }
+					[helper]: { code: 0, stdout: 'hunter2\n', stderr: '' }
 				})
-			})
+			}),
+			'bastion',
+			platform
 		);
 		expect(await store.get('a')).toBe('hunter2');
 	});
 
+	it(`calls ${helper} and not the other platform's binary`, async () => {
+		const runner = scriptedRunner({
+			[helper]: { code: 0, stdout: 'v\n', stderr: '' }
+		});
+		await keyringSecrets(ctx({ runner }), 'bastion', platform).get('a');
+		expect(runner.calls.map((call) => call.command)).toEqual([helper]);
+	});
+});
+
+describe('keyringSecrets', () => {
 	it('lists nothing, because a keyring cannot be enumerated safely', async () => {
 		expect(await keyringSecrets(ctx()).list()).toEqual([]);
 	});
