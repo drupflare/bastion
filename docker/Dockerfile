@@ -3,9 +3,14 @@ WORKDIR /src
 COPY package.json bun.lock ./
 COPY core/package.json core/package.json
 COPY warden/package.json warden/package.json
+COPY dashboard/package.json dashboard/package.json
 RUN bun install --frozen-lockfile
 COPY . .
-RUN bun run --cwd warden build:binary
+# the root `build:binary`, not warden's: the console is embedded as a generated module and warden's
+# own script compiles the cli alone. The grep runs before the chain restores the empty form
+RUN bun run build:dashboard \
+	&& grep -q index.html warden/src/dashboard-assets.ts \
+	&& bun run --cwd warden build:binary
 
 FROM alpine:3.21
 # workerd needs glibc; the compat layer is what lets the pinned binary run on alpine

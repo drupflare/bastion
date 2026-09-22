@@ -66,6 +66,16 @@ jobs:
         run: bun run test
       - name: Reachability
         run: bun run check:reachability
+      - name: Build the Dashboard
+        run: bun run build:dashboard
+      - name: Refuse a Binary With No Dashboard
+        run: |
+          set -euo pipefail
+          if ! grep -q "index.html" warden/src/dashboard-assets.ts; then
+            echo "::error::the dashboard was not embedded, so every released binary would serve a page saying it carries none." >&2
+            exit 1
+          fi
+          echo "the dashboard is embedded"
       - name: Cross Compile
         run: |
           set -euo pipefail
