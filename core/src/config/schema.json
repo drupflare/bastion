@@ -165,6 +165,12 @@
 				},
 				"secrets": {
 					"$ref": "#/$defs/driver"
+				},
+				"ai": {
+					"$ref": "#/$defs/driver"
+				},
+				"vectorize": {
+					"$ref": "#/$defs/driver"
 				}
 			}
 		},
@@ -268,6 +274,12 @@
 		"backup": {
 			"type": "object"
 		},
+		"groups": {
+			"type": "object",
+			"additionalProperties": {
+				"$ref": "#/$defs/group"
+			}
+		},
 		"tenants": {
 			"type": "array",
 			"items": {
@@ -343,6 +355,138 @@
 				},
 				"adminPhpConsole": {
 					"type": "boolean"
+				},
+				"images": {
+					"type": "boolean"
+				},
+				"browser": {
+					"type": "boolean"
+				},
+				"ai": {
+					"type": "boolean"
+				},
+				"vectorize": {
+					"type": "boolean"
+				},
+				"email": {
+					"type": "boolean"
+				},
+				"analytics": {
+					"type": "boolean"
+				}
+			}
+		},
+		"limits": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"cpu": {
+					"type": "string"
+				},
+				"memory": {
+					"$ref": "#/$defs/size"
+				},
+				"pids": {
+					"type": "integer",
+					"minimum": 1
+				},
+				"maxSites": {
+					"type": "integer",
+					"minimum": 0
+				}
+			}
+		},
+		"group": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"extends": {
+					"type": "string",
+					"minLength": 1
+				},
+				"capabilities": {
+					"$ref": "#/$defs/capabilities"
+				},
+				"limits": {
+					"$ref": "#/$defs/limits"
+				},
+				"egress": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"allow": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						}
+					}
+				}
+			}
+		},
+		"siteWorker": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"main": {
+					"type": "string",
+					"minLength": 1
+				},
+				"durableObjectClass": {
+					"type": ["string", "null"]
+				},
+				"durableObject": {
+					"type": "string",
+					"minLength": 1
+				},
+				"assets": {
+					"type": "string",
+					"minLength": 1
+				},
+				"kv": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"r2": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"queues": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"d1": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"vectorize": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"ai": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"compatibilityDate": {
+					"type": "string"
+				},
+				"compatibilityFlags": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
 				}
 			}
 		},
@@ -361,6 +505,16 @@
 				},
 				"probe": {
 					"type": "string"
+				},
+				"worker": {
+					"$ref": "#/$defs/siteWorker"
+				},
+				"group": {
+					"type": "string",
+					"minLength": 1
+				},
+				"capabilities": {
+					"$ref": "#/$defs/capabilities"
 				},
 				"primary": {
 					"$ref": "#/$defs/name"
@@ -393,25 +547,12 @@
 						"$ref": "#/$defs/site"
 					}
 				},
+				"group": {
+					"type": "string",
+					"minLength": 1
+				},
 				"limits": {
-					"type": "object",
-					"additionalProperties": false,
-					"properties": {
-						"cpu": {
-							"type": "string"
-						},
-						"memory": {
-							"$ref": "#/$defs/size"
-						},
-						"pids": {
-							"type": "integer",
-							"minimum": 1
-						},
-						"maxSites": {
-							"type": "integer",
-							"minimum": 0
-						}
-					}
+					"$ref": "#/$defs/limits"
 				},
 				"egress": {
 					"type": "object",

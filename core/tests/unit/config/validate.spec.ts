@@ -269,3 +269,133 @@ describe('host identity is case insensitive, as DNS is', () => {
 		expect(result.ok).toBe(true);
 	});
 });
+
+describe('the worker block, which is what makes a bundle other than drupflare expressible', () => {
+	const withWorker = (worker: unknown) =>
+		validate({
+			...base,
+			tenants: [
+				{ name: 'acme', sites: [{ host: 'a.example.edu', bundle: './p.tar.gz', worker }] }
+			]
+		});
+
+	it('accepts a site that declares none, which is every site written before it existed', () => {
+		expect(validate(base).ok).toBe(true);
+	});
+
+	it('accepts a worker that declares it has no object', () => {
+		const result = withWorker({ durableObjectClass: null, durableObject: undefined });
+		expect(result.ok).toBe(true);
+	});
+
+	it('refuses a class with no binding, which nothing in the worker could reach', () => {
+		const result = withWorker({ durableObjectClass: 'Counter', durableObject: undefined });
+		expect(result.ok).toBe(false);
+		expect(result.problems[0]?.message).toMatch(/no binding/);
+	});
+
+	it('refuses a binding with no class, which workerd refuses at startup', () => {
+		const result = withWorker({ durableObjectClass: null, durableObject: 'COUNTER' });
+		expect(result.ok).toBe(false);
+		expect(result.problems[0]?.message).toMatch(/no class/);
+	});
+
+	it('refuses a block that is not a mapping', () => {
+		expect(withWorker(['index.js']).ok).toBe(false);
+		expect(withWorker('index.js').ok).toBe(false);
+	});
+
+	it('reports the path of a slot that is not a list of names', () => {
+		const result = withWorker({ kv: 'SESSIONS' });
+		expect(result.problems.map((p) => p.path)).toContain('tenants[0].sites[0].worker.kv');
+	});
+
+	it('reports the path of an entrypoint that is not a string', () => {
+		const result = withWorker({ main: 7 });
+		expect(result.problems.map((p) => p.path)).toContain('tenants[0].sites[0].worker.main');
+	});
+
+	it('accepts a fully stated arbitrary worker', () => {
+		const result = withWorker({
+			main: 'server.js',
+			durableObjectClass: null,
+			durableObject: undefined,
+			assets: undefined,
+			kv: ['SESSIONS'],
+			r2: [],
+			queues: ['JOBS'],
+			compatibilityFlags: ['nodejs_compat']
+		});
+		expect(result.ok).toBe(true);
+	});
+});
+
+/**
+ * A binding is refused unless its primitive exists.
+ *
+ * None of these is on a server image. ImageMagick is absent from Debian, Ubuntu, RHEL and Alpine
+ * until somebody installs it; no image ships a headless browser; an inference endpoint, a vector
+ * index and a mail server are each something an operator runs on purpose. bastion installs none of
+ * them, so the configuration is refused rather than accepted and failed on the first request.
+ */
+describe('a binding whose primitive nobody installed', () => {
+	const withWorker = (worker: unknown, drivers?: Record<string, unknown>) =>
+		validate({
+			...base,
+			...(drivers === undefined ? {} : { drivers }),
+			tenants: [
+				{ name: 'acme', sites: [{ host: 'a.example.edu', bundle: './p.tar.gz', worker }] }
+			]
+		});
+
+	it('refuses images with no drivers.images, and names the install', () => {
+		const result = withWorker({ durableObjectClass: null, images: ['IMAGES'] });
+		expect(result.ok).toBe(false);
+		expect(result.problems[0]?.message).toMatch(/install imagemagick/);
+	});
+
+	it('refuses browser with no drivers.browser', () => {
+		const result = withWorker({ durableObjectClass: null, browser: ['BROWSER'] });
+		expect(result.ok).toBe(false);
+		expect(result.problems[0]?.message).toMatch(/install chromium/);
+	});
+
+	it('refuses ai, vectorize and email the same way', () => {
+		for (const [slot, binding] of [
+			['ai', 'AI'],
+			['vectorize', 'INDEX'],
+			['email', 'SEB']
+		] as const) {
+			const result = withWorker({ durableObjectClass: null, [slot]: [binding] });
+			expect(result.ok).toBe(false);
+			expect(result.problems[0]?.path).toBe(`tenants[0].sites[0].worker.${slot}`);
+		}
+	});
+
+	it('names every binding in the refusal, not just the first', () => {
+		const result = withWorker({ durableObjectClass: null, images: ['A', 'B'] });
+		expect(result.problems[0]?.message).toMatch(/A, B/);
+	});
+
+	it('accepts it once the operator has configured the driver', () => {
+		const result = withWorker(
+			{ durableObjectClass: null, images: ['IMAGES'] },
+			{
+				images: { driver: 'magick' }
+			}
+		);
+		expect(result.ok).toBe(true);
+	});
+
+	it('leaves d1 alone, because sqlite is compiled in and needs no operator action', () => {
+		expect(withWorker({ durableObjectClass: null, d1: ['DB'] }).ok).toBe(true);
+	});
+
+	it('leaves analytics alone, because the ring lives in bastion own process', () => {
+		expect(withWorker({ durableObjectClass: null, analytics: ['AE'] }).ok).toBe(true);
+	});
+
+	it('says nothing about a slot the site does not bind', () => {
+		expect(withWorker({ durableObjectClass: null, kv: ['SESSIONS'] }).ok).toBe(true);
+	});
+});

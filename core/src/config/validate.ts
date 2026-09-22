@@ -1,5 +1,21 @@
-import { DEFAULT_CAPABILITIES, LIMIT_FLOORS, RESIDENT_SITE_BYTES } from './defaults';
-import { LOG_LEVELS, MODES, RESIDENCIES } from './types';
+import { WRAPPED_SLOTS } from '../capnp/plan';
+import {
+	DEFAULT_CAPABILITIES,
+	LIMIT_FLOORS,
+	RESIDENT_SITE_BYTES,
+	resolveSiteWorker
+} from './defaults';
+import { resolve, SLOT_CAPABILITY } from './groups';
+import {
+	LOG_LEVELS,
+	MODES,
+	RESIDENCIES,
+	type GroupConfig,
+	type SiteConfig,
+	type SiteWorkerConfig,
+	type TenantCapabilities,
+	type TenantConfig
+} from './types';
 
 /** one rejection, carrying the path that produced it so a message is actionable */
 export interface Problem {
@@ -83,7 +99,8 @@ export function validate(raw: unknown, options: { testLane?: boolean } = {}): Va
 	validateDrivers(doc.drivers, problems, options.testLane === true);
 	validateLogging(doc.audit, 'audit', problems);
 	validateLogging(doc.logs, 'logs', problems);
-	const tenants = validateTenants(doc.tenants, problems);
+	const groups = validateGroups(doc.groups, problems);
+	const tenants = validateTenants(doc.tenants, problems, doc.drivers, groups);
 	validateCluster(doc.cluster, problems);
 
 	// residency: pin is refused HERE rather than detected at runtime, because the alternative is an
@@ -212,7 +229,86 @@ function validateCluster(value: unknown, problems: Problem[]): void {
 	}
 }
 
-function validateTenants(value: unknown, problems: Problem[]): Record<string, unknown>[] {
+/**
+ * Checks the group table itself, before anything resolves through it.
+ *
+ * A tenant naming a group that does not exist is the one failure worth being loud about: the
+ * tenant would otherwise resolve to the shipped defaults, quietly, and an operator who meant to
+ * apply a restrictive tier would get a permissive one.
+ */
+function validateGroups(value: unknown, problems: Problem[]): Record<string, GroupConfig> {
+	if (value === undefined) return {};
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		problems.push({ path: 'groups', message: 'must be a mapping of names to settings' });
+		return {};
+	}
+	const groups = value as Record<string, GroupConfig>;
+	for (const [name, group] of Object.entries(groups)) {
+		const path = `groups.${name}`;
+		if (group === null || typeof group !== 'object' || Array.isArray(group)) {
+			problems.push({ path, message: 'must be a mapping' });
+			continue;
+		}
+		if (group.extends !== undefined && groups[group.extends] === undefined) {
+			problems.push({
+				path: `${path}.extends`,
+				message: `there is no group called ${group.extends}`
+			});
+		}
+		validateCapabilities(group.capabilities, `${path}.capabilities`, problems);
+	}
+	// a cycle resolves to a truncated chain rather than hanging, and is still an operator mistake
+	for (const name of Object.keys(groups)) {
+		const seen = new Set<string>();
+		let current: string | undefined = name;
+		while (current !== undefined && groups[current] !== undefined) {
+			if (seen.has(current)) {
+				problems.push({ path: `groups.${name}`, message: 'extends itself in a cycle' });
+				break;
+			}
+			seen.add(current);
+			current = groups[current]?.extends;
+		}
+	}
+	return groups;
+}
+
+/**
+ * A name that resolves to nothing is louder than a missing setting.
+ *
+ * A tenant pointing at a group that is not there falls back to the shipped defaults, which are
+ * permissive for the optional bindings. An operator who meant to apply a restrictive tier and
+ * misspelled it would get the opposite of what they wrote, silently.
+ */
+function assertGroupExists(
+	name: unknown,
+	groups: Record<string, GroupConfig>,
+	path: string,
+	problems: Problem[]
+): void {
+	if (name === undefined) return;
+	if (typeof name !== 'string' || name === '') {
+		problems.push({ path, message: 'must name a group' });
+		return;
+	}
+	if (groups[name] === undefined) {
+		const known = Object.keys(groups);
+		problems.push({
+			path,
+			message:
+				known.length === 0
+					? `there is no group called ${name}; none are defined`
+					: `there is no group called ${name}; there is ${known.join(', ')}`
+		});
+	}
+}
+
+function validateTenants(
+	value: unknown,
+	problems: Problem[],
+	drivers: unknown,
+	groups: Record<string, GroupConfig>
+): Record<string, unknown>[] {
 	if (value === undefined) return [];
 	if (!Array.isArray(value)) {
 		problems.push({ path: 'tenants', message: 'must be a list' });
@@ -240,6 +336,7 @@ function validateTenants(value: unknown, problems: Problem[]): Record<string, un
 		}
 
 		validateCapabilities(tenant.capabilities, `${path}.capabilities`, problems);
+		assertGroupExists(tenant.group, groups, `${path}.group`, problems);
 
 		if (!Array.isArray(tenant.sites)) {
 			problems.push({ path: `${path}.sites`, message: 'must be a list' });
@@ -313,9 +410,121 @@ function validateTenants(value: unknown, problems: Problem[]): Record<string, un
 			if (site.probe !== undefined && typeof site.probe !== 'string') {
 				problems.push({ path: `${sitePath}.probe`, message: 'must name a probe profile' });
 			}
+			validateSiteWorker(site.worker, `${sitePath}.worker`, problems);
+			validateCapabilities(site.capabilities, `${sitePath}.capabilities`, problems);
+			assertGroupExists(site.group, groups, `${sitePath}.group`, problems);
+			// resolved through the group chain, so a tier that withdraws a capability is what the
+			// site is checked against rather than whatever the site itself happens to state
+			const allowed = resolve(
+				{ groups },
+				tenant as unknown as TenantConfig,
+				site as unknown as SiteConfig
+			).capabilities;
+			assertBackingExists(site.worker, drivers, allowed, `${sitePath}.worker`, problems);
 		}
 	}
 	return tenants;
+}
+
+/**
+ * Refuses a worker declaration workerd would refuse, before a tenant is spawned against it.
+ *
+ * The binding and the class are one decision stated in two places: a binding with no class names
+ * a namespace that does not exist, and a class with no binding builds an object nothing can reach.
+ * Either half alone produces a `config.capnp` that fails at startup, and a startup failure reads
+ * as a broken bundle rather than a config typo.
+ */
+function validateSiteWorker(value: unknown, path: string, problems: Problem[]): void {
+	if (value === undefined) return;
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		problems.push({ path, message: 'must be a mapping' });
+		return;
+	}
+	const worker = value as Record<string, unknown>;
+	for (const key of ['main', 'durableObject', 'assets', 'compatibilityDate']) {
+		if (worker[key] !== undefined && typeof worker[key] !== 'string') {
+			problems.push({ path: `${path}.${key}`, message: 'must be a string' });
+		}
+	}
+	if (
+		worker.durableObjectClass !== undefined &&
+		worker.durableObjectClass !== null &&
+		typeof worker.durableObjectClass !== 'string'
+	) {
+		problems.push({
+			path: `${path}.durableObjectClass`,
+			message: 'must name the exported class, or be null for a worker with no object'
+		});
+	}
+	for (const key of ['kv', 'r2', 'queues', 'compatibilityFlags']) {
+		const given = worker[key];
+		if (given === undefined) continue;
+		if (!Array.isArray(given) || given.some((entry) => typeof entry !== 'string')) {
+			problems.push({ path: `${path}.${key}`, message: 'must be a list of names' });
+		}
+	}
+
+	const resolved = resolveSiteWorker(worker as SiteWorkerConfig);
+	const hasClass =
+		resolved.durableObjectClass !== null && resolved.durableObjectClass !== undefined;
+	const hasBinding = resolved.durableObject !== undefined;
+	if (hasClass !== hasBinding) {
+		problems.push({
+			path: `${path}.durableObjectClass`,
+			message: hasClass
+				? 'names a class with no binding, so nothing in the worker could reach the object'
+				: 'binds an object with no class, and workerd refuses a namespace whose class the bundle does not export'
+		});
+	}
+}
+
+/**
+ * Refuses a binding whose primitive nobody has installed.
+ *
+ * Every one of these is an operator action: ImageMagick is not on a Debian, Ubuntu, RHEL or Alpine
+ * server image, no server image ships a headless browser, and an inference endpoint, a vector
+ * index and a mail server are all things somebody runs on purpose. bastion installs none of them
+ * and falls back to none of them.
+ *
+ * Refused HERE rather than at runtime, because the alternative is a site that validates, deploys,
+ * starts, serves for a week and then answers 501 the first time a visitor uploads an avatar. The
+ * message names what to install so the refusal is one step from fixed.
+ */
+function assertBackingExists(
+	worker: unknown,
+	drivers: unknown,
+	allowed: TenantCapabilities,
+	path: string,
+	problems: Problem[]
+): void {
+	if (worker === null || typeof worker !== 'object' || Array.isArray(worker)) return;
+	const block = worker as Record<string, unknown>;
+	const configured =
+		drivers !== null && typeof drivers === 'object' && !Array.isArray(drivers)
+			? (drivers as Record<string, unknown>)
+			: {};
+
+	for (const slot of WRAPPED_SLOTS) {
+		const bound = block[slot.key];
+		if (!Array.isArray(bound) || bound.length === 0) continue;
+
+		// the policy refusal comes first, because an operator who withdrew a capability wants to
+		// read that rather than a note about installing something they deliberately do not want
+		const capability = SLOT_CAPABILITY[slot.key];
+		if (capability !== undefined && allowed[capability] === false) {
+			problems.push({
+				path: `${path}.${slot.key}`,
+				message: `${bound.join(', ')} is withdrawn for this site; the box can do it and this tenant may not`
+			});
+			continue;
+		}
+		if (slot.driver === null) continue;
+		if (configured[slot.driver] !== undefined) continue;
+		problems.push({
+			path: `${path}.${slot.key}`,
+			message: `${bound.join(', ')} needs ${slot.needs}; it is off until you do`
+		});
+	}
 }
 
 function validateCapabilities(value: unknown, path: string, problems: Problem[]): void {
