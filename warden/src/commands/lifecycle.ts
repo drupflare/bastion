@@ -19,6 +19,7 @@ import {
 	writeConfig
 } from '@drupflare/bastion';
 import { apiHandlers } from '../api/handlers';
+import { liveHandlers } from '../api/live';
 import { dashboardAssets } from '../dashboard';
 import { MANUAL, manualTopics, renderTopic } from '../manual';
 import { COMMANDS, GLOBAL_OPTIONS, type CommandSpec } from '../registry';
@@ -166,8 +167,14 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 	});
 	// without these the management listener answers 503 to everything and the dashboard renders
 	// against nothing; the handlers run the same commands the CLI does, under the same config
+	const commands = apiHandlers({
+		...globals,
+		...(loaded.path === null ? {} : { config: loaded.path })
+	});
 	runtime.attachApi(
-		apiHandlers({ ...globals, ...(loaded.path === null ? {} : { config: loaded.path }) }),
+		// live handlers over command-backed ones: the analytics window is held by THIS process and
+		// a second process asking the same question has nothing to read
+		{ ...commands, ...liveHandlers(runtime, commands) },
 		{
 			sessions: new SessionStore(ctx, loaded.state),
 			tokens: new TokenStore(ctx, loaded.state),
@@ -188,8 +195,9 @@ export async function runServe(ctx: Context, globals: Globals & { mode?: string 
 		[
 			`mode ${state.mode}`,
 			`${state.tenants.length} tenants running`,
-			...state.listeners.map((listener) => `${listener.which} on ${listener.address}`),
-			`management on ${loaded.config.listeners.management.address}`
+			// the management listener is in `state.listeners` now that `up` actually binds it, so
+			// printing it again from the configuration said it twice
+			...state.listeners.map((listener) => `${listener.which} on ${listener.address}`)
 		].join('\n')
 	);
 
