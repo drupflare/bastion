@@ -23,7 +23,7 @@
 		"prettier": "prettier --write .",
 		"prettier:check": "prettier --check .",
 		"verify": "bun run prettier:check && bun run typecheck && bun run test && bun run check:reachability",
-		"prepare": "husky"
+		"prepare": "husky && husky install"
 	},
 	"devDependencies": {
 		"husky": "^9.1.7",
