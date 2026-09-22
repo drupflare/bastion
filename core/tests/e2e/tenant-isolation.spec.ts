@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { gate } from './support/gate';
 
 /**
  * Two tenants on one box, which is the claim the whole isolation model rests on.
@@ -18,7 +19,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  */
 const run = promisify(execFile);
 
-const enabled = process.env.REQUIRE_SERVING === '1';
 const IMAGE = 'oven/bun:1.4';
 const NAME = `bastion-isolation-${process.pid}`;
 const PINNED = '1.20260828.1';
@@ -29,12 +29,7 @@ const worker = (who: string): string =>
 	`export default { async fetch() { return new Response("from ${who}", ` +
 	`{ headers: { "x-who": "${who}" } }); } };\n`;
 
-function missing(): string | null {
-	if (!enabled) return 'REQUIRE_SERVING=1 is not set';
-	return null;
-}
-
-const reason = missing();
+const reason = gate('REQUIRE_SERVING');
 let prepared = false;
 
 async function inside(script: string): Promise<{ code: number; out: string }> {
@@ -301,38 +296,65 @@ describe.skipIf(reason !== null)(`tenant isolation (${reason ?? 'enabled'})`, ()
 	});
 
 	/**
-	 * `reload` compares what is configured against what is RUNNING.
+	 * `reload` compares what is configured against what is RUNNING, then swaps what moved.
 	 *
 	 * It wrote the baseline digest itself, so the first run on any box reported every tenant as
 	 * changed and the second reported none: the answer depended on whether `reload` had been run
-	 * before. And it said `1 tenant will restart`, exited 0, and restarted nothing -- an operator
+	 * before. And it said `1 tenant will restart`, exited 0, and restarted nothing, so an operator
 	 * who raised a memory limit was told it had been applied and kept serving on the old one.
+	 *
+	 * The swap is per tenant because the limit lives on a per-tenant cgroup, and because the
+	 * tenants that did not move keep their Durable Objects resident. Reading `memory.max` off the
+	 * running cgroup is the only assertion that distinguishes an applied limit from a reported one.
 	 */
-	describe('reporting what is out of date', () => {
+	describe('reloading what is out of date', () => {
+		let before: string[] = [];
+
 		it('reads a freshly started box as running what is on disk', async () => {
-			const answer = await bastion('reload');
+			const answer = await bastion('reload --check');
 			expect(answer.code).toBe(0);
 			expect(answer.out).toContain('running the configuration on disk');
 		});
 
 		it('names the tenant whose configuration moved, and only that one', async () => {
+			before = await heldBy('beta');
 			await bastion('tenant limits acme --memory 1Gi');
-			const answer = await bastion('reload');
+			const answer = await bastion('reload --check');
 			expect(answer.out).toMatch(/out of date\s+acme/);
 			expect(answer.out).toMatch(/unchanged\s+beta/);
 		});
 
-		it('exits 3 and says nothing was restarted, rather than 0 and a promise', async () => {
-			const answer = await bastion('reload');
+		it('exits 3 under --check, because something configured is not running', async () => {
+			const answer = await bastion('reload --check');
 			expect(answer.code).toBe(3);
-			expect(answer.out).toContain('Nothing has been restarted');
-			expect(answer.out).toContain('bastion restart');
+			expect(answer.out).toContain('without --check');
 		});
 
-		/** the limit an operator just set is not applied, and the command must not imply it was */
-		it('leaves the running tenant on the limit it started with', async () => {
+		it('swaps that tenant and names what it swapped', async () => {
+			const answer = await bastion('reload');
+			expect(answer.code).toBe(0);
+			expect(answer.out).toMatch(/swapped\s+acme/);
+			expect(answer.out).toContain('1 tenant swapped');
+		});
+
+		it('puts the new limit on the cgroup the tenant is actually running under', async () => {
 			const answer = await inside('cat /sys/fs/cgroup/bastion.slice/tenant-acme/memory.max');
-			expect(answer.out.trim()).toBe('536870912');
+			expect(answer.out.trim()).toBe('1073741824');
+		});
+
+		it('leaves the other tenant on the process it already had', async () => {
+			expect(await heldBy('beta')).toEqual(before);
+		});
+
+		it('still serves both sites afterwards', async () => {
+			expect((await served('www.acme.edu')).out).toContain('200 acme');
+			expect((await served('www.beta.edu')).out).toContain('200 beta');
+		});
+
+		it('reads clean on the next run, so the digest moved with the swap', async () => {
+			const answer = await bastion('reload --check');
+			expect(answer.code).toBe(0);
+			expect(answer.out).toContain('running the configuration on disk');
 		});
 	});
 
