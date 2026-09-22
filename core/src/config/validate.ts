@@ -17,7 +17,7 @@ import {
 	type TenantConfig
 } from './types';
 
-/** one rejection, carrying the path that produced it so a message is actionable */
+/** one rejection, carrying the path that produced it so a message names where to look */
 export interface Problem {
 	/** dotted path into the document, e.g. `tenants[0].sites[1].host` */
 	path: string;

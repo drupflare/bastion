@@ -9,7 +9,7 @@ export interface TlsMaterial {
 export interface ListenerSpec {
 	address: string;
 	tls?: TlsMaterial[];
-	/** two listeners may hold one port, which is what makes a swap seamless */
+	/** two listeners may hold one port, which is what lets a swap leave nothing unbound */
 	reusePort?: boolean;
 	/**
 	 * A unix socket path, which takes the place of the address when it is set.

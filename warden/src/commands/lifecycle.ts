@@ -403,25 +403,22 @@ export async function runUp(
 	if (globals.config !== undefined) argv.push('--config', globals.config);
 	if (acknowledged(globals)) argv.push(ACKNOWLEDGE_FLAG);
 
-	// Detached, with its output in a file. Inheriting handed the child this process's stdout and
-	// stderr, so `up` printed a pid and then never exited: nothing reading its output could get
-	// EOF while a process that is meant to outlive it held the other end.
+	// detached, with its output in a file; inheriting hands the child this process's stdout, so
+	// nothing reading it gets EOF while a process meant to outlive `up` holds the other end
 	const log = `${loaded.state}/logs/serve.log`;
 	const started = ctx.runner.spawn(process.execPath, argv, { logFile: log });
 	if (started.pid !== null) ctx.files.writeText(path, String(started.pid));
 
-	// A child that exits during startup used to leave `up` reporting a pid and exiting 0, so an
-	// operator read "bastion is running as pid 113" for a process that had already died on the
-	// configuration it was handed. Whatever it printed went to the terminal and was ignored.
+	// without this, a child that dies on its configuration still leaves `up` reporting a pid and
+	// exiting 0, and whatever it printed goes to a terminal nobody is reading
 	const died = await Promise.race([
 		started.exited.then((code) => code),
 		new Promise<null>((resolve) => setTimeout(() => resolve(null), STARTUP_GRACE_MS))
 	]);
 	if (died !== null) {
 		ctx.files.remove(path);
-		// The child's refusal is in the log rather than on this terminal, and an operator whose
-		// certificate is missing should not have to open a file to find that out. It is dead, so
-		// the file is complete: read what it said and put it back where it used to appear.
+		// the refusal is in the log rather than on this terminal, and the child is dead so the
+		// file is complete; read it back to where an operator is already looking
 		const said = ctx.files.exists(log)
 			? ctx.files.readText(log).trimEnd().split('\n').slice(-STARTUP_LOG_LINES)
 			: [];

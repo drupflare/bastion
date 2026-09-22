@@ -113,8 +113,8 @@ export class TenantSupervisor {
 	 * infer it from a process that stopped coming back.
 	 */
 	async run(): Promise<TenantState> {
-		// a stop requested BEFORE the loop starts is honoured rather than cleared. Resetting the
-		// flag here meant a shutdown racing a bring-up was erased and the tenant came back up.
+		// a stop requested BEFORE the loop starts is honoured rather than cleared; resetting the
+		// flag here lets a shutdown racing a bring-up be erased and the tenant come back up
 		if (this.stopping) {
 			this.process = { ...this.process, state: 'stopped', pid: null };
 			return 'stopped';

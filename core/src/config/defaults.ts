@@ -28,7 +28,7 @@ export const VERSION_FLOORS = {
 	firecracker: '1.15.1'
 } as const;
 
-/** what each floor is protecting, printed by a refusal so it is actionable rather than blunt */
+/** what each floor is protecting, printed by a refusal so it names a reason rather than a number */
 export const FLOOR_REASONS: Record<string, string> = {
 	workerd: "CVE-2023-48230, a Cap'n Proto crash reachable over WebSocket and Durable Objects",
 	firecracker: 'CVE-2026-5747, a guest-to-host out-of-bounds write in virtio-PCI'

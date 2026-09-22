@@ -280,9 +280,8 @@ export class Runtime {
 			this.ctx.files.mkdirp(`${paths.state}/${dir}`);
 		}
 
-		// A unix socket outlives the process that bound it, and workerd answers `Address already in
-		// use` rather than replacing it. An unclean stop -- a kill, an OOM, a power loss -- therefore
-		// left a file that stopped the tenant starting ever again, with nothing saying why.
+		// a unix socket outlives the process that bound it and workerd answers `Address already in
+		// use` rather than replacing it, so an unclean stop blocks every later start
 		this.ctx.files.remove(`${paths.state}/${TENANT_SOCKET}`);
 		for (const slot of ADAPTER_SLOTS) {
 			this.ctx.files.remove(socketFor({ adapterDir: `${paths.state}/adapters` }, slot));
@@ -401,9 +400,8 @@ export class Runtime {
 		const supervisor = new TenantSupervisor(this.ctx, tenant, {
 			binary: wrapped.command,
 			configPath: paths.config,
-			// the dead process still holds its socket name, and workerd refuses to bind over one.
-			// Only this tenant's own listen socket: the adapter sockets beside it are bound by
-			// bastion and are still live
+			// the dead process still holds its socket name and workerd refuses to bind over one;
+			// only this tenant's own, since the adapter sockets beside it are bastion's and live
 			beforeStart: () => this.ctx.files.remove(`${paths.state}/${TENANT_SOCKET}`),
 			// every start, not the first: a restart that skipped this would bring the tenant back
 			// with no cgroup, which is worst exactly when the kill was an OOM
@@ -733,9 +731,8 @@ export class Runtime {
 				bound.push({ which: 'http', address: `${listener.hostname}:${listener.port}` });
 			}
 			if (this.options.config.listeners.https !== undefined) {
-				// An https listener with no keypair binds PLAINTEXT and reports itself as https, so
-				// a visitor typing the url gets cleartext on the port that exists to encrypt it and
-				// the operator reads `https on 0.0.0.0:443` and believes otherwise.
+				// an https listener with no keypair binds PLAINTEXT and still calls itself https,
+				// so the port that exists to encrypt serves cleartext and the operator is told it
 				const material = this.material();
 				if (material.length === 0) {
 					throw new BastionError(

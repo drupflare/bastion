@@ -305,7 +305,7 @@ export const WRAPPED_SLOTS = [
 	shim: string;
 	/** the `drivers` key that must be configured, or null where the backing is always present */
 	driver: string | null;
-	/** what the operator has to do, named in the refusal so it is actionable */
+	/** what the operator has to do, named in the refusal so it is not left to guess */
 	needs: string | null;
 }[];
 
@@ -447,12 +447,8 @@ export function planSite(input: PlanInput): CapnpConfig {
 			writable: true
 		});
 	}
-	// Deny by default: the config layer of the two-layer egress rule, with the netns underneath it.
-	//
-	// An empty `allow` is how workerd spells "reach nothing". `deny = ["public"]` reads like the
-	// same thing and workerd refuses to start on it: `don't deny 'public', allow 'private' instead`.
-	// bastion emitted that form from the first commit and no configuration it generated could boot
-	// until a real workerd was pointed at one.
+	// deny by default, the config layer of the two-layer egress rule with the netns underneath
+	// an empty `allow` is "reach nothing"; `deny = ["public"]` reads the same and refuses to start
 	services.push({
 		kind: 'network',
 		name: ADAPTER_SERVICES.outbound,
