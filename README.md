@@ -1,6 +1,16 @@
-# bastion
+<div style="display: flex; align-items: center; flex-direction: column;" align="center">
+    <img align="center" style="align-self: center; max-width: 256px" src="./assets/bastion.png" width="30%" alt="" />
+    <h1 style="text-align: center;">bastion</h1>
+    <p style="text-align: center;">A hardened operating environment for self-hosted workerd.</p>
+    <div align="center">
+        <img src="https://img.shields.io/github/v/release/drupflare/bastion">
+        <img src="https://img.shields.io/github/license/drupflare/bastion">
+        <img src="https://img.shields.io/github/stars/drupflare/bastion?style=flat">
+        <img src="https://img.shields.io/github/commit-activity/t/drupflare/bastion?color=violet">
+    </div>
+</div>
 
-🏰 A hardened operating environment for self-hosted workerd.
+---
 
 workerd is not a hardened multi-tenant sandbox, and its own repository says so. A private
 deployment running mutually untrusted tenants needs a VM, container or microVM boundary around it.
