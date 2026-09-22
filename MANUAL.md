@@ -25,6 +25,7 @@ binary, so a host with no network still has it.
 - [Isolation](#isolation)
 - [Clustering](#clustering)
 - [Access](#access)
+- [Keys and Credentials](#credentials)
 - [Auditing](#auditing)
 - [Adapters](#adapters)
 - [Updating](#updating)
@@ -569,7 +570,7 @@ rollback is a pointer move rather than a re-upload.
     bastion deploy www.example.edu ./payload-1.0.2.tar.gz
     bastion deploy www.example.edu https://releases.example.edu/payload-1.0.2.tar.gz
     bastion versions list www.example.edu
-    bastion rollout www.example.edu --version <id> --percent 10
+    bastion rollout www.example.edu --to <id> --percent 10
     bastion rollback www.example.edu
 
 The rollout split is real: the front door sends that share of traffic to the canary version.
@@ -885,13 +886,32 @@ names what disappeared.
 workerd has no clustering: objects are always local to one instance of the runtime.
 bastion supplies the cluster itself.
 
-    bastion cluster init
-    bastion cluster join --control 10.0.0.1:8788 --token <token>
+    bastion cluster init --node node-a                 # prints a join token
+    bastion cluster join --control node-a:8787 --token <token> --node node-b
     bastion cluster provision 10.0.1.0/24
     bastion cluster place www.example.edu --replicas 1
+    bastion cluster nodes
 
 Children dial out to the control node and it never dials in, so a child behind NAT needs no
-inbound rule.
+inbound rule. A join is refused unless it carries a token, and a refused join leaves the box
+exactly as it was rather than half joined.
+
+**Each node advertises where its peers can reach it.** That cannot be read off the listener: a
+node binds `0.0.0.0` to accept from every interface and no peer can dial that. The advertised
+host defaults to the node id and is set explicitly where the id is not resolvable:
+
+    cluster:
+      role: child
+      control: { address: node-a:8787 }
+      node: { id: node-b, advertise: 10.0.1.7 }
+
+A node that advertises an address no peer can dial is reported as such on the first forward,
+rather than quietly answering from the wrong box.
+
+**The cluster wire is plaintext unless the management listener has a certificate.** A child dials
+that listener, so on a cluster it binds more than loopback, and `up` says so on every start. The
+join token and the node credential both cross it. Put the cluster on a private network, or issue a
+certificate for the management address and point `--control` at `https://`.
 
 Each site has one primary node holding the authoritative object, plus zero or more replica nodes.
 Writes and anything off the serving path go to the primary. Reads on the serving path are served
@@ -936,6 +956,99 @@ body parameter. No route accepts a tenant name from the client.
 Quota is what makes delegation safe. A tenant-admin cannot exhaust the box because `maxSites`
 and the tenant's cgroup bound them, so handing a department self-service costs the operator
 nothing to watch.
+
+## Keys and Credentials
+
+<a id="credentials"></a>
+
+Every secret bastion holds, where it comes from and where it lives. Paths are relative
+to `state:` in the configuration, which defaults to `/var/lib/bastion`.
+
+    state/tokens.json                API tokens, hashed
+    state/console.json               the outstanding dashboard claim, hashed
+    state/cluster-credentials.json   the join token and per-node credentials, hashed
+    state/cluster.json               this node's own cluster credential, in full
+    state/certs/                     certificates and their private keys
+
+**The state directory's permissions are the access control.** bastion writes the four files above
+`0600`, and anything that can read `state/cluster.json` can act as this node. Keep the
+directory owned by the user bastion runs as and mode `0700`.
+
+### The Dashboard Claim
+
+The console has no password and stores no accounts. Signing in exchanges a one-time claim token
+for a session, which is minted at a shell on the box:
+
+    bastion dashboard token
+
+It is spent by the first sign-in, and running the command again replaces the outstanding one. The
+session cookie carries the `__Host-` prefix, which a browser keeps only over https, so a console
+with no certificate serves the app and cannot be signed into. Issue one first:
+
+    bastion cert self-sign 127.0.0.1
+
+### API Tokens
+
+    bastion api token create ci --role tenant-admin --tenant acme
+    bastion api token list
+    bastion api token revoke <id>
+
+The secret prints once and is never stored; only its SHA-256 is kept. A token reaches the routes
+the table marks token-usable and no others, so an unattended credential cannot install software or
+read a secret. Revoke by id; there is no way to recover a lost secret, and no need to, because
+issuing another costs nothing.
+
+### SSH Keys for Provisioning
+
+`cluster provision` installs bastion on other boxes over SSH. It runs `ssh` with
+`BatchMode=yes`, so the key must be one that needs no passphrase prompt: either an unencrypted
+key, or one already loaded into an agent.
+
+    ssh-keygen -t ed25519 -C "bastion provisioning" -f ~/.ssh/bastion_provision
+    ssh-copy-id -i ~/.ssh/bastion_provision.pub root@10.0.1.5
+
+Keep the private half on the control node only, mode `0600`, and give it to nothing else. It
+installs software as root on every box it reaches, so it is the most powerful credential in the
+cluster. An agent is the better answer where one is available:
+
+    eval "$(ssh-agent -s)"
+    ssh-add ~/.ssh/bastion_provision
+
+Host keys are accepted on first use (`StrictHostKeyChecking=accept-new`), so a host that
+changes its key later fails rather than being trusted silently. Pre-seed
+`~/.ssh/known_hosts` with `ssh-keyscan` where first-use trust is not acceptable.
+
+### Cluster Join Tokens
+
+`cluster init` mints one and prints it once. It expires in an hour, is spent by the first join,
+and buys that node a long-lived credential of its own:
+
+    bastion cluster init --node node-a       # prints the token
+    bastion cluster init --rotate            # mints another
+
+Carry it to the child however you already carry secrets. It is a bearer token in transit, which
+is why it is short-lived and single-use rather than a shared cluster password.
+
+### Certificates
+
+    bastion cert self-sign www.example.edu   # a local certificate, no internet needed
+    bastion cert issue www.example.edu       # ACME, needs the http-01 or dns-01 path open
+    bastion cert import www.example.edu --chain chain.pem --key key.pem
+
+Keys live in `state/certs/` beside their certificates. The local CA is the exception and its
+private key is deliberately NOT here: it is generated off-host, only the public certificate and a
+pre-signed leaf are shipped in, and `bastion cert trust` installs the public half. A CA key on a
+multi-tenant box is a interception capability against every client that trusted it.
+
+### Secrets a Site Needs
+
+Site secrets never go in `bastion.yml`. They go through the configured driver, which is the OS
+keyring by default:
+
+    bastion secrets set SMTP_PASSWORD --value ...
+    bastion secrets list
+
+`secrets get` is audited and the value never appears in a `--json` payload.
 
 ## Auditing
 

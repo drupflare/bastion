@@ -22,24 +22,55 @@ Worked flows for things the manual describes one command at a time.
 
 ## Bringing Up a Two-Node Cluster
 
+Before anything, the first box needs an SSH key that reaches the second without a passphrase
+prompt, because provisioning runs `ssh` with `BatchMode=yes`:
+
+```sh
+ssh-keygen -t ed25519 -C "bastion provisioning" -f ~/.ssh/bastion_provision
+ssh-copy-id -i ~/.ssh/bastion_provision.pub root@10.0.1.12
+```
+
+Keep that private key on the control node only, mode `0600`. It installs software as root on every
+box it reaches. `bastion manual credentials` covers every other key and where it lives.
+
 On the first box:
 
 ```sh
 bastion init
-bastion cluster init
+bastion cluster init --node node-a
 bastion up
 ```
 
-`cluster init` makes this node the control node and mints a join token with a short expiry. Print
-it, then provision the second box from the first:
+`cluster init` makes this node the control node and prints a join token that expires in an hour and
+is spent by the first join. Provision the second box from the first:
 
 ```sh
 bastion cluster provision 10.0.1.12 --yes
 ```
 
-That installs the pinned binary over SSH and writes a child configuration derived from the running
-primary. Nothing is provisioned with a secret in it: the child receives the control node's address
-and the one-time token, then dials out for the rest.
+That installs the pinned binary over SSH. Or join by hand from the second box, which is the same
+exchange:
+
+```sh
+bastion cluster join --control node-a:8787 --token node-b < token > --node
+bastion up
+```
+
+A join carrying no token, a wrong one or a spent one is refused, and a refused join leaves the box
+exactly as it was rather than half joined.
+
+Each node advertises where its peers reach it. That is the node id by default, so set `advertise`
+where the id is not a resolvable name:
+
+```yaml
+cluster:
+  role: child
+  control: { address: node-a:8787 }
+  node: { id: node-b, advertise: 10.0.1.12 }
+```
+
+A node cannot advertise its own bind address: `0.0.0.0` accepts from every interface and no peer
+can dial it.
 
 Give a site a replica:
 
@@ -57,6 +88,11 @@ different one renders every visitor anonymous. And the site must have rendered a
 CSRF token at least once, because the private key that page mints is what a replica waits for; a
 freshly migrated site without one refuses every replica for a reason that reads like a capacity
 limit.
+
+The cluster wire is plaintext unless the management listener carries a certificate. A child dials
+that listener, so on a cluster it binds more than loopback and `up` says so on every start. The
+join token and the node credential both cross it, so put the cluster on a private network or issue
+a certificate for the management address and point `--control` at `https://`.
 
 To move a site's primary:
 

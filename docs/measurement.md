@@ -52,9 +52,15 @@ Each of these needs a Linux host with the named mechanism. None of them is in CI
 | Durable Object persistence under power loss                                                   | a host that can be hard-killed                | `localDisk` is the one storage path nobody has pulled the plug on                                                  |
 | `residency: pin` against `evict`                                                              | a host with enough RAM to hold the pinned set | one flag separates them, so the cost is priced rather than assumed                                                 |
 | microVM cost per tenant                                                                       | `/dev/kvm`                                    | cold start, memory per tenant, and what a VM costs against the per-tenant-process baseline                         |
+| `isolated` booting a guest at all                                                             | `/dev/kvm`, a kernel image and a rootfs       | the argv, the jailer chroot mode and the preflight refusal are unit-tested; nothing has booted a guest             |
 | the per-site resident cost on real hardware                                                   | any Linux host running sites                  | it is the term the capacity model currently carries as `assumed`                                                   |
 
-The last row is the one that improves the product rather than a document. Every capacity answer
+`isolated` is the row that bounds what may be claimed. Its refusals and its argv are asserted in
+the gate lane, including that `--enable-pci` is never emitted, which is what closes CVE-2026-5747
+by construction. What has never happened is a guest booting, so the mode is implemented and
+unexercised rather than working.
+
+The per-site cost row is the one that improves the product rather than a document. Every capacity answer
 carries the weakest provenance of its inputs, so until a host measures its own per-site cost, every
 answer reads `assumed`. One measurement moves them all to `probed`.
 

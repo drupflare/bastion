@@ -303,6 +303,7 @@ REQUIRE_WORKERD=1 bun run test:e2e  # a real workerd against a generated configu
 REQUIRE_SERVING=1 bun run test:e2e  # a box comes up in a container and serves a request
 REQUIRE_FLOW=1 bun run test:e2e     # the operator flow through the compiled binary
 REQUIRE_PAYLOAD=1 bun run test:e2e  # the released drupflare payload, unmodified
+REQUIRE_CLUSTER=1 bun run test:e2e  # two nodes on one docker network, joined and routing
 REQUIRE_DOCKER=1 bun run test:e2e   # the compose stack: redis, minio, postgres, chromium, an ssh target
 REQUIRE_SIBLINGS=1 bun run test:e2e # the repair vocabulary against the worker's own source
 ```
