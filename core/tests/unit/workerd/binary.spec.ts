@@ -29,6 +29,7 @@ function harness(files = memoryFiles({ [PATH]: BYTES })): {
 		fetch: () => Promise.reject(new Error('no network in the gate lane')),
 		env: {},
 		cwd: '/',
+		platform: 'linux',
 		now: () => 0
 	};
 	return { ctx, io };

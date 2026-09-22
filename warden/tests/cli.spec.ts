@@ -26,6 +26,7 @@ function harness(files: Record<string, string> = {}): {
 			fetch: () => Promise.reject(new Error('no network in the gate lane')),
 			env: {},
 			cwd: '/srv',
+			platform: 'linux',
 			now: () => 0
 		}
 	};
@@ -107,7 +108,9 @@ describe('--json', () => {
 		await run(ctx, ['--json', 'doctor']);
 		expect(io.stdout).toHaveLength(1);
 		const report = JSON.parse(io.outText()) as { platform: string; limits: unknown[] };
-		expect(report.platform).toBe(process.platform);
+		// the platform the CONTEXT names, not the runner's own: the seam is what lets this suite
+		// reach the linux paths from a mac, and asserting the global would pin it back
+		expect(report.platform).toBe(ctx.platform);
 		expect(report.limits.length).toBeGreaterThan(0);
 	});
 

@@ -43,7 +43,7 @@ export function binaryOnPath(ctx: Context, name: string): string | null {
  * never `probed` present: the cost of the two mistakes is not symmetric, because a mode believed
  * available and silently weaker is the failure this project exists to prevent.
  */
-export function preflight(ctx: Context, platform: string = process.platform): Preflight {
+export function preflight(ctx: Context, platform: string = ctx.platform): Preflight {
 	const linux = platform === 'linux';
 	const mechanisms: MechanismCheck[] = [];
 

@@ -168,6 +168,7 @@ function harness(
 			fetch: world.fetch,
 			env: {},
 			cwd: '/srv',
+			platform: 'linux',
 			now: () => NOW
 		}
 	};

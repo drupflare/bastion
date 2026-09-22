@@ -15,6 +15,14 @@ export interface Context {
 	fetch: typeof globalThis.fetch;
 	env: NodeJS.ProcessEnv;
 	cwd: string;
+	/**
+	 * What this host is, as `process.platform` names it.
+	 *
+	 * A seam because the preflight and every mode decision branch on it, and the gate lane has to
+	 * drive both sides of a refusal that only fires on one kind of host. Reading `process.platform`
+	 * directly left the linux paths reachable only from a linux runner.
+	 */
+	platform: string;
 	/** milliseconds since the epoch; a seam so a spec can freeze it */
 	now(): number;
 }
@@ -27,6 +35,7 @@ export function defaultContext(): Context {
 		fetch: globalThis.fetch.bind(globalThis),
 		env: process.env,
 		cwd: process.cwd(),
+		platform: process.platform,
 		now: () => Date.now()
 	};
 }
