@@ -33,7 +33,7 @@ export const SHIM_MODULES = {
  */
 export const D1_SHIM = `
 const post = async (fetcher, body) => {
-	const response = await fetcher.fetch('http://bastion/sql', {
+	const response = await fetcher.fetch('http://bastion/', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(body)
@@ -42,7 +42,21 @@ const post = async (fetcher, body) => {
 	return response.json();
 };
 
-const one = (results) => results[0] ?? { results: [], meta: {}, success: true };
+// bastion's sql adapter answers {rows, rowsAffected, lastInsertId} and D1 answers
+// {results, success, meta}. Two different contracts either side of one socket, so the shim maps
+// between them; without this every caller reading a result set gets undefined
+const shape = (answer) => ({
+	results: (answer && answer.rows) ?? [],
+	success: true,
+	meta: {
+		changes: (answer && answer.rowsAffected) ?? 0,
+		last_row_id: (answer && answer.lastInsertId) ?? null,
+		rows_read: ((answer && answer.rows) ?? []).length,
+		rows_written: (answer && answer.rowsAffected) ?? 0
+	}
+});
+
+const one = (answers) => shape(answers && answers[0]);
 
 class Statement {
 	constructor(fetcher, sql, params) {
@@ -85,11 +99,12 @@ export default function (env) {
 			const body = await post(fetcher, {
 				batch: statements.map((s) => ({ sql: s.sql, params: s.params }))
 			});
-			return body.results;
+			// one D1 result per statement, in the order they were sent
+			return (body.results ?? []).map(shape);
 		},
 		exec: async (sql) => {
 			const body = await post(fetcher, { sql });
-			return { count: body.results.length, duration: 0 };
+			return { count: (body.results ?? []).length, duration: 0 };
 		},
 		dump: async () => {
 			throw new Error('D1_ERROR: bastion serves sql over an adapter and cannot dump a file');
@@ -113,7 +128,7 @@ export default function (env) {
 	const fetcher = env.fetcher;
 	return {
 		async run(model, inputs, options) {
-			const response = await fetcher.fetch('http://bastion/ai/run', {
+			const response = await fetcher.fetch('http://bastion/run', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ model, inputs: inputs ?? {}, options: options ?? {} })
@@ -127,7 +142,7 @@ export default function (env) {
 		},
 		async models(params) {
 			const query = new URLSearchParams(params ?? {}).toString();
-			const response = await fetcher.fetch('http://bastion/ai/models?' + query);
+			const response = await fetcher.fetch('http://bastion/models?' + query);
 			if (!response.ok) throw new Error('AiError: ' + response.status);
 			return (await response.json()).models;
 		},
@@ -150,7 +165,7 @@ export default function (env) {
  */
 export const VECTORIZE_SHIM = `
 const call = async (fetcher, path, body) => {
-	const response = await fetcher.fetch('http://bastion/vectorize' + path, {
+	const response = await fetcher.fetch('http://bastion' + path, {
 		method: body === undefined ? 'GET' : 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: body === undefined ? undefined : JSON.stringify(body)
@@ -193,7 +208,7 @@ const bytesOf = async (source) => {
 };
 
 const send = async (fetcher, path, header, body) => {
-	const response = await fetcher.fetch('http://bastion/images' + path, {
+	const response = await fetcher.fetch('http://bastion' + path, {
 		method: 'POST',
 		headers: { 'content-type': 'application/octet-stream', 'x-bastion-ops': header },
 		body
@@ -264,7 +279,7 @@ export default function (env) {
 				typeof message.raw === 'string'
 					? message.raw
 					: await new Response(message.raw).text();
-			const response = await fetcher.fetch('http://bastion/email/send', {
+			const response = await fetcher.fetch('http://bastion/send', {
 				method: 'POST',
 				headers: {
 					'content-type': 'message/rfc822',
@@ -302,7 +317,7 @@ export default function (env) {
 			});
 			// analytics is never worth failing a request over, so the write is fire and forget
 			fetcher
-				.fetch('http://bastion/analytics/write', {
+				.fetch('http://bastion/write', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
 					body
@@ -322,7 +337,7 @@ export default function (env) {
  */
 export const BROWSER_SHIM = `
 const call = async (fetcher, path, body) => {
-	const response = await fetcher.fetch('http://bastion/browser' + path, {
+	const response = await fetcher.fetch('http://bastion' + path, {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(body ?? {})

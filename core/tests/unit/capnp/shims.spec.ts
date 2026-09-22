@@ -21,7 +21,7 @@ const base: PlanInput = {
 		bundle: '/b',
 		storage: '/s',
 		assets: '/a',
-		adapterSocket: '/run/acme.sock',
+		adapterDir: '/run/acme',
 		listenSocket: '/run/acme-http.sock'
 	},
 	modules: [{ name: 'index.js', kind: 'esModule', embed: 'index.js' }],
@@ -150,11 +150,11 @@ describe('the shim sources themselves', () => {
 	});
 
 	it('the AI shim posts to the run route the adapter serves', () => {
-		expect(AI_SHIM).toContain("'http://bastion/ai/run'");
+		expect(AI_SHIM).toContain("'http://bastion/run'");
 	});
 
 	it('the D1 shim posts to the sql route the adapter serves', () => {
-		expect(D1_SHIM).toContain("'http://bastion/sql'");
+		expect(D1_SHIM).toContain("'http://bastion/'");
 	});
 
 	it('neither shim holds a credential or any state between calls', () => {
