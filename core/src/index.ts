@@ -1,4 +1,11 @@
-export { ASSET_PROFILES, CONTENT_TYPES, NEVER_SERVED, assetResolver } from './adapters/assets';
+export {
+	ASSET_PROFILES,
+	CONTENT_TYPES,
+	NEVER_SERVED,
+	assetResolver,
+	type AssetProfile,
+	type AssetResolver
+} from './adapters/assets';
 export { memoryCacheStore, tieredCache, type CacheEntry, type CacheStore } from './adapters/cache';
 export {
 	CONSERVATIVE,
@@ -29,7 +36,15 @@ export {
 	type SqlStore,
 	type SqlValue
 } from './adapters/sql';
-export { assertCanHonour, isExpired, refuse, type KeyValueStore } from './adapters/store';
+export {
+	assertCanHonour,
+	isExpired,
+	refuse,
+	type KeyValueStore,
+	type ListPage,
+	type PutOptions,
+	type StoredValue
+} from './adapters/store';
 export {
 	GRANTS,
 	ROLES,
@@ -37,6 +52,7 @@ export {
 	can,
 	tenantFor,
 	type Action,
+	type AuthzRequest,
 	type Principal,
 	type Role
 } from './api/authz';
@@ -67,10 +83,11 @@ export {
 	BackupEngine,
 	DEFAULT_RETENTION,
 	retain,
+	type BackupOptions,
 	type Manifest,
 	type RetentionPolicy
 } from './backup/engine';
-export { FRAME_BYTES, digestOf, frames, join } from './backup/frame';
+export { FRAME_BYTES, digestOf, frames, join, type Frame } from './backup/frame';
 export {
 	COMPACTION_LEVEL,
 	DELTA_MECHANISM,
@@ -80,7 +97,8 @@ export {
 	recompress,
 	seal,
 	unseal,
-	type Pack
+	type Pack,
+	type PackEntry
 } from './backup/pack';
 export {
 	admitSite,
@@ -94,7 +112,19 @@ export {
 	type Provenance,
 	type Term
 } from './capacity/model';
-export { renderConfig, type CapnpConfig, type ServiceSpec } from './capnp/generate';
+export {
+	renderConfig,
+	type BindingSpec,
+	type CapnpConfig,
+	type DiskSpec,
+	type DurableObjectSpec,
+	type ExternalSpec,
+	type ModuleSpec,
+	type NetworkSpec,
+	type ServiceSpec,
+	type SocketSpec,
+	type WorkerSpec
+} from './capnp/generate';
 export { ADAPTER_SERVICES, planSite, type PlanInput, type TenantPaths } from './capnp/plan';
 export {
 	REPLICA_LAG_MS,
@@ -102,6 +132,7 @@ export {
 	planPromotion,
 	promote,
 	type Placement,
+	type PlacementInput,
 	type PromotionPlan
 } from './cluster/placement';
 export {
@@ -131,6 +162,7 @@ export {
 	ReplicaDriver,
 	assertSameCookieName,
 	sessionCookieName,
+	type ReplicaAction,
 	type ReplicaResult
 } from './cluster/replicate';
 export {
@@ -138,6 +170,7 @@ export {
 	chooseNode,
 	mustProxy,
 	type NodeDecision,
+	type NodeRole,
 	type NodeRouteInput
 } from './cluster/route';
 export {
@@ -166,8 +199,30 @@ export {
 	schemaText,
 	validateFile,
 	writeConfig,
-	type LoadedConfig
+	type ConfigHost,
+	type LoadedConfig,
+	type Setting,
+	type SettingOrigin
 } from './config/file';
+export {
+	type AuditConfig,
+	type ClusterConfig,
+	type DomainsConfig,
+	type DriverConfig,
+	type DriversConfig,
+	type FrontConfig,
+	type HeaderRuleConfig,
+	type LOG_LEVELS,
+	type ListenerConfig,
+	type LogsConfig,
+	type MODES,
+	type RESIDENCIES,
+	type RetentionConfig,
+	type RuntimeConfig,
+	type RuntimeLimits,
+	type TenantCapabilities,
+	type TenantLimits
+} from './config/types';
 export type {
 	BastionConfig,
 	LogLevel,
@@ -201,6 +256,7 @@ export {
 	checkLabel,
 	isUnderPrimary,
 	suggest,
+	type LabelOutcome,
 	type PrimaryDomain
 } from './domains/naming';
 export {
@@ -212,7 +268,8 @@ export {
 	txtWatcher,
 	type CloudflareOptions,
 	type DnsProvider,
-	type DnsRecord
+	type DnsRecord,
+	type ManualResponderOptions
 } from './domains/provider';
 export {
 	CHALLENGE_PREFIX,
@@ -221,7 +278,9 @@ export {
 	challengeToken,
 	checkDomain,
 	type Check,
-	type DomainReport
+	type CheckState,
+	type DomainReport,
+	type VerifyOptions
 } from './domains/verify';
 export { azureObjectStore, sharedKeyStringToSign, type AzureOptions } from './drivers/azure-object';
 export { fsCacheStore } from './drivers/fs-cache';
@@ -252,6 +311,8 @@ export {
 	signRequest,
 	signingKey,
 	uriEncode,
+	type CanonicalRequest,
+	type SignedRequest,
 	type SigningCredentials
 } from './drivers/sigv4';
 export { sqlStore } from './drivers/sql-store';
@@ -266,9 +327,10 @@ export {
 	parseRule,
 	rulesFor,
 	wouldAllow,
+	type DriftReport,
 	type EgressRule
 } from './egress/policy';
-export { BastionError, CODES, EXIT, FindingError, UsageError } from './errors';
+export { BastionError, CODES, EXIT, FindingError, UsageError, type ErrorFacts } from './errors';
 export {
 	CLIENT_IP_HEADER,
 	resolveClientIp,
@@ -279,9 +341,16 @@ export {
 	chooseEncoding,
 	compress,
 	parseAcceptEncoding,
-	type CompressionPolicy
+	type CompressionPolicy,
+	type Offer
 } from './front/compress';
-export { HTTP3_REFUSAL, buildFront, http3Warning, listenerSpec } from './front/door';
+export {
+	HTTP3_REFUSAL,
+	buildFront,
+	http3Warning,
+	listenerSpec,
+	type DoorOptions
+} from './front/door';
 export {
 	finishResponse,
 	handleRequest,
@@ -296,6 +365,7 @@ export {
 	checkHeaderPolicy,
 	defaultResponseHeaders,
 	type HeaderPolicy,
+	type HeaderProblem,
 	type HeaderRule
 } from './front/headers';
 export {
@@ -306,6 +376,7 @@ export {
 	type Listener,
 	type ListenerHost,
 	type ListenerSpec,
+	type RequestHandler,
 	type TlsMaterial
 } from './front/listener';
 export { ConnectionCounter, RateLimiter, type LimitPolicy } from './front/ratelimit';
@@ -323,6 +394,7 @@ export {
 	resolveRoute,
 	routeTable,
 	type Route,
+	type RouteOutcome,
 	type RouteTable
 } from './front/router';
 export { socketPaths, unixUpstream, type UpstreamPaths } from './front/upstream';
@@ -338,7 +410,8 @@ export {
 	nextRung,
 	type LadderState,
 	type RepairClass,
-	type Rung
+	type Rung,
+	type RungDecision
 } from './health/ladder';
 export {
 	HealthLedger,
@@ -355,9 +428,18 @@ export {
 	type ReachabilityViolation
 } from './health/reachability';
 export { BY_CODE, TRIPWIRES, finding, type Finding, type Tripwire } from './health/tripwires';
-export { nodeRunner, scriptedRunner, type CommandRunner } from './host/exec';
-export { memoryFiles, nodeFiles, type FileHost } from './host/files';
-export { consoleIo, memoryIo, type Io } from './io';
+export {
+	nodeRunner,
+	scriptedRunner,
+	type CommandRunner,
+	type RecordedCall,
+	type RunOptions,
+	type RunResult,
+	type ScriptedRunner,
+	type Started
+} from './host/exec';
+export { memoryFiles, nodeFiles, type FileEntry, type FileHost } from './host/files';
+export { consoleIo, memoryIo, type Io, type MemoryIo } from './io';
 export {
 	CGROUP_ROOT,
 	applyCgroup,
@@ -366,18 +448,33 @@ export {
 	cgroupUsage,
 	cgroupWrites,
 	cpuMax,
-	type CgroupUsage
+	type CgroupUsage,
+	type CgroupWrites
 } from './isolation/cgroups';
 export {
 	FORBIDDEN_VMM_FLAGS,
 	assertVmmArgvSafe,
 	firecrackerConfig,
 	firecrackerHypervisor,
-	jailerArgv
+	jailerArgv,
+	type FirecrackerConfig,
+	type FirecrackerOptions
 } from './isolation/firecracker';
+export { type GuestState } from './isolation/hypervisor';
 export type { Guest, GuestSpec, Hypervisor } from './isolation/hypervisor';
-export { ACKNOWLEDGE_FLAG, MODE_TABLE, assertModeSafe } from './isolation/modes';
-export { binaryOnPath, modeAvailable, preflight, type Preflight } from './isolation/preflight';
+export {
+	ACKNOWLEDGE_FLAG,
+	MODE_TABLE,
+	assertModeSafe,
+	type ModeDescription
+} from './isolation/modes';
+export {
+	binaryOnPath,
+	modeAvailable,
+	preflight,
+	type MechanismCheck,
+	type Preflight
+} from './isolation/preflight';
 export {
 	DEFAULT_RESTART,
 	dueForRestart,
@@ -401,23 +498,27 @@ export {
 	CARRY_TABLE,
 	assertPlanFits,
 	buildPlan,
+	type CarryItem,
 	type DiscoveredSite,
 	type MigrationPlan,
+	type MigrationSource,
 	type SitePlan
 } from './migrate/plan';
 export {
 	MigrationRun,
 	refuseDirectSeed,
 	type MigrationHooks,
-	type SiteProgress
+	type SiteProgress,
+	type SiteStage
 } from './migrate/run';
 export {
 	AnalyticsWindow,
 	scopeFor,
 	type RequestSample,
-	type SiteAnalytics
+	type SiteAnalytics,
+	type Window
 } from './observe/analytics';
-export { LogWriter, formatLine, parseAge } from './observe/logs';
+export { LogWriter, formatLine, parseAge, type LogLine } from './observe/logs';
 export { DEFAULT_BUCKETS, Registry, type MetricLabels } from './observe/metrics';
 export {
 	buildSecrets,
@@ -427,6 +528,8 @@ export {
 	kmsSecrets,
 	redact,
 	type KmsClient,
+	type SecretClients,
+	type SecretRef,
 	type SecretStore
 } from './secrets/store';
 export { Runtime, type RuntimeOptions, type RuntimeState } from './serve/runtime';
@@ -439,7 +542,8 @@ export {
 	nonce,
 	readCookie,
 	securityHeaders,
-	sessionCookie
+	sessionCookie,
+	type CsrfOutcome
 } from './serve/security';
 export {
 	SCRYPT_PARAMS,
@@ -453,18 +557,37 @@ export {
 	type Session
 } from './serve/session';
 export { TOKEN_PREFIX, TokenStore, bearer, type ApiToken } from './serve/tokens';
-export { DEFAULT_BACKOFF, type BackoffPolicy } from './supervise/backoff';
-export { TenantSupervisor, type TenantState } from './supervise/tenant';
+export {
+	DEFAULT_BACKOFF,
+	type BackoffPolicy,
+	type Breaker,
+	type BreakerState
+} from './supervise/backoff';
+export {
+	TenantSupervisor,
+	type SupervisorOptions,
+	type TenantProcess,
+	type TenantState
+} from './supervise/tenant';
 export {
 	AcmeClient,
 	DIRECTORIES,
 	httpResponder,
 	keyAuthorization,
 	thumbprint,
+	type AcmeOptions,
 	type ChallengeResponder,
+	type ChallengeType,
+	type Directory,
 	type IssuedCertificate
 } from './tls/acme';
-export { certificateRequestPem, generateKey, hostsOfRequest, publicKeyOfRequest } from './tls/csr';
+export {
+	certificateRequestPem,
+	generateKey,
+	hostsOfRequest,
+	publicKeyOfRequest,
+	type KeyPair
+} from './tls/csr';
 export { pem } from './tls/der';
 export {
 	acmeConfigured,
@@ -473,9 +596,10 @@ export {
 	isLocalName,
 	renewable,
 	type Strategy,
-	type StrategyChoice
+	type StrategyChoice,
+	type StrategyInput
 } from './tls/issue';
-export { mdnsCommand, trustLocalCa, untrustLocalCa } from './tls/local';
+export { mdnsCommand, trustLocalCa, untrustLocalCa, type LocalTrustOptions } from './tls/local';
 export {
 	issueAndStore,
 	responderFor,
@@ -489,10 +613,26 @@ export {
 	expiryOf,
 	expirySeverity,
 	hostsOf,
+	type ExpirySeverity,
 	type StoredCertificate
 } from './tls/store';
-export { assertChain, checkChain, splitChain, type ChainReport } from './tls/verify';
-export { certificate, localCa, selfSigned, signLeaf, utcTime, type SelfSigned } from './tls/x509';
+export {
+	assertChain,
+	checkChain,
+	splitChain,
+	type ChainProblem,
+	type ChainReport
+} from './tls/verify';
+export {
+	certificate,
+	localCa,
+	selfSigned,
+	signLeaf,
+	utcTime,
+	type CertificateOptions,
+	type LocalCa,
+	type SelfSigned
+} from './tls/x509';
 export {
 	FORMAT_FINGERPRINTS,
 	acceptedCves,
@@ -503,8 +643,24 @@ export {
 	rolloutPlan,
 	sha256Of,
 	verifyBinary,
-	type Pin
+	type ChangeRefusal,
+	type Pin,
+	type PinHistory,
+	type RolloutStep
 } from './update/pin';
 export { VERSION } from './version';
-export { FORBIDDEN_FLAGS, assertArgvSafe, resolveBinary, serveArgv } from './workerd/binary';
-export { checkFloor, compareWorkerd, requireFloor } from './workerd/version';
+export {
+	FORBIDDEN_FLAGS,
+	assertArgvSafe,
+	resolveBinary,
+	serveArgv,
+	type ResolvedBinary,
+	type WorkerdPin
+} from './workerd/binary';
+export {
+	checkFloor,
+	compareWorkerd,
+	requireFloor,
+	type Comparison,
+	type FloorVerdict
+} from './workerd/version';
