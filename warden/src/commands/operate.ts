@@ -2,27 +2,33 @@ import type { Context } from '@drupflare/bastion';
 import {
 	BackupEngine,
 	BastionError,
+	RUNTIME_DIGEST,
 	SessionStore,
 	backupTarget,
 	buildObjects,
 	checkPinChange,
 	formatFor,
+	tenantDigest,
 	trustLocalCa,
 	untrustLocalCa,
 	writeConfig
 } from '@drupflare/bastion';
-import { createHash } from 'node:crypto';
 import { kv, table } from '../format';
-import { emit, load, type Globals } from '../state';
+import { emit, load, writePath, type Globals } from '../state';
 
 // #region lifecycle
 
 /**
- * Restarts only the tenants whose generated capnp changed.
+ * Which tenants are running with a configuration that has since changed.
  *
  * workerd has no in-place reload: `--watch` re-executes the binary over itself and loses every
  * in-memory Durable Object. So the unit of a reload is the tenant, and a tenant whose configuration
  * did not change is left alone rather than restarted for symmetry.
+ *
+ * **This reports; it does not restart.** It said `1 tenant will restart`, exited 0 and changed
+ * nothing: an operator who raised a memory limit was told it had been applied and kept serving on
+ * the old one. Reaching the running `serve` from a separate CLI process is a mechanism bastion does
+ * not have yet, so the command names `bastion restart` rather than implying a swap it cannot do.
  */
 export function runReload(ctx: Context, globals: Globals): number {
 	const loaded = load(ctx, globals);
@@ -35,40 +41,39 @@ export function runReload(ctx: Context, globals: Globals): number {
 			suspended.push(tenant.name);
 			continue;
 		}
-		// the digest of what this tenant is configured with, which is what decides a restart. The
-		// generated capnp derives from exactly this, so comparing the source avoids rendering a
-		// whole config to discover that nothing moved
-		const digest = createHash('sha256')
-			.update(
-				JSON.stringify({ tenant, runtime: loaded.config.runtime, mode: loaded.config.mode })
-			)
-			.digest('hex');
-		const path = `${loaded.state}/tenants/${tenant.name}/config.sha256`;
+		// the digest of what this tenant is configured with, against what the running process
+		// recorded when it started. Comparing the source avoids rendering a whole config to find
+		// that nothing moved, and the runtime writes the baseline so this reads the box rather than
+		// its own last answer: nothing recorded one, so the first run always said every tenant had
+		// changed and the second always said none had
+		const digest = tenantDigest(loaded.config, tenant);
+		const path = `${loaded.state}/tenants/${tenant.name}/${RUNTIME_DIGEST}`;
 		const current = ctx.files.exists(path) ? ctx.files.readText(path).trim() : null;
 		if (current === digest) {
 			unchanged.push(tenant.name);
 			continue;
 		}
-		ctx.files.mkdirp(`${loaded.state}/tenants/${tenant.name}`);
-		ctx.files.writeText(path, `${digest}\n`);
 		changed.push(tenant.name);
 	}
 
-	emit(ctx, globals, { changed, unchanged, suspended }, () =>
+	emit(ctx, globals, { changed, unchanged, suspended, applied: false }, () =>
 		[
 			kv([
-				['restarting', changed.length === 0 ? '(nothing)' : changed.join(', ')],
+				['out of date', changed.length === 0 ? '(nothing)' : changed.join(', ')],
 				['unchanged', unchanged.length === 0 ? '(none)' : unchanged.join(', ')],
 				['suspended', suspended.length === 0 ? '(none)' : suspended.join(', ')]
 			]),
 			'',
 			changed.length === 0
-				? 'every tenant already matches its configuration'
-				: `${changed.length} tenant${changed.length === 1 ? '' : 's'} will restart; the rest ` +
-					'keep their Durable Objects resident'
+				? 'every tenant is running the configuration on disk'
+				: `${changed.length} tenant${changed.length === 1 ? '' : 's'} ` +
+					`${changed.length === 1 ? 'is' : 'are'} running an older configuration. ` +
+					'Nothing has been restarted: run `bastion restart` to apply it, which restarts ' +
+					'every tenant and drops the Durable Objects they hold'
 		].join('\n')
 	);
-	return 0;
+	// a finding rather than a success: something is configured that is not running
+	return changed.length === 0 ? 0 : 3;
 }
 
 /**
@@ -300,7 +305,7 @@ export function runUpdateRollback(
 			workerd: { ...loaded.config.runtime.workerd, version: previous.version }
 		}
 	};
-	writeConfig(ctx, loaded.path ?? `${ctx.cwd}/bastion.yml`, config);
+	writeConfig(ctx, writePath(ctx, globals, loaded), config);
 	emit(
 		ctx,
 		globals,
