@@ -528,7 +528,7 @@ export const COMMANDS: CommandSpec[] = [
 		manual: 'deploying',
 		args: [{ name: 'host', required: true, description: 'the hostname' }],
 		options: [
-			{ flags: '--version <id>', description: 'the version to send traffic to' },
+			{ flags: '--to <id>', description: 'the version to send traffic to' },
 			{ flags: '--percent <n>', description: 'the share, 0 to 100' }
 		],
 		surface: '/tenants'
@@ -1065,8 +1065,12 @@ export const COMMANDS: CommandSpec[] = [
 	{
 		group: 'cluster',
 		name: 'cluster init',
-		description: 'make this node the control node',
+		description: 'make this node the control node and mint a join token',
 		manual: 'clustering',
+		options: [
+			{ flags: '--node <id>', description: 'the id this node answers to' },
+			{ flags: '--rotate', description: 'mint a fresh join token on a node already control' }
+		],
 		surface: '/cluster'
 	},
 	{
@@ -1076,7 +1080,8 @@ export const COMMANDS: CommandSpec[] = [
 		manual: 'clustering',
 		options: [
 			{ flags: '--control <address>', description: 'the control node' },
-			{ flags: '--token <token>', description: 'the one-time join token' }
+			{ flags: '--token <token>', description: 'the one-time join token' },
+			{ flags: '--node <id>', description: 'the id this node answers to' }
 		],
 		exits: [JSON_EXIT],
 		surface: '/cluster'
@@ -1134,7 +1139,6 @@ export const COMMANDS: CommandSpec[] = [
 				flags: '--dry-run',
 				description: 'print the plan and change nothing; the default for a range'
 			},
-			{ flags: '--yes', description: 'act rather than printing the plan' },
 			{ flags: '--only <hosts>', description: 'narrow a range' },
 			{ flags: '--exclude <hosts>', description: 'skip hosts in a range' },
 			{ flags: '--i-know-this-is-a-large-range', description: 'required above a /24' }
@@ -1231,7 +1235,6 @@ export const COMMANDS: CommandSpec[] = [
 		args: [
 			{ name: 'source', required: true, description: 'an ssh target, a URL, or --cloudflare' }
 		],
-		options: [{ flags: '--yes', description: 'act; the default is a dry run' }],
 		surface: null,
 		exempt: 'the migration wizard renders the same plan object and is its own flow'
 	},
@@ -1256,6 +1259,7 @@ export const COMMANDS: CommandSpec[] = [
 		name: 'api token create',
 		description: 'issue a scoped API token',
 		manual: 'access',
+		args: [{ name: 'name', required: false, description: 'a label for the token' }],
 		options: [
 			{ flags: '--tenant <name>', description: 'scope it to one tenant' },
 			{ flags: '--role <role>', description: 'tenant-admin or tenant-viewer' }

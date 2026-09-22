@@ -475,10 +475,10 @@ send a share of traffic to a version
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
 
-| flag             | meaning                        |
-| ---------------- | ------------------------------ |
-| `--version <id>` | the version to send traffic to |
-| `--percent <n>`  | the share, 0 to 100            |
+| flag            | meaning                        |
+| --------------- | ------------------------------ |
+| `--to <id>`     | the version to send traffic to |
+| `--percent <n>` | the share, 0 to 100            |
 
 Documented in `bastion manual deploying`.
 
@@ -1025,7 +1025,12 @@ Documented in `bastion manual isolation`.
 
 ### `bastion cluster init`
 
-make this node the control node
+make this node the control node and mint a join token
+
+| flag          | meaning                                           |
+| ------------- | ------------------------------------------------- |
+| `--node <id>` | the id this node answers to                       |
+| `--rotate`    | mint a fresh join token on a node already control |
 
 Documented in `bastion manual clustering`.
 
@@ -1033,10 +1038,11 @@ Documented in `bastion manual clustering`.
 
 dial out to a control node and join
 
-| flag                  | meaning                 |
-| --------------------- | ----------------------- |
-| `--control <address>` | the control node        |
-| `--token <token>`     | the one-time join token |
+| flag                  | meaning                     |
+| --------------------- | --------------------------- |
+| `--control <address>` | the control node            |
+| `--token <token>`     | the one-time join token     |
+| `--node <id>`         | the id this node answers to |
 
 Documented in `bastion manual clustering`.
 
@@ -1094,7 +1100,6 @@ install bastion on hosts over SSH and join them
 | flag                             | meaning                                                    |
 | -------------------------------- | ---------------------------------------------------------- |
 | `--dry-run`                      | print the plan and change nothing; the default for a range |
-| `--yes`                          | act rather than printing the plan                          |
 | `--only <hosts>`                 | narrow a range                                             |
 | `--exclude <hosts>`              | skip hosts in a range                                      |
 | `--i-know-this-is-a-large-range` | required above a /24                                       |
@@ -1197,10 +1202,6 @@ execute the plan, resumable per site
 | -------- | -------- | ------------------------------------- |
 | `source` | yes      | an ssh target, a URL, or --cloudflare |
 
-| flag    | meaning                       |
-| ------- | ----------------------------- |
-| `--yes` | act; the default is a dry run |
-
 Documented in `bastion manual migrating`.
 
 ### `bastion migrate resume`
@@ -1217,9 +1218,13 @@ Documented in `bastion manual migrating`.
 
 ## Api
 
-### `bastion api token create`
+### `bastion api token create [name]`
 
 issue a scoped API token
+
+| argument | required | meaning               |
+| -------- | -------- | --------------------- |
+| `name`   | no       | a label for the token |
 
 | flag              | meaning                       |
 | ----------------- | ----------------------------- |
