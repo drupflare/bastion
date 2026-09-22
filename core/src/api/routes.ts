@@ -38,7 +38,7 @@ export const ROUTES: RouteDefinition[] = [
 		path: '/api/capabilities',
 		action: 'host.read',
 		token: true,
-		command: 'bastion doctor'
+		command: 'bastion capability list'
 	},
 	// installing a package is privileged and outward-facing, so it takes `host.write` and is
 	// SESSION ONLY: an unattended token driving self-service signup must not be able to install
@@ -48,7 +48,7 @@ export const ROUTES: RouteDefinition[] = [
 		path: '/api/capabilities/:slot/install',
 		action: 'host.write',
 		token: false,
-		command: 'bastion doctor --install'
+		command: 'bastion capability install'
 	},
 	{
 		method: 'GET',
@@ -147,7 +147,7 @@ export const ROUTES: RouteDefinition[] = [
 		path: '/api/versions',
 		action: 'site.read',
 		token: true,
-		command: 'bastion version list'
+		command: 'bastion versions list'
 	},
 	{
 		method: 'GET',
