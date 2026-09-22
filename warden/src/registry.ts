@@ -1106,7 +1106,14 @@ export const COMMANDS: CommandSpec[] = [
 		description: 'choose a primary and replicas for a site',
 		manual: 'clustering',
 		args: [{ name: 'site', required: true, description: 'the hostname' }],
-		options: [{ flags: '--replicas <n>', description: 'how many replica nodes' }],
+		options: [
+			{ flags: '--replicas <n>', description: 'how many replica nodes' },
+			{
+				flags: '--owner-token <token>',
+				description: "the site's own token, which copying its data to a replica needs"
+			}
+		],
+		exits: [FINDING_EXIT],
 		surface: '/cluster'
 	},
 	{

@@ -1066,9 +1066,10 @@ choose a primary and replicas for a site
 | -------- | -------- | ------------ |
 | `site`   | yes      | the hostname |
 
-| flag             | meaning                |
-| ---------------- | ---------------------- |
-| `--replicas <n>` | how many replica nodes |
+| flag                    | meaning                                                         |
+| ----------------------- | --------------------------------------------------------------- |
+| `--replicas <n>`        | how many replica nodes                                          |
+| `--owner-token <token>` | the site's own token, which copying its data to a replica needs |
 
 Documented in `bastion manual clustering`.
 
