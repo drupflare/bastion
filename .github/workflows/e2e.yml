@@ -5,6 +5,8 @@ on:
     branches: [master, ver/*, feat/*, renovate/*]
   pull_request:
     branches: [master, ver/*, feat/*, renovate/*]
+  schedule:
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -38,3 +40,138 @@ jobs:
       - name: Tear The Stack Down
         run: docker compose -f docker/compose.yml down -v
         if: always()
+
+  runtime:
+    name: A Real workerd
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Fetch The Pinned Runtime
+        run: |
+          set -euo pipefail
+          PIN=$(bun -e "import {defaultConfig} from './core/src/config/defaults'; console.log(defaultConfig().runtime.workerd.version)")
+          echo "bastion pins workerd ${PIN}"
+          npm install --no-save --no-audit --no-fund "workerd@${PIN}"
+          BIN="$PWD/node_modules/workerd/bin/workerd"
+          "$BIN" --version
+          echo "WORKERD_BINARY=$BIN" >> "$GITHUB_ENV"
+      - name: Compile The Binary
+        run: |
+          bun run build:binary
+          echo "BASTION_BINARY=$PWD/warden/dist/bastion" >> "$GITHUB_ENV"
+      - name: Boot workerd From A Generated Configuration
+        run: REQUIRE_WORKERD=1 bun run test:e2e
+      - name: The Operator Flow Through The Compiled Binary
+        run: REQUIRE_FLOW=1 bun run test:e2e
+      # each spec refuses rather than skipping when its flag is set and a prerequisite is absent,
+      # so neither step above can go green without having run. This asserts that refusal still
+      # works: point the lane at a binary that is not there and it has to fail
+      - name: The Lanes Refuse Rather Than Skipping
+        run: |
+          set -euo pipefail
+          if WORKERD_BINARY=/nonexistent/workerd REQUIRE_WORKERD=1 bun run test:e2e; then
+            echo "::error::the workerd lane passed with no runtime, so it skipped instead of refusing." >&2
+            exit 1
+          fi
+          echo "the lane refuses a missing runtime rather than reporting success."
+
+  siblings:
+    name: The Repair Vocabulary Against The Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Check The Worker Out
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/drupflare/worker.git "$RUNNER_TEMP/worker"
+          git -C "$RUNNER_TEMP/worker" sparse-checkout set src/ops
+          echo "SIBLING_WORKER=$RUNNER_TEMP/worker" >> "$GITHUB_ENV"
+      - name: Score The Vocabulary
+        run: REQUIRE_SIBLINGS=1 bun run test:e2e
+
+  serving:
+    name: A Real Serve, Behind The Front Door
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Bring A Box Up And Serve Through It
+        run: REQUIRE_SERVING=1 bun run test:e2e
+
+  payload:
+    name: The Released Payload, Unmodified
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Fetch The Pinned Runtime
+        run: |
+          set -euo pipefail
+          PIN=$(bun -e "import {defaultConfig} from './core/src/config/defaults'; console.log(defaultConfig().runtime.workerd.version)")
+          npm install --no-save --no-audit --no-fund "workerd@${PIN}"
+          echo "WORKERD_BINARY=$PWD/node_modules/workerd/bin/workerd" >> "$GITHUB_ENV"
+      - name: Bundle The Worker
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/drupflare/worker.git "$RUNNER_TEMP/worker"
+          cd "$RUNNER_TEMP/worker"
+          bun install --frozen-lockfile
+          bun run hydrate
+          bunx wrangler deploy --dry-run --outdir dist/dry-run
+      - name: Assemble The Payload Directory
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          DIR="$RUNNER_TEMP/payload"
+          mkdir -p "$DIR"
+          cp "$RUNNER_TEMP"/worker/dist/dry-run/site.js "$DIR/"
+          cp "$RUNNER_TEMP"/worker/dist/dry-run/*.wasm "$DIR/"
+          gh release download --repo drupflare/worker --pattern '*.tar.gz' --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP"/drupflare-worker-*.tar.gz -C "$DIR" assets
+          echo "PAYLOAD_DIR=$DIR" >> "$GITHUB_ENV"
+      - name: Boot The Payload Under The Generated Configuration
+        run: REQUIRE_PAYLOAD=1 bun run test:e2e
