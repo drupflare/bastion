@@ -1,0 +1,108 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+      - name: cross compile every target
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for target in bun-linux-x64 bun-linux-arm64 bun-darwin-x64 bun-darwin-arm64 bun-windows-x64; do
+            out="dist/bastion-${target#bun-}"
+            case "$target" in *windows*) out="$out.exe";; esac
+            bun build --compile --minify --target="$target" --outfile "$out" warden/src/cli.ts
+          done
+          cd dist && sha256sum bastion-* > SHA256SUMS
+      - name: the compiled binary answers
+        run: ./dist/bastion-linux-x64 --version
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/bastion-*
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  publish:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd warden build:dist
+      - run: node warden/dist/cli.js --version
+      - run: npm publish --access public --provenance
+        working-directory: core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public --provenance
+        working-directory: warden
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  container:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/drupflare/bastion
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: build for this runner and check the entrypoint
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: bastion:check
+      - run: docker run --rm bastion:check --version
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            Container image: `ghcr.io/drupflare/bastion@${{ steps.push.outputs.digest }}`
+          append_body: true
