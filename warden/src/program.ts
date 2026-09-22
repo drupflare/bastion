@@ -1,18 +1,50 @@
 import type { Context } from '@drupflare/bastion';
 import { Command, Option } from 'commander';
 import {
+	runAccessInvite,
+	runAccessList,
+	runAccessRevoke,
+	runAccessRole,
+	runAuditExport,
+	runAuditProfile,
+	runTokenList,
+	runTokenRevoke
+} from './commands/access';
+import {
+	runClusterInit,
+	runClusterJoin,
+	runClusterLeave,
 	runClusterNodes,
 	runClusterPlace,
 	runClusterPromote,
 	runClusterProvision,
-	runMigratePlan
+	runClusterStatus,
+	runMigratePlan,
+	runMigrateResume,
+	runMigrateRun,
+	runMigrateStatus,
+	runMigrateSurvey
 } from './commands/cluster';
 import {
+	runConfigEdit,
+	runConfigGet,
 	runConfigSchema,
+	runConfigSet,
 	runConfigShow,
 	runConfigValidate,
 	runConfigWhere
 } from './commands/config';
+import {
+	runRollout as runDeliveryRollout,
+	runDeploy,
+	runExport,
+	runImport,
+	runRollback,
+	runVersionDiff,
+	runVersionList,
+	runVersionPin,
+	runVersionShow
+} from './commands/delivery';
 import { runDoctor } from './commands/doctor';
 import {
 	runCertImport,
@@ -57,6 +89,33 @@ import {
 	runUpdateApply
 } from './commands/maintain';
 import {
+	runEgressAllow,
+	runEgressDeny,
+	runSiteProbe,
+	runSiteShow,
+	runTenantEgress,
+	runTenantResume,
+	runTenantSuspend,
+	runVmConsole,
+	runVmShow,
+	runVmStop
+} from './commands/manage';
+import {
+	runBackupEstimate,
+	runBackupRestore,
+	runBackupShow,
+	runCertTrust,
+	runCertUntrust,
+	runDashboardOpen,
+	runDashboardToken,
+	runPair,
+	runRecycle,
+	runReload,
+	runTail,
+	runUnpair,
+	runUpdateRollback
+} from './commands/operate';
+import {
 	runAuditTail,
 	runAuditVerify,
 	runCertList,
@@ -66,6 +125,7 @@ import {
 	runSecretsList,
 	runUpdateCheck
 } from './commands/ops';
+import { STORES, runStore, type Store } from './commands/stores';
 import {
 	runBackupList,
 	runBackupPrune,
@@ -93,7 +153,7 @@ const DESCRIPTION =
 type Handler = (
 	ctx: Context,
 	globals: Globals,
-	args: string[]
+	args: (string | undefined)[]
 ) => void | Promise<void | number> | number;
 
 /**
@@ -181,7 +241,88 @@ export const HANDLERS: Record<string, Handler> = {
 
 	'api token create': (ctx, globals, args) => runTokenCreate(ctx, globals, args[0]),
 	manual: (ctx, globals, args) => runManual(ctx, globals, args[0]),
-	completion: (ctx, globals, args) => runCompletion(ctx, globals, args[0] as string)
+	completion: (ctx, globals, args) => runCompletion(ctx, globals, args[0] as string),
+
+	reload: (ctx, globals) => runReload(ctx, globals),
+	tail: (ctx, globals) => runTail(ctx, globals),
+	recycle: (ctx, globals, args) => runRecycle(ctx, globals, args[0] as string),
+
+	'config get': (ctx, globals, args) => runConfigGet(ctx, globals, args[0] as string),
+	'config set': (ctx, globals, args) =>
+		runConfigSet(ctx, globals, args[0] as string, args[1] as string),
+	'config edit': (ctx, globals) => runConfigEdit(ctx, globals),
+
+	'tenant suspend': (ctx, globals, args) => runTenantSuspend(ctx, globals, args[0] as string),
+	'tenant resume': (ctx, globals, args) => runTenantResume(ctx, globals, args[0] as string),
+	'tenant egress': (ctx, globals, args) => runTenantEgress(ctx, globals, args[0] as string),
+	'site show': (ctx, globals, args) => runSiteShow(ctx, globals, args[0] as string),
+	'site probe': (ctx, globals, args) => runSiteProbe(ctx, globals, args[0] as string),
+
+	deploy: (ctx, globals, args) => runDeploy(ctx, globals, args[0] as string, args[1] as string),
+	'versions list': (ctx, globals, args) => runVersionList(ctx, globals, args[0] as string),
+	'versions show': (ctx, globals, args) =>
+		runVersionShow(ctx, globals, args[0] as string, args[1] as string),
+	'versions diff': (ctx, globals, args) =>
+		runVersionDiff(ctx, globals, args[0] as string, args[1] as string, args[2] as string),
+	'versions pin': (ctx, globals, args) =>
+		runVersionPin(ctx, globals, args[0] as string, args[1] as string),
+	rollout: (ctx, globals, args) => runDeliveryRollout(ctx, globals, args[0] as string),
+	rollback: (ctx, globals, args) => runRollback(ctx, globals, args[0] as string),
+	export: (ctx, globals, args) => runExport(ctx, globals, args[0] as string),
+	import: (ctx, globals, args) => runImport(ctx, globals, args[0] as string, args[1] as string),
+
+	'backup show': (ctx, globals, args) => runBackupShow(ctx, globals, args[0] as string),
+	'backup restore': (ctx, globals, args) => runBackupRestore(ctx, globals, args[0] as string),
+	'backup estimate': (ctx, globals, args) => runBackupEstimate(ctx, globals, args[0] as string),
+
+	'cert trust': (ctx, globals, args) => runCertTrust(ctx, globals, args[0] as string),
+	'cert untrust': (ctx, globals) => runCertUntrust(ctx, globals),
+
+	'egress allow': (ctx, globals, args) =>
+		runEgressAllow(ctx, globals, args[0] as string, args[1] as string),
+	'egress deny': (ctx, globals, args) =>
+		runEgressDeny(ctx, globals, args[0] as string, args[1] as string),
+
+	'update rollback': (ctx, globals) => runUpdateRollback(ctx, globals),
+	'audit export': (ctx, globals) => runAuditExport(ctx, globals),
+	'audit profile': (ctx, globals) => runAuditProfile(ctx, globals),
+
+	'vm show': (ctx, globals, args) => runVmShow(ctx, globals, args[0] as string),
+	'vm console': (ctx, globals, args) => runVmConsole(ctx, globals, args[0] as string),
+	'vm stop': (ctx, globals, args) => runVmStop(ctx, globals, args[0] as string),
+
+	'cluster init': (ctx, globals) => runClusterInit(ctx, globals),
+	'cluster join': (ctx, globals) => runClusterJoin(ctx, globals),
+	'cluster leave': (ctx, globals) => runClusterLeave(ctx, globals),
+	'cluster status': (ctx, globals) => runClusterStatus(ctx, globals),
+
+	'access invite': (ctx, globals, args) => runAccessInvite(ctx, globals, args[0] as string),
+	'access list': (ctx, globals) => runAccessList(ctx, globals),
+	'access revoke': (ctx, globals, args) => runAccessRevoke(ctx, globals, args[0] as string),
+	'access role': (ctx, globals, args) =>
+		runAccessRole(ctx, globals, args[0] as string, args[1] as string),
+
+	'migrate survey': (ctx, globals, args) => runMigrateSurvey(ctx, globals, args[0] as string),
+	'migrate run': (ctx, globals, args) => runMigrateRun(ctx, globals, args[0] as string),
+	'migrate resume': (ctx, globals) => runMigrateResume(ctx, globals),
+	'migrate status': (ctx, globals) => runMigrateStatus(ctx, globals),
+
+	'api token list': (ctx, globals) => runTokenList(ctx, globals),
+	'api token revoke': (ctx, globals, args) => runTokenRevoke(ctx, globals, args[0] as string),
+
+	pair: (ctx, globals) => runPair(ctx, globals),
+	unpair: (ctx, globals) => runUnpair(ctx, globals),
+	'dashboard open': (ctx, globals) => runDashboardOpen(ctx, globals),
+	'dashboard token': (ctx, globals) => runDashboardToken(ctx, globals),
+
+	// the five store inspectors share one handler; the adapter is the command name
+	...Object.fromEntries(
+		STORES.map((store) => [
+			store,
+			(ctx: Context, globals: Globals, args: (string | undefined)[]) =>
+				runStore(ctx, globals, store as Store, args[0] as string)
+		])
+	)
 };
 
 export const IMPLEMENTED: CommandSpec[] = COMMANDS.filter(
@@ -275,9 +416,13 @@ export function buildProgram(ctx: Context, outcome: Outcome = { code: 0 }): Comm
 		}
 
 		command.action(async function (this: Command, ...raw: unknown[]) {
+			// an absent optional argument stays undefined rather than becoming '': `bastion manual`
+			// with no topic has to reach the handler as "no topic", not as the topic named ''
 			const positional = raw
 				.slice(0, (spec.args ?? []).length)
-				.map((value) => String(value ?? ''));
+				.map((value) =>
+					value === undefined || value === null ? undefined : String(value)
+				);
 			const merged = globals(this);
 			for (const option of spec.options ?? []) {
 				const key = camel(option.flags);
