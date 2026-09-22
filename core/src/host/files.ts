@@ -22,6 +22,8 @@ export interface FileHost {
 	readText(path: string): string;
 	readBytes(path: string): Uint8Array;
 	writeText(path: string, contents: string): void;
+	/** adds to the end, creating the file when it is absent; an append-only log is the caller */
+	appendText(path: string, contents: string): void;
 	writeBytes(path: string, contents: Uint8Array): void;
 	readDir(path: string): FileEntry[];
 	/** whether the path is a directory; false for a file and for one that is not there */
@@ -42,6 +44,7 @@ export function nodeFiles(): FileHost {
 		exists: (p) => fs.existsSync(p),
 		readText: (p) => fs.readFileSync(p, 'utf8'),
 		readBytes: (p) => new Uint8Array(fs.readFileSync(p)),
+		appendText: (p, c) => fs.appendFileSync(p, c),
 		writeText: (p, c) => {
 			fs.mkdirSync(dirname(p), { recursive: true });
 			fs.writeFileSync(p, c, 'utf8');
@@ -124,6 +127,12 @@ export function memoryFiles(
 		},
 		writeText: (p, c) => {
 			store.set(norm(p), enc.encode(c));
+			addParents(p);
+		},
+		appendText: (p, c) => {
+			const held = store.get(norm(p));
+			const prefix = held === undefined ? '' : new TextDecoder().decode(held);
+			store.set(norm(p), enc.encode(`${prefix}${c}`));
 			addParents(p);
 		},
 		writeBytes: (p, c) => {

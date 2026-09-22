@@ -4,6 +4,7 @@ import { MANUAL } from '../../warden/src/manual';
 import { IMPLEMENTED } from '../../warden/src/program';
 import { defaultConfig } from '../src/config/defaults';
 import { CODES } from '../src/errors';
+import { PROBES } from '../src/health/probes';
 import { checkTripwires, configKeys, unreadConfigKeys } from '../src/health/reachability';
 import { TRIPWIRES } from '../src/health/tripwires';
 
@@ -65,6 +66,19 @@ const deadButtons = TRIPWIRES.map((tripwire) => ({
 	command: namesCommand(tripwire.button)
 })).filter((entry) => entry.command !== null);
 
+/**
+ * A tripwire nothing detects, and a detector for a tripwire that does not exist.
+ *
+ * Both directions, because the second is what catches a code renamed in one table and not the
+ * other. This is the rule that would have caught the state this started in: 33 codes, a ledger, a
+ * breaker and a repair ladder, with nothing anywhere raising a single one of them.
+ */
+const probed = new Set(PROBES.map((probe) => probe.code));
+const undetected = TRIPWIRES.filter((tripwire) => !probed.has(tripwire.code));
+const orphanProbes = PROBES.filter(
+	(probe) => !TRIPWIRES.some((tripwire) => tripwire.code === probe.code)
+);
+
 const deadNext = Object.entries(CODES)
 	.map(([code, entry]) => ({ source: code, command: namesCommand(entry.next) }))
 	.filter((entry) => entry.command !== null);
@@ -90,6 +104,16 @@ for (const command of unsurfaced) {
 			`${command.surface ?? '(none)'}, which does not exist, and carries no exemption\n`
 	);
 }
+for (const tripwire of undetected) {
+	process.stderr.write(
+		`tripwire-undetected: ${tripwire.code} -- no probe raises it, so it can never fire\n`
+	);
+}
+for (const probe of orphanProbes) {
+	process.stderr.write(
+		`probe-orphaned: ${probe.code} -- detects something no tripwire declares\n`
+	);
+}
 for (const command of undocumented) {
 	process.stderr.write(
 		`command-undocumented: ${command.name} -- names the manual topic ${command.manual}, ` +
@@ -109,10 +133,13 @@ const total =
 	undocumented.length +
 	unsurfaced.length +
 	deadButtons.length +
-	deadNext.length;
+	deadNext.length +
+	undetected.length +
+	orphanProbes.length;
 if (total === 0) {
 	process.stdout.write(
-		'reachability: every tripwire has a repair or a button, every config key is read, and ' +
+		`reachability: every one of the ${TRIPWIRES.length} tripwires has a probe that raises it, ` +
+			'a repair or a button, every config key is read, and ' +
 			`every one of the ${IMPLEMENTED.length} commands has a manual section and a ` +
 			'dashboard surface or a stated exemption, and every button and next step names a ' +
 			'command that exists\n'

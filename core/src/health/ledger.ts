@@ -33,21 +33,110 @@ function worse(a: LogLevel, b: LogLevel): LogLevel {
 	return WORST.indexOf(a) >= WORST.indexOf(b) ? a : b;
 }
 
+/** where a ledger keeps its findings, under the state directory the operator configured */
+export const LEDGER_FILE = 'health/findings.jsonl';
+
+/** a recovery is a line too, so replaying the file reconstructs the ladder rather than guessing */
+interface RecoveryLine {
+	kind: 'recovered';
+	scope: string;
+	code: string;
+	at: number;
+}
+
+type Line = (LedgerEntry & { kind?: 'found' }) | RecoveryLine;
+
 /**
  * What was found, what was done about it, and how to undo it.
  *
  * The `undo` column is the part that matters more than the automation. Break-glass is the
  * requirement: every automatic repair records what it did, is reversible, and `bastion diagnose`
  * explains it. A repair nobody can reverse is a repair nobody should have run.
+ *
+ * **Findings live in a file, because the process that finds them is not the process that reports
+ * them.** `serve` detects; `bastion health` and `bastion diagnose` run later, from a different
+ * process, often after a restart. Held in memory this was a ledger created empty by each CLI
+ * invocation, read, and thrown away: every one of the 33 tripwires was unreachable by construction
+ * and nothing ever called `record`.
+ *
+ * A file rather than the management API for the reason the plan already gives for logs: a
+ * partitioned node has to stay diagnosable from itself, so reading its own health must need no
+ * credential and no network. Append-only and replayed on load, which is also what reconstructs the
+ * strike counts and quarantine timestamps a crash would otherwise lose.
  */
 export class HealthLedger {
 	private readonly ctx: Context;
 	private readonly entries: LedgerEntry[] = [];
 	private readonly states = new Map<string, LadderState>();
 	private degraded = false;
+	/** absent for a ledger nobody persists, which is what a pure decision test wants */
+	private readonly path: string | null;
 
-	constructor(ctx: Context) {
+	constructor(ctx: Context, state?: string) {
 		this.ctx = ctx;
+		this.path = state === undefined ? null : `${state}/${LEDGER_FILE}`;
+		this.replay();
+	}
+
+	/**
+	 * Rebuilds the entries and the ladder from the file.
+	 *
+	 * A malformed line is skipped rather than fatal: a ledger that refuses to load because one
+	 * write was torn by a power cut is a box that cannot report its own health at the moment that
+	 * matters most.
+	 */
+	private replay(): void {
+		if (this.path === null || !this.ctx.files.exists(this.path)) return;
+		for (const raw of this.ctx.files.readText(this.path).split('\n')) {
+			if (raw.trim() === '') continue;
+			let line: Line;
+			try {
+				line = JSON.parse(raw) as Line;
+			} catch {
+				continue;
+			}
+			if ('kind' in line && line.kind === 'recovered') {
+				const key = `${line.scope}/${line.code}`;
+				this.states.set(key, recordRecovery(this.state(line.scope, line.code)));
+				continue;
+			}
+			const entry = line as LedgerEntry;
+			if (entry.finding === undefined) continue;
+			this.entries.push(entry);
+			const key = `${entry.finding.scope}/${entry.finding.code}`;
+			const next = recordFailure(
+				this.state(entry.finding.scope, entry.finding.code),
+				entry.finding.at
+			);
+			if (entry.rung === 'quarantine') next.quarantinedAt = entry.at;
+			this.states.set(key, next);
+		}
+	}
+
+	private append(line: Line): void {
+		if (this.path === null) return;
+		this.ctx.files.mkdirp(this.path.slice(0, this.path.lastIndexOf('/')));
+		this.ctx.files.appendText(this.path, `${JSON.stringify(line)}\n`);
+	}
+
+	/**
+	 * Drops the oldest lines once the file passes a ceiling.
+	 *
+	 * The same rule the audit and runtime logs carry, for the same measured reason: an append-only
+	 * file with no bound is how miniflare's observability reached 20.75 GB and decayed the
+	 * generator ceiling with nothing reporting it.
+	 */
+	trim(maxBytes: number): number {
+		if (this.path === null || !this.ctx.files.exists(this.path)) return 0;
+		const lines = this.ctx.files.readText(this.path).split('\n').filter(Boolean);
+		let kept = lines;
+		let dropped = 0;
+		while (kept.join('\n').length + 1 > maxBytes && kept.length > 0) {
+			kept = kept.slice(1);
+			dropped += 1;
+		}
+		this.ctx.files.writeText(this.path, kept.length === 0 ? '' : `${kept.join('\n')}\n`);
+		return dropped;
 	}
 
 	get all(): LedgerEntry[] {
@@ -79,12 +168,14 @@ export class HealthLedger {
 			at: this.ctx.now()
 		};
 		this.entries.push(entry);
+		this.append(entry);
 		return entry;
 	}
 
 	recovered(scope: string, code: string): void {
 		const key = `${scope}/${code}`;
 		this.states.set(key, recordRecovery(this.state(scope, code)));
+		this.append({ kind: 'recovered', scope, code, at: this.ctx.now() });
 	}
 
 	/** the health tree, rendered locally so a box with the network down is still diagnosable */
