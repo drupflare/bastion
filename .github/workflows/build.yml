@@ -1,9 +1,11 @@
-name: build
+name: Build
 
 on:
   push:
     branches: [master]
   pull_request:
+    branches: [master]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -11,41 +13,75 @@ concurrency:
 
 jobs:
   gate:
+    name: Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run test
-      - run: bun run check:reachability
-      - run: bunx prettier --check .
+          bun-version: latest
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Unit Tests
+        run: bun run test
+      - name: Reachability
+        run: bun run check:reachability
+      - name: Prettier
+        run: bunx prettier --check .
 
   dashboard:
+    name: Dashboard
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: bun run --cwd dashboard typecheck
-      - run: bun run --cwd dashboard test:unit
-      - run: bun run --cwd dashboard build
+          bun-version: latest
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun run --cwd dashboard typecheck
+      - name: Component Tests
+        run: bun run --cwd dashboard test:unit
+      - name: Build The SPA
+        run: bun run --cwd dashboard build
 
   browser:
+    name: Browser
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: bunx playwright install --with-deps chromium
-      - run: bun run --cwd dashboard test:browser
-      - uses: actions/upload-artifact@v4
+          bun-version: latest
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+      - name: Browser Tests
+        run: bun run --cwd dashboard test:browser
+      - name: Upload The Playwright Report
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report
@@ -53,31 +89,52 @@ jobs:
           retention-days: 7
 
   docs:
+    name: Documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: bun run docs:cli
-      - run: git diff --exit-code -- docs/commands.md MANUAL.md
-      - run: bun run docs:api
+          bun-version: latest
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Regenerate The Command Reference
+        run: bun run docs:cli
+      - name: Fail On Drift
+        run: git diff --exit-code -- docs/commands.md MANUAL.md
+      - name: Build TypeDoc
+        run: bun run docs:api
 
   siblings:
+    name: Sibling Mirrors
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
         with:
           path: bastion
-      - uses: actions/checkout@v4
+      - name: Check Out The Worker
+        uses: actions/checkout@v4
         with:
           repository: drupflare/worker
           path: worker
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
+          bun-version: latest
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
         working-directory: bastion
-      - run: REQUIRE_SIBLINGS=1 bun run test
+      - name: Score The Specs That Read The Sibling
+        run: REQUIRE_SIBLINGS=1 bun run test
         working-directory: bastion

@@ -1,4 +1,4 @@
-name: release
+name: Release Project
 
 on:
   push:
@@ -16,18 +16,25 @@ concurrency:
 
 jobs:
   binaries:
+    name: Cross Compile And Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run test
-      - name: cross compile every target
+          bun-version: latest
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Unit Tests
+        run: bun run test
+      - name: Cross Compile Every Target
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -37,15 +44,17 @@ jobs:
             bun build --compile --minify --target="$target" --outfile "$out" warden/src/cli.ts
           done
           cd dist && sha256sum bastion-* > SHA256SUMS
-      - name: the compiled binary answers
+      - name: The Compiled Binary Answers
         run: ./dist/bastion-linux-x64 --version
-      - id: changelog
+      - name: Build The Changelog
+        id: changelog
         uses: mikepenz/release-changelog-builder-action@v5
         with:
           configuration: .github/release.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: softprops/action-gh-release@v2
+      - name: Publish The Release
+        uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.changelog.outputs.changelog }}
           files: |
@@ -54,34 +63,45 @@ jobs:
           fail_on_unmatched_files: true
 
   publish:
+    name: Publish To npm And GitHub Packages
     needs: binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - uses: actions/setup-node@v4
+          bun-version: latest
+      - name: Set up Node For npm
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - run: bun install --frozen-lockfile
-      - run: bun run --cwd warden build:dist
-      - run: node warden/dist/cli.js --version
-      - run: npm publish --access public --provenance
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Build The Node Entry Point
+        run: bun run --cwd warden build:dist
+      - name: The Node Entry Point Answers
+        run: node warden/dist/cli.js --version
+      - name: Publish core To npm
+        run: npm publish --access public --provenance
         working-directory: core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: npm publish --access public --provenance
+      - name: Publish warden To npm
+        run: npm publish --access public --provenance
         working-directory: warden
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - uses: actions/setup-node@v4
+      - name: Set up Node For GitHub Packages
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
           scope: '@drupflare'
-      - name: point both manifests at GitHub Packages
+      - name: Point Both Manifests At GitHub Packages
         run: |
           set -euo pipefail
           for dir in core warden; do
@@ -93,33 +113,43 @@ jobs:
               fs.writeFileSync(file, JSON.stringify(manifest, null, "\t") + "\n");
             ' "$dir"
           done
-      - run: npm publish --access public
+      - name: Publish core To GitHub Packages
+        run: npm publish --access public
         working-directory: core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: npm publish --access public
+      - name: Publish warden To GitHub Packages
+        run: npm publish --access public
         working-directory: warden
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   container:
+    name: Publish To ghcr.io And Docker Hub
     needs: binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log In To ghcr.io
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/login-action@v3
+      - name: Log In To Docker Hub
+        uses: docker/login-action@v3
         with:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - id: meta
+      - name: Derive The Tags
+        id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
@@ -129,15 +159,17 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
-      - name: build for this runner and check the entrypoint
+      - name: Build For This Runner
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
           load: true
           tags: bastion:check
-      - run: docker run --rm bastion:check --version
-      - id: push
+      - name: The Entrypoint Answers
+        run: docker run --rm bastion:check --version
+      - name: Push Multi-Arch To Both Registries
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -146,32 +178,39 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-      - uses: softprops/action-gh-release@v2
+      - name: Record The Image Digest
+        uses: softprops/action-gh-release@v2
         with:
           body: |
             Container image: `ghcr.io/drupflare/bastion@${{ steps.push.outputs.digest }}`
           append_body: true
 
   verify:
+    name: Every Published Target Resolves
     needs: [publish, container]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
-      - uses: actions/setup-node@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
-      - uses: docker/login-action@v3
+      - name: Log In To ghcr.io
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/login-action@v3
+      - name: Log In To Docker Hub
+        uses: docker/login-action@v3
         with:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: every published target resolves
+      - name: Resolve Every Target
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

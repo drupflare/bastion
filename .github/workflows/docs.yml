@@ -1,4 +1,4 @@
-name: docs
+name: Deploy Documentation
 
 on:
   push:
@@ -16,14 +16,18 @@ jobs:
     name: Deploy Documentation
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: bun run docs:api
+          bun-version: latest
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+      - name: Build TypeDoc
+        run: bun run docs:api
       - name: Deploy TypeDoc
         run: bash typedoc.sh "${GITHUB_SHA::7}"
