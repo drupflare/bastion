@@ -1,0 +1,26 @@
+name: e2e
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - run: docker compose -f docker/compose.yml up -d --wait redis valkey minio postgres mariadb sshd
+      - run: REQUIRE_DOCKER=1 bun run test:e2e
+      - run: docker compose -f docker/compose.yml logs
+        if: failure()
+      - run: docker compose -f docker/compose.yml down -v
+        if: always()

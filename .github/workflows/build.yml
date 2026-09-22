@@ -6,7 +6,7 @@ on:
   pull_request:
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,21 +62,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run docs:cli
       - run: git diff --exit-code -- docs/commands.md MANUAL.md
-
-  coverage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: bun run test:coverage
-      - uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: core/coverage/lcov.info
-          flags: unit
+      - run: bun run docs:api
 
   siblings:
     runs-on: ubuntu-latest
@@ -95,18 +81,3 @@ jobs:
         working-directory: bastion
       - run: REQUIRE_SIBLINGS=1 bun run test
         working-directory: bastion
-
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - run: docker compose -f docker/compose.yml up -d --wait redis valkey minio postgres mariadb sshd
-      - run: REQUIRE_DOCKER=1 bun run test:e2e
-      - run: docker compose -f docker/compose.yml logs
-        if: failure()
-      - run: docker compose -f docker/compose.yml down -v
-        if: always()
