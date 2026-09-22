@@ -389,6 +389,119 @@ describe('cluster lifecycle', () => {
 		expect(await run(ctx, ['cluster', 'join'])).toBe(EXIT.USAGE);
 	});
 
+	it('refuses to join with no token, because a join is authenticated', async () => {
+		const { ctx, io } = harness();
+		expect(await run(ctx, ['cluster', 'join', '--control', 'node-a:8787'])).toBe(EXIT.USAGE);
+		expect(io.errText()).toContain('token');
+	});
+
+	it('prints a join token that expires and is spent once', async () => {
+		const { ctx, io } = harness();
+		expect(await run(ctx, ['cluster', 'init', '--node', 'node-a'])).toBe(EXIT.OK);
+		expect(io.outText()).toMatch(/--token bsj_\S+/);
+		expect(io.outText()).toContain('spent by the first join');
+	});
+
+	it('mints another under --rotate rather than refusing forever', async () => {
+		const { ctx, files } = harness();
+		await run(ctx, ['cluster', 'init']);
+		const second = withDisk(files);
+		expect(await run(second.ctx, ['cluster', 'init', '--rotate'])).toBe(EXIT.OK);
+		expect(second.io.outText()).toMatch(/--token bsj_\S+/);
+	});
+
+	/**
+	 * Placement routes reads; it does not copy data.
+	 *
+	 * A replica holding no copy of the site answers those reads from an empty object, and the
+	 * placement itself would not say so. Exit 3 rather than 0, because it ran and found something.
+	 */
+	it('says plainly when a replica was placed and no data was copied', async () => {
+		const { ctx, files } = harness();
+		await run(ctx, ['cluster', 'init', '--node', 'node-a']);
+		// a second node, because a replica never shares a node with the primary
+		files.writeText(
+			'/var/lib/bastion/cluster-nodes.json',
+			JSON.stringify([
+				{
+					id: 'node-b',
+					address: 'node-b:8787',
+					serves: 'node-b:80',
+					labels: {},
+					state: 'ready',
+					lastSeenAt: 0,
+					capacity: null,
+					auditHead: null
+				}
+			])
+		);
+
+		const second = withDisk(files);
+		expect(
+			await run(second.ctx, ['cluster', 'place', 'www.example.edu', '--replicas', '1'])
+		).toBe(EXIT.FINDING);
+		expect(second.io.outText()).toContain('NOT copied');
+		expect(second.io.outText()).toContain('--owner-token');
+	});
+
+	it('is a plain success when a site has no replicas to provision', async () => {
+		const { ctx, files } = harness();
+		await run(ctx, ['cluster', 'init', '--node', 'node-a']);
+		const second = withDisk(files);
+		expect(await run(second.ctx, ['cluster', 'place', 'www.example.edu'])).toBe(EXIT.OK);
+		expect(second.io.outText()).toContain('(no replicas)');
+	});
+
+	/** moving a primary loses unreplicated writes, which is what `promote` exists to say first */
+	it('never moves the primary on a re-place, whatever the planner would prefer', async () => {
+		const { ctx, files } = harness();
+		await run(ctx, ['cluster', 'init', '--node', 'node-a']);
+		files.writeText(
+			'/var/lib/bastion/cluster-nodes.json',
+			JSON.stringify([
+				{
+					id: 'node-b',
+					address: 'node-b:8787',
+					serves: 'node-b:80',
+					labels: {},
+					state: 'ready',
+					lastSeenAt: 0,
+					capacity: null,
+					auditHead: null
+				}
+			])
+		);
+
+		const first = withDisk(files);
+		await run(first.ctx, ['--json', 'cluster', 'place', 'www.example.edu', '--replicas', '1']);
+		const before = JSON.parse(first.io.outText().trim()) as { primary: string };
+
+		const second = withDisk(files);
+		await run(second.ctx, ['--json', 'cluster', 'place', 'www.example.edu', '--replicas', '1']);
+		const after = JSON.parse(second.io.outText().trim()) as {
+			primary: string;
+			replicas: string[];
+		};
+		expect(after.primary).toBe(before.primary);
+		expect(after.replicas).not.toContain(after.primary);
+	});
+
+	it('reports asking for more replicas than the cluster can hold', async () => {
+		const { ctx, files } = harness();
+		await run(ctx, ['cluster', 'init', '--node', 'node-a']);
+		const second = withDisk(files);
+		expect(
+			await run(second.ctx, ['cluster', 'place', 'www.example.edu', '--replicas', '1'])
+		).toBe(EXIT.FINDING);
+		expect(second.io.outText()).toContain('1 replica(s) were asked for and 0 placed');
+	});
+
+	it('refuses to place from a node that is not the control node', async () => {
+		const { ctx, io } = harness();
+		expect(await run(ctx, ['cluster', 'place', 'www.example.edu'])).toBe(EXIT.USAGE);
+		expect(io.errText()).toContain('not in a cluster');
+	});
+
 	it('says plainly that a lone node is not in a cluster', async () => {
 		const { ctx, io } = harness();
 		expect(await run(ctx, ['cluster', 'status'])).toBe(EXIT.OK);
