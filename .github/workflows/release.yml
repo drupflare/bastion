@@ -1,4 +1,4 @@
-name: Release Project
+name: Release
 
 on:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Bun
+      - name: Set Up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 'latest'
@@ -89,7 +89,7 @@ jobs:
             rm -f "dist/build/${BIN}"
           done
           ls -l dist/release
-      - name: The Compiled Binary Answers
+      - name: Verify the Compiled Binary
         run: |
           set -euo pipefail
           tar -xzf "dist/release/bastion-v${VERSION}-linux-x64.tar.gz" -C dist/build
@@ -113,7 +113,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Create Release
+    name: Create the Release
     needs: binaries
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -125,7 +125,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Extract Version from core/package.json
+      - name: Extract the Version
         run: |
           VERSION=$(node -p "require('./core/package.json').version")
           echo "Extracted Version: $VERSION"
@@ -134,16 +134,16 @@ jobs:
             exit 1
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-      - name: Retrieve Latest Tag
+      - name: Retrieve the Latest Tag
         id: latest_tag
         run: |
           echo "LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo '')" >> $GITHUB_ENV
-      - name: Collect the Archives the Previous Job Built
+      - name: Collect the Archives
         uses: actions/download-artifact@v8
         with:
           name: release-binaries
           path: dist/release
-      - name: Build The Changelog
+      - name: Build the Changelog
         if: ${{ github.event.inputs.changelog == '' }}
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v6
@@ -154,7 +154,7 @@ jobs:
           toTag: '${{ github.ref_name }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish The Release
+      - name: Publish the Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.VERSION }}${{ github.event.inputs.suffix }}
@@ -209,12 +209,12 @@ jobs:
           else
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
-      - name: Set up Bun
+      - name: Set Up Bun
         if: steps.suffix.outputs.skip == 'false'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 'latest'
-      - name: Set up Node For npm
+      - name: Set Up Node for npm
         if: steps.suffix.outputs.skip == 'false'
         uses: actions/setup-node@v7
         with:
@@ -223,32 +223,32 @@ jobs:
       - name: Install Dependencies
         if: steps.suffix.outputs.skip == 'false'
         run: bun install --frozen-lockfile
-      - name: Build The Node Entry Point
+      - name: Build the Node Entry Point
         if: steps.suffix.outputs.skip == 'false'
         run: bun run --cwd warden build:dist
-      - name: The Node Entry Point Answers
+      - name: Verify the Node Entry Point
         if: steps.suffix.outputs.skip == 'false'
         run: node warden/dist/cli.js --version
-      - name: Publish core To npm
+      - name: Publish core to npm
         if: ${{ steps.suffix.outputs.skip == 'false' && github.event.inputs.skip_npm != 'true' }}
         run: npm publish --access public --provenance
         working-directory: core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Publish warden To npm
+      - name: Publish warden to npm
         if: ${{ steps.suffix.outputs.skip == 'false' && github.event.inputs.skip_npm != 'true' }}
         run: npm publish --access public --provenance
         working-directory: warden
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Set up Node For GitHub Packages
+      - name: Set Up Node for GitHub Packages
         if: ${{ steps.suffix.outputs.skip == 'false' && github.event.inputs.skip_github_npm != 'true' }}
         uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
           scope: '@drupflare'
-      - name: Point Both Manifests At GitHub Packages
+      - name: Point Both Manifests at GitHub Packages
         if: ${{ steps.suffix.outputs.skip == 'false' && github.event.inputs.skip_github_npm != 'true' }}
         run: |
           set -euo pipefail
@@ -261,13 +261,13 @@ jobs:
               fs.writeFileSync(file, JSON.stringify(manifest, null, "\t") + "\n");
             ' "$dir"
           done
-      - name: Publish core To GitHub Packages
+      - name: Publish core to GitHub Packages
         if: ${{ steps.suffix.outputs.skip == 'false' && github.event.inputs.skip_github_npm != 'true' }}
         run: npm publish --access public
         working-directory: core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish warden To GitHub Packages
+      - name: Publish warden to GitHub Packages
         if: ${{ steps.suffix.outputs.skip == 'false' && github.event.inputs.skip_github_npm != 'true' }}
         run: npm publish --access public
         working-directory: warden
@@ -291,23 +291,23 @@ jobs:
         run: |
           VERSION=$(node -p "require('./core/package.json').version")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-      - name: Set up QEMU
+      - name: Set Up QEMU
         uses: docker/setup-qemu-action@v3
-      - name: Set up Buildx
+      - name: Set Up Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Log In To ghcr.io
+      - name: Log In to ghcr.io
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Log In To Docker Hub
+      - name: Log In to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Derive The Tags
+      - name: Derive the Tags
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -336,7 +336,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-      - name: Record Image Digest
+      - name: Record the Image Digest
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.VERSION }}${{ github.event.inputs.suffix }}
@@ -357,18 +357,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Node
+      - name: Set Up Node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://npm.pkg.github.com
-      - name: Log In To ghcr.io
+      - name: Log In to ghcr.io
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Log In To Docker Hub
+      - name: Log In to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: docker.io

@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   coverage:
-    name: Measure And Upload
+    name: Measure and Upload
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -22,13 +22,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Bun
+      - name: Set Up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 'latest'
       - name: Install Dependencies
         run: bun install --frozen-lockfile
-      - name: Unit Tests with Coverage
+      - name: Unit Tests With Coverage
         run: bun run test:coverage
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v7
