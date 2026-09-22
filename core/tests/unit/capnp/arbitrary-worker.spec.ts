@@ -16,7 +16,7 @@ const paths = {
 	bundle: '/var/lib/bastion/t/acme/bundle',
 	storage: '/var/lib/bastion/t/acme/storage',
 	assets: '/var/lib/bastion/t/acme/assets',
-	adapterSocket: '/run/bastion/acme.sock',
+	adapterDir: '/run/bastion/acme',
 	listenSocket: '/run/bastion/acme-http.sock'
 };
 

@@ -30,8 +30,8 @@ describe('renderConfig', () => {
 
 	it('declares the config and one worker const', () => {
 		expect(out).toContain('const config :Workerd.Config = (');
-		expect(out).toContain('const w_main :Workerd.Worker = (');
-		expect(out).toContain('(name = "main", worker = .w_main)');
+		expect(out).toContain('const wMain :Workerd.Worker = (');
+		expect(out).toContain('(name = "main", worker = .wMain)');
 	});
 
 	// without it every `/` answers 500 `No Cache was configured`; it is not optional

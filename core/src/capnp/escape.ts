@@ -37,16 +37,34 @@ export function text(value: string): string {
 	return `${out}"`;
 }
 
-/** a capnp identifier; refuses rather than escaping, because a service name is ours to choose */
+/**
+ * A capnp DECLARATION name.
+ *
+ * camelCase with no underscores, which is a rule of the language rather than a convention:
+ * `const w_main :Workerd.Worker` makes the parser report "declaration names should use camelCase
+ * and must not contain underscores" and workerd never starts. This is separate from a service's
+ * `name = "..."`, which is a string literal and may hold anything.
+ */
 export function ident(value: string): string {
-	if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-		throw new Error(`\`${value}\` is not a capnp identifier`);
+	if (!/^[a-z][A-Za-z0-9]*$/.test(value)) {
+		throw new Error(`\`${value}\` is not a capnp declaration name`);
 	}
 	return value;
 }
 
-/** a service name derived from something a user typed, made safe rather than refused */
+/**
+ * A declaration name derived from something a user typed, made safe rather than refused.
+ *
+ * Each run of non-alphanumerics becomes a word boundary and the next letter is capitalised, so
+ * `main` is `wMain` and `my-site.edu` is `wMySiteEdu`. A tenant name cannot produce a name the
+ * parser rejects, which is what the underscore form did for every configuration bastion generated
+ * until a real workerd was finally pointed at one.
+ */
 export function serviceName(prefix: string, value: string): string {
-	const cleaned = value.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-	return ident(`${prefix}_${cleaned === '' ? 'x' : cleaned}`);
+	const words = value.split(/[^A-Za-z0-9]+/).filter((word) => word !== '');
+	const camel = words
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join('')
+		.replace(/^[0-9]+/, '');
+	return ident(`${prefix}${camel === '' ? 'X' : camel}`);
 }

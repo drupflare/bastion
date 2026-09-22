@@ -36,12 +36,32 @@ describe('identifiers', () => {
 	});
 
 	it('refuses anything else rather than escaping it', () => {
-		expect(() => ident('main-worker')).toThrow(/not a capnp identifier/);
-		expect(() => ident('1main')).toThrow(/not a capnp identifier/);
+		expect(() => ident('main-worker')).toThrow(/not a capnp declaration name/);
+		expect(() => ident('1main')).toThrow(/not a capnp declaration name/);
 	});
 
-	it('derives a safe service name from arbitrary text', () => {
-		expect(serviceName('w', 'www.example.edu')).toBe('w_www_example_edu');
-		expect(serviceName('w', '!!!')).toBe('w_x');
+	/**
+	 * An underscore in a DECLARATION name stops workerd starting.
+	 *
+	 * `const w_main :Workerd.Worker` makes the parser answer "declaration names should use
+	 * camelCase and must not contain underscores" and the process exits before it binds anything.
+	 * The generator emitted that form for every configuration until a real workerd was pointed at
+	 * one. A service's `name = "..."` is a string literal and keeps its underscores.
+	 */
+	it('refuses an underscore, which workerd will not parse', () => {
+		expect(() => ident('w_main')).toThrow(/not a capnp declaration name/);
+	});
+
+	it('derives a camelCase declaration name from arbitrary text', () => {
+		expect(serviceName('w', 'www.example.edu')).toBe('wWwwExampleEdu');
+		expect(serviceName('w', 'main')).toBe('wMain');
+		expect(serviceName('w', '!!!')).toBe('wX');
+	});
+
+	it('never produces an underscore, whatever the tenant is called', () => {
+		for (const name of ['a_b', 'a-b', 'a.b', 'a b', '__x__', 'ACME', '9lives', 'ünïcødé']) {
+			expect(serviceName('w', name)).not.toContain('_');
+			expect(() => ident(serviceName('w', name))).not.toThrow();
+		}
 	});
 });

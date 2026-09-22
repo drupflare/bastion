@@ -20,7 +20,7 @@ const input: PlanInput = {
 		bundle: '/var/lib/bastion/t/acme/bundle',
 		storage: '/var/lib/bastion/t/acme/storage',
 		assets: '/var/lib/bastion/t/acme/assets',
-		adapterSocket: '/run/bastion/acme.sock',
+		adapterDir: '/run/bastion/acme',
 		listenSocket: '/run/bastion/acme-http.sock'
 	},
 	modules: [
@@ -101,11 +101,14 @@ describe('where the generator deliberately differs from the rig', () => {
 		expect(generated).toContain(`(name = "${ADAPTER_SERVICES.cache}", external =`);
 	});
 
-	it('pins egress to a deny-by-default network service', () => {
+	// an empty allow list is how workerd spells "reach nothing". The obvious-looking
+	// `deny = ["public"]` makes it refuse to start: `don't deny 'public', allow 'private' instead`
+	it('pins egress to a deny-by-default network service workerd will accept', () => {
 		expect(generated).toContain(`globalOutbound = "${ADAPTER_SERVICES.outbound}"`);
 		expect(generated).toContain(
-			`(name = "${ADAPTER_SERVICES.outbound}", network = (allow = [], deny = ["public"]))`
+			`(name = "${ADAPTER_SERVICES.outbound}", network = (allow = []))`
 		);
+		expect(generated).not.toContain('deny =');
 	});
 });
 
