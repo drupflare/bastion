@@ -4,16 +4,22 @@ import {
 	assertModeSafe,
 	BastionError,
 	bunListenerHost,
+	clusterHeartbeat,
 	defaultConfig,
+	HEARTBEAT_MS,
 	http3Warning,
 	modeAvailable,
 	preflight,
 	resolveBinary,
 	Runtime,
+	SessionStore,
 	socketPaths,
+	TokenStore,
 	unixUpstream,
 	writeConfig
 } from '@drupflare/bastion';
+import { apiHandlers } from '../api/handlers';
+import { dashboardAssets } from '../dashboard';
 import { MANUAL, manualTopics, renderTopic } from '../manual';
 import { COMMANDS, GLOBAL_OPTIONS, type CommandSpec } from '../registry';
 import { emit, load, type Globals } from '../state';
@@ -149,7 +155,7 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 	} catch (e) {
 		ctx.io.err(e instanceof Error ? e.message : String(e));
 	}
-	return new Runtime(ctx, {
+	const runtime = new Runtime(ctx, {
 		config,
 		host: bunListenerHost(),
 		upstream: unixUpstream(ctx, socketPaths(loaded.state)),
@@ -158,6 +164,17 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 		...(loaded.path === null ? {} : { configPath: loaded.path }),
 		...(binary === null ? {} : { binary })
 	});
+	// without these the management listener answers 503 to everything and the dashboard renders
+	// against nothing; the handlers run the same commands the CLI does, under the same config
+	runtime.attachApi(
+		apiHandlers({ ...globals, ...(loaded.path === null ? {} : { config: loaded.path }) }),
+		{
+			sessions: new SessionStore(ctx, loaded.state),
+			tokens: new TokenStore(ctx, loaded.state),
+			dashboard: dashboardAssets()
+		}
+	);
+	return runtime;
 }
 
 export async function runServe(ctx: Context, globals: Globals & { mode?: string }): Promise<void> {
@@ -195,6 +212,20 @@ export async function runServe(ctx: Context, globals: Globals & { mode?: string 
 		}
 	}, SWEEP_INTERVAL_MS);
 	sweeping.unref?.();
+
+	// a child tells the control node it is alive and learns its placement back. Failing is not
+	// fatal: the node keeps serving what it already holds and `cluster status` reports the staleness
+	const child = loaded.config.cluster?.role === 'child';
+	const beating = child
+		? setInterval(() => {
+				void clusterHeartbeat(ctx, loaded.state).then((answer) => {
+					if (!answer.reached && answer.reason !== '') {
+						ctx.io.err(`heartbeat: ${answer.reason}`);
+					}
+				});
+			}, HEARTBEAT_MS)
+		: null;
+	beating?.unref?.();
 
 	// serve runs in the foreground; a unit file is what restarts it
 	await new Promise<void>((resolve) => {
