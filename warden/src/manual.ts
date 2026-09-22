@@ -848,7 +848,7 @@ bastion supplies the cluster itself.
     bastion cluster init --node node-a                 # prints a join token
     bastion cluster join --control node-a:8787 --token <token> --node node-b
     bastion cluster provision 10.0.1.0/24
-    bastion cluster place www.example.edu --replicas 1
+    bastion cluster place www.example.edu --replicas 1 --owner-token <token>
     bastion cluster nodes
 
 Children dial out to the control node and it never dials in, so a child behind NAT needs no
@@ -882,6 +882,13 @@ Host header, because Drupal derives its session cookie name from the host and a 
 different one renders every visitor anonymous. And a node join renders a form-bearing page and
 verifies the private key exists first, because that key is minted lazily and a freshly migrated
 site without one refuses every replica for a reason that reads like a capacity limit.
+
+**Placement routes reads; it does not copy data.** A replica node holding no copy of the site
+answers those reads from an empty object. Copying it needs the SITE's own owner token, which
+bastion mints at claim and does not keep, so \`cluster place\` takes it as a flag. Without one the
+placement is recorded, the command exits 3, and it says the data was not copied. It also says so
+when the cluster had nowhere to put a replica: asking for one and silently getting none is how an
+operator comes to believe a site is replicated.
 
 Promotion is not free. Making a replica authoritative loses anything not yet replicated, bounded
 by the replication lag. \`cluster promote\` prints the worst-case window before it acts.
