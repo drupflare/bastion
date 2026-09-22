@@ -167,9 +167,20 @@ export function runDomainAdd(
 					)
 				};
 			}
+			// a new host in an existing tenant is the same product as its siblings, so it inherits
+			// their bundle, probe and worker shape rather than a fixed drupflare stub
+			const sibling = entry.sites[0];
 			return {
 				...entry,
-				sites: [...entry.sites, { host, bundle: './payload.tar.gz', probe: 'drupflare' }]
+				sites: [
+					...entry.sites,
+					{
+						host,
+						bundle: sibling?.bundle ?? './payload.tar.gz',
+						...(sibling?.probe === undefined ? {} : { probe: sibling.probe }),
+						...(sibling?.worker === undefined ? {} : { worker: sibling.worker })
+					}
+				]
 			};
 		})
 	};

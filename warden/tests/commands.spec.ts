@@ -923,3 +923,70 @@ describe('maintenance', () => {
 		expect([EXIT.OK, EXIT.USAGE, EXIT.FINDING]).toContain(await run(ctx, ['backup', 'drill']));
 	});
 });
+
+/**
+ * The CLI against a bundle that is not drupflare's.
+ *
+ * `site probe` read a drupflare response header from a literal, and `domain add` wrote a drupflare
+ * probe and bundle path into every new site whatever the tenant was hosting. Both made bastion
+ * report a working arbitrary worker as broken.
+ */
+describe('a tenant hosting an arbitrary worker', () => {
+	const PLAIN = `
+version: 1
+mode: solo
+state: /var/lib/bastion
+domains:
+  primary: apps.example.edu
+tenants:
+  - name: api
+    sites:
+      - host: api.example.edu
+        bundle: ./worker.tar.gz
+        worker:
+          main: server.js
+          durableObjectClass: null
+          kv:
+            - SESSIONS
+`;
+
+	const plain = () => withDisk(memoryFiles({ '/srv/bastion.yml': PLAIN }));
+
+	it('shows a site that has no probe profile without inventing one', async () => {
+		const { ctx, io } = plain();
+		expect(await run(ctx, ['site', 'show', 'api.example.edu'])).toBe(EXIT.OK);
+		expect(io.outText()).toContain('(none)');
+	});
+
+	it('says the profile sets no boot header rather than reporting one absent', async () => {
+		const { ctx, io } = plain();
+		await run(ctx, ['site', 'probe', 'api.example.edu']);
+		expect(io.outText()).toContain('no boot header');
+	});
+
+	it('still validates, so an arbitrary worker is a first-class configuration', async () => {
+		const { ctx } = plain();
+		expect(await run(ctx, ['config', 'validate'])).toBe(EXIT.OK);
+	});
+
+	it('inherits the sibling bundle and worker block when a domain is allocated', async () => {
+		const store = memoryFiles({ '/srv/bastion.yml': PLAIN });
+		const { ctx } = withDisk(store);
+		expect(await run(ctx, ['domain', 'add', 'beta', '--tenant', 'api'])).toBe(EXIT.OK);
+		const written = store.readText('/srv/bastion.yml');
+		expect(written).toContain('./worker.tar.gz');
+		expect(written).not.toContain('drupflare');
+	});
+
+	it('keeps the drupflare probe for a tenant that is hosting drupflare', async () => {
+		const store = memoryFiles({
+			'/srv/bastion.yml': CONFIG.replace(
+				'tenants:',
+				'domains:\n  primary: apps.example.edu\ntenants:'
+			)
+		});
+		const { ctx } = withDisk(store);
+		expect(await run(ctx, ['domain', 'add', 'extra', '--tenant', 'acme'])).toBe(EXIT.OK);
+		expect(store.readText('/srv/bastion.yml')).toContain('drupflare');
+	});
+});

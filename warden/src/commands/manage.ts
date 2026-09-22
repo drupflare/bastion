@@ -3,6 +3,7 @@ import {
 	BastionError,
 	DEFAULT_CAPABILITIES,
 	firecrackerHypervisor,
+	probeProfile,
 	writeConfig
 } from '@drupflare/bastion';
 import { kv, table, yesNo } from '../format';
@@ -134,7 +135,7 @@ export function runSiteShow(ctx: Context, globals: Globals, host: string): void 
 				['host', site.host],
 				['tenant', owner.name],
 				['bundle', site.bundle],
-				['probe', site.probe],
+				['probe', site.probe ?? '(none)'],
 				['aliases', site.aliases?.join(', ') ?? '(none)'],
 				['primary node', site.primary ?? '(this node)'],
 				['replicas', site.replicas?.join(', ') ?? '(none)'],
@@ -171,24 +172,35 @@ export async function runSiteProbe(ctx: Context, globals: Globals, host: string)
 
 	const address = loaded.config.listeners.https?.address ?? '(no https listener)';
 	const url = `https://${host}/`;
+	// the header comes from the profile: an arbitrary worker sets none, and demanding one would
+	// fail a site that is answering perfectly well
+	const profile = probeProfile(site.probe);
 	let answered: { status: number; booted: string | null } | null = null;
 	let failure: string | null = null;
 	try {
 		const response = await ctx.fetch(url, { headers: { host } });
-		answered = { status: response.status, booted: response.headers.get('x-cfw-php-booted') };
+		answered = {
+			status: response.status,
+			booted: profile.bootHeader === null ? null : response.headers.get(profile.bootHeader)
+		};
 	} catch (error) {
 		failure = error instanceof Error ? error.message : String(error);
 	}
 
 	const ok = answered !== null && answered.status < 500;
-	emit(ctx, globals, { host, profile: site.probe, url, answered, failure, ok }, () =>
+	emit(ctx, globals, { host, profile: site.probe ?? null, url, answered, failure, ok }, () =>
 		[
 			kv([
 				['site', host],
-				['profile', site.probe],
+				['profile', site.probe ?? '(none)'],
 				['listener', address],
 				['status', answered === null ? `unreachable: ${failure}` : String(answered.status)],
-				['booted', answered?.booted ?? '(header absent)']
+				[
+					'booted',
+					profile.bootHeader === null
+						? '(profile sets no boot header)'
+						: (answered?.booted ?? '(header absent)')
+				]
 			]),
 			'',
 			ok ? 'the site answered' : 'the site did not answer; is bastion running?'
