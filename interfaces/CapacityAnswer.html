@@ -12,7 +12,7 @@
 <h1>Interface CapacityAnswer</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">CapacityAnswer</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#bindingterm">bindingTerm</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#concurrencyceiling">concurrencyCeiling</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#known">known</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maximum">maximum</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#notes">notes</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#provenance">provenance</a><span class="tsd-signature-symbol">:</span> <a href="../types/Provenance.html" class="tsd-signature-type tsd-kind-type-alias">Provenance</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#recommended">recommended</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#terms">terms</a><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L171">core/src/capacity/model.ts:171</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L171">core/src/capacity/model.ts:171</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,52 +38,52 @@
 <div class="tsd-comment tsd-typography"><p>which term binds, named rather than implied</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L179">core/src/capacity/model.ts:179</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L179">core/src/capacity/model.ts:179</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="concurrencyceiling"><span>concurrency<wbr/>Ceiling</span><a href="#concurrencyceiling" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">concurrencyCeiling</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
 <div class="tsd-comment tsd-typography"><p>with <code>evict</code>, RAM bounds CONCURRENCY rather than the site count</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L184">core/src/capacity/model.ts:184</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L184">core/src/capacity/model.ts:184</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="known"><span>known</span><a href="#known" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">known</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>false when a term could not be read at all, so 0 is not reported as a real ceiling</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L173">core/src/capacity/model.ts:173</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L173">core/src/capacity/model.ts:173</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="maximum"><span>maximum</span><a href="#maximum" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">maximum</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>the most it could hold before the binding term runs out</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L177">core/src/capacity/model.ts:177</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L177">core/src/capacity/model.ts:177</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="notes"><span>notes</span><a href="#notes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">notes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L185">core/src/capacity/model.ts:185</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L185">core/src/capacity/model.ts:185</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="provenance"><span>provenance</span><a href="#provenance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">provenance</span><span class="tsd-signature-symbol">:</span> <a href="../types/Provenance.html" class="tsd-signature-type tsd-kind-type-alias">Provenance</a></div>
 <div class="tsd-comment tsd-typography"><p>the weakest provenance of any input, so a figure with an assumption says so</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L181">core/src/capacity/model.ts:181</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L181">core/src/capacity/model.ts:181</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="recommended"><span>recommended</span><a href="#recommended" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">recommended</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>what bastion recommends this host holds</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L175">core/src/capacity/model.ts:175</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L175">core/src/capacity/model.ts:175</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="terms"><span>terms</span><a href="#terms" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">terms</span><span class="tsd-signature-symbol">:</span> <a href="Term.html" class="tsd-signature-type tsd-kind-interface">Term</a><span class="tsd-signature-symbol">[]</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/dd36a3ac549e5157898d694ab02cd36a0f59f311/core/src/capacity/model.ts#L182">core/src/capacity/model.ts:182</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/capacity/model.ts#L182">core/src/capacity/model.ts:182</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
