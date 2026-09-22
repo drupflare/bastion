@@ -1,5 +1,6 @@
 import type { Context, Version } from '@drupflare/bastion';
-import { BastionError, VersionStore, pickVersion } from '@drupflare/bastion';
+import { BastionError, VersionStore, pickVersion, pullBundle } from '@drupflare/bastion';
+import { downloadOptions } from '../download';
 import { kv, table } from '../format';
 import { emit, load, type Globals, type Loaded } from '../state';
 
@@ -24,9 +25,19 @@ const bytes = (n: number): string =>
 			? `${(n / 1024).toFixed(1)} KiB`
 			: `${(n / 1024 ** 2).toFixed(1)} MiB`;
 
-export function runDeploy(ctx: Context, globals: Globals, host: string, bundle: string): void {
+export async function runDeploy(
+	ctx: Context,
+	globals: Globals & { checksum?: string; insecureSource?: boolean },
+	host: string,
+	source: string
+): Promise<void> {
 	const loaded = load(ctx, globals);
 	siteOrRefuse(loaded, host);
+	const pulled = await pullBundle(ctx, source, {
+		dest: `${loaded.state}/bundles/${host}`,
+		...downloadOptions(globals)
+	});
+	const bundle = pulled.path;
 	if (!ctx.files.exists(bundle)) {
 		throw new BastionError('usage', `${bundle} is not there`);
 	}

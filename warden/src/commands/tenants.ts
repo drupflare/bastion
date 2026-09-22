@@ -19,12 +19,14 @@ import {
 	capacity,
 	defaultCostModel,
 	firecrackerHypervisor,
+	pullBundle,
 	pullTemplate,
 	readHost,
 	refusals,
 	retain,
 	writeConfig
 } from '@drupflare/bastion';
+import { downloadOptions } from '../download';
 import { kv, sizeOrRefuse, table, yesNo } from '../format';
 import { emit, load, writePath, type Globals, type Loaded } from '../state';
 
@@ -167,7 +169,14 @@ export function runSiteList(ctx: Context, globals: Globals): void {
 
 export async function runSiteAdd(
 	ctx: Context,
-	globals: Globals & { tenant?: string; bundle?: string; template?: string; probe?: string },
+	globals: Globals & {
+		tenant?: string;
+		bundle?: string;
+		template?: string;
+		probe?: string;
+		checksum?: string;
+		insecureSource?: boolean;
+	},
 	host: string
 ): Promise<void> {
 	const loaded = load(ctx, globals);
@@ -193,15 +202,26 @@ export async function runSiteAdd(
 	let plan: TemplatePlan | null = null;
 	if (globals.template !== undefined) {
 		plan = await pullTemplate(ctx, globals.template, {
-			dest: `${loaded.config.state}/templates/${host}`
+			dest: `${loaded.config.state}/templates/${host}`,
+			remote: downloadOptions(globals)
 		});
 	}
 	const sibling = tenant.sites[0];
 	const probe = globals.probe ?? (plan === null ? (sibling?.probe ?? 'drupflare') : undefined);
 
+	// a url is fetched once and recorded as the file it landed in, so a start never re-downloads
+	const pulled =
+		globals.bundle === undefined
+			? null
+			: await pullBundle(ctx, globals.bundle, {
+					dest: `${loaded.config.state}/bundles/${host}`,
+					...downloadOptions(globals)
+				});
+	if (pulled?.digest != null) ctx.io.err(`downloaded ${pulled.path} (sha256:${pulled.digest})`);
+
 	const site: SiteConfig = {
 		host,
-		bundle: globals.bundle ?? sibling?.bundle ?? './payload.tar.gz',
+		bundle: pulled?.path ?? sibling?.bundle ?? './payload.tar.gz',
 		...(probe === undefined ? {} : { probe }),
 		...(plan === null ? {} : { worker: plan.worker })
 	};
@@ -250,12 +270,13 @@ export async function runSiteAdd(
  */
 export async function runSiteTemplate(
 	ctx: Context,
-	globals: Globals,
+	globals: Globals & { checksum?: string; insecureSource?: boolean },
 	source: string
 ): Promise<number> {
 	const loaded = load(ctx, globals);
 	const plan = await pullTemplate(ctx, source, {
-		dest: `${loaded.config.state}/templates/.inspect`
+		dest: `${loaded.config.state}/templates/.inspect`,
+		remote: downloadOptions(globals)
 	});
 	const dropped = refusals(plan);
 	emit(ctx, globals, { source, ...plan }, () =>
