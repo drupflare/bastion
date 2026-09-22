@@ -66,7 +66,11 @@ Documented in `bastion manual running`.
 
 ### `bastion reload`
 
-report which tenants are running an older configuration
+swap the tenants whose configuration changed, leaving the rest resident
+
+| flag      | meaning                                       |
+| --------- | --------------------------------------------- |
+| `--check` | report what is out of date and change nothing |
 
 Documented in `bastion manual running`.
 
@@ -341,12 +345,14 @@ add a site to a tenant
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
 
-| flag                | meaning                                                        |
-| ------------------- | -------------------------------------------------------------- |
-| `--tenant <name>`   | the tenant to add it to                                        |
-| `--bundle <path>`   | the site payload                                               |
-| `--template <url>`  | pull a worker template and read its bindings from its manifest |
-| `--probe <profile>` | the profile that proves a boot                                 |
+| flag                  | meaning                                             |
+| --------------------- | --------------------------------------------------- |
+| `--tenant <name>`     | the tenant to add it to                             |
+| `--bundle <path       | url>`                                               | the site payload                                               |
+| `--template <path     | url>`                                               | pull a worker template and read its bindings from its manifest |
+| `--probe <profile>`   | the profile that proves a boot                      |
+| `--checksum <sha256>` | the digest a download must hash to                  |
+| `--insecure-source`   | accept a plaintext download, or one on this network |
 
 Documented in `bastion manual sites`.
 
@@ -357,6 +363,11 @@ read a worker template and report what bastion would and would not carry
 | argument | required | meaning              |
 | -------- | -------- | -------------------- |
 | `source` | yes      | a url or a directory |
+
+| flag                  | meaning                                             |
+| --------------------- | --------------------------------------------------- |
+| `--checksum <sha256>` | the digest a download must hash to                  |
+| `--insecure-source`   | accept a plaintext download, or one on this network |
 
 Documented in `bastion manual sites`.
 
@@ -400,10 +411,15 @@ Documented in `bastion manual sites`.
 
 upload a bundle and point the site at it
 
-| argument | required | meaning               |
-| -------- | -------- | --------------------- |
-| `host`   | yes      | the hostname          |
-| `bundle` | yes      | the payload to upload |
+| argument | required | meaning                                |
+| -------- | -------- | -------------------------------------- |
+| `host`   | yes      | the hostname                           |
+| `bundle` | yes      | the payload to upload, a path or a url |
+
+| flag                  | meaning                                             |
+| --------------------- | --------------------------------------------------- |
+| `--checksum <sha256>` | the digest a download must hash to                  |
+| `--insecure-source`   | accept a plaintext download, or one on this network |
 
 Documented in `bastion manual deploying`.
 

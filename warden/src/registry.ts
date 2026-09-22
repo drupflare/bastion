@@ -91,8 +91,15 @@ export const COMMANDS: CommandSpec[] = [
 	{
 		group: 'lifecycle',
 		name: 'reload',
-		description: 'report which tenants are running an older configuration',
+		description: 'swap the tenants whose configuration changed, leaving the rest resident',
 		manual: 'running',
+		options: [
+			{
+				flags: '--check',
+				description: 'report what is out of date and change nothing'
+			}
+		],
+		exits: [FINDING_EXIT],
 		surface: '/'
 	},
 	{
@@ -377,12 +384,20 @@ export const COMMANDS: CommandSpec[] = [
 		args: [{ name: 'host', required: true, description: 'the hostname' }],
 		options: [
 			{ flags: '--tenant <name>', description: 'the tenant to add it to' },
-			{ flags: '--bundle <path>', description: 'the site payload' },
+			{ flags: '--bundle <path|url>', description: 'the site payload' },
 			{
-				flags: '--template <url>',
+				flags: '--template <path|url>',
 				description: 'pull a worker template and read its bindings from its manifest'
 			},
-			{ flags: '--probe <profile>', description: 'the profile that proves a boot' }
+			{ flags: '--probe <profile>', description: 'the profile that proves a boot' },
+			{
+				flags: '--checksum <sha256>',
+				description: 'the digest a download must hash to'
+			},
+			{
+				flags: '--insecure-source',
+				description: 'accept a plaintext download, or one on this network'
+			}
 		],
 		exits: [JSON_EXIT],
 		surface: '/tenants'
@@ -393,6 +408,16 @@ export const COMMANDS: CommandSpec[] = [
 		description: 'read a worker template and report what bastion would and would not carry',
 		manual: 'sites',
 		args: [{ name: 'source', required: true, description: 'a url or a directory' }],
+		options: [
+			{
+				flags: '--checksum <sha256>',
+				description: 'the digest a download must hash to'
+			},
+			{
+				flags: '--insecure-source',
+				description: 'accept a plaintext download, or one on this network'
+			}
+		],
 		exits: [JSON_EXIT],
 		surface: '/tenants'
 	},
@@ -436,7 +461,21 @@ export const COMMANDS: CommandSpec[] = [
 		manual: 'deploying',
 		args: [
 			{ name: 'host', required: true, description: 'the hostname' },
-			{ name: 'bundle', required: true, description: 'the payload to upload' }
+			{
+				name: 'bundle',
+				required: true,
+				description: 'the payload to upload, a path or a url'
+			}
+		],
+		options: [
+			{
+				flags: '--checksum <sha256>',
+				description: 'the digest a download must hash to'
+			},
+			{
+				flags: '--insecure-source',
+				description: 'accept a plaintext download, or one on this network'
+			}
 		],
 		surface: '/tenants'
 	},
