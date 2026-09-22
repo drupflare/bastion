@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Context } from '../context';
 import { BastionError } from '../errors';
 
 export interface Version {
@@ -37,6 +38,59 @@ export class VersionStore {
 	private readonly versions = new Map<string, Version>();
 	private readonly deployments = new Map<string, Deployment>();
 	private readonly history = new Map<string, Deployment[]>();
+	private readonly disk: { ctx: Context; path: string } | null;
+
+	/**
+	 * Optionally backed by a file, which is what the CLI needs.
+	 *
+	 * `bastion deploy` and `bastion version list` are two processes, so a store that only lives in
+	 * memory answers "no versions" to the second one. The bytes themselves are not kept here, only
+	 * the content address and the pointer; a bundle lives where the tenant's state does.
+	 */
+	constructor(backing?: { ctx: Context; path: string }) {
+		this.disk = backing ?? null;
+		this.load();
+	}
+
+	private load(): void {
+		if (this.disk === null || !this.disk.ctx.files.exists(this.disk.path)) return;
+		let saved: {
+			versions?: Version[];
+			deployments?: Deployment[];
+			history?: Record<string, Deployment[]>;
+		};
+		try {
+			saved = JSON.parse(this.disk.ctx.files.readText(this.disk.path));
+		} catch {
+			// a truncated file is not a reason to refuse every command; it is reported by `status`
+			return;
+		}
+		for (const version of saved.versions ?? []) {
+			this.versions.set(`${version.site}/${version.id}`, version);
+		}
+		for (const deployment of saved.deployments ?? []) {
+			this.deployments.set(deployment.site, deployment);
+		}
+		for (const [site, entries] of Object.entries(saved.history ?? {})) {
+			this.history.set(site, entries);
+		}
+	}
+
+	private save(): void {
+		if (this.disk === null) return;
+		this.disk.ctx.files.writeText(
+			this.disk.path,
+			JSON.stringify(
+				{
+					versions: [...this.versions.values()],
+					deployments: [...this.deployments.values()],
+					history: Object.fromEntries(this.history)
+				},
+				null,
+				2
+			)
+		);
+	}
 
 	add(
 		site: string,
@@ -57,6 +111,7 @@ export class VersionStore {
 			annotations
 		};
 		this.versions.set(`${site}/${id}`, version);
+		this.save();
 		return version;
 	}
 
@@ -77,6 +132,7 @@ export class VersionStore {
 		const deployment: Deployment = { site, current: id, split: null, at, by };
 		this.deployments.set(site, deployment);
 		this.history.set(site, [...(this.history.get(site) ?? []), deployment]);
+		this.save();
 		return deployment;
 	}
 
@@ -98,6 +154,7 @@ export class VersionStore {
 		};
 		this.deployments.set(site, deployment);
 		this.history.set(site, [...(this.history.get(site) ?? []), deployment]);
+		this.save();
 		return deployment;
 	}
 
