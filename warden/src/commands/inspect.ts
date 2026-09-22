@@ -1,5 +1,6 @@
 import type { Context } from '@drupflare/bastion';
 import {
+	BastionError,
 	HealthLedger,
 	LogWriter,
 	Registry,
@@ -7,7 +8,9 @@ import {
 	capacity,
 	defaultCostModel,
 	diagnose,
+	installTool,
 	preflight,
+	probeOptional,
 	readHost,
 	renderTree
 } from '@drupflare/bastion';
@@ -138,6 +141,80 @@ export function runLogs(
 			? 'no log lines at that level yet'
 			: lines.map((l) => l.message).join('\n')
 	);
+}
+
+/**
+ * What each optional binding needs and whether this host has it.
+ *
+ * Exits 3 when something is missing rather than 0, because an operator running this in a
+ * provisioning script wants a non-zero code on "the box cannot do what the config asks for". It is
+ * a finding rather than a failure: nothing is broken, something is simply not installed.
+ */
+export async function runCapabilityList(ctx: Context, globals: Globals): Promise<number> {
+	const report = await probeOptional(ctx);
+	const missing = report.filter((entry) => entry.state === 'absent');
+	emit(ctx, globals, { capabilities: report }, () =>
+		[
+			table(
+				['binding', 'command', 'state', 'size', 'what it is for'],
+				report.map((entry) => [
+					entry.slot,
+					entry.command,
+					entry.state === 'present' ? (entry.version ?? 'present') : 'not installed',
+					`~${entry.approxMb} MB`,
+					entry.why
+				])
+			),
+			...(missing.length === 0
+				? ['', 'every optional binding has its software']
+				: [
+						'',
+						'to install what is missing:',
+						...missing.map((entry) => `  ${entry.install}`),
+						'',
+						'or run `bastion capability install <binding>`, which runs exactly that'
+					])
+		].join('\n')
+	);
+	return missing.length === 0 ? 0 : 3;
+}
+
+/**
+ * Installs the software one binding needs.
+ *
+ * Privileged, so it is never implicit: no site binding a capability triggers this, and `up` does
+ * not run it on an operator's behalf. It prints the command it is about to run before running it,
+ * because a tool that installs packages should not be the one thing an operator cannot audit.
+ */
+export async function runCapabilityInstall(
+	ctx: Context,
+	globals: Globals,
+	slot: string
+): Promise<number> {
+	const before = (await probeOptional(ctx)).find((entry) => entry.slot === slot);
+	if (before === undefined) {
+		throw new BastionError('usage', `${slot} is not an optional binding`, {
+			next: 'bastion capability list'
+		});
+	}
+	if (before.state === 'present') {
+		emit(
+			ctx,
+			globals,
+			{ slot, installed: false, already: true },
+			() => `${slot} already has ${before.command}: ${before.version ?? 'present'}`
+		);
+		return 0;
+	}
+
+	ctx.io.err(`running: ${before.install}`);
+	const answer = await installTool(ctx, slot);
+	emit(ctx, globals, { slot, installed: answer.ok, command: answer.command }, () =>
+		answer.ok
+			? `installed ${slot}: ${answer.command}`
+			: `could not install ${slot}\n${answer.output}`
+	);
+	return answer.ok ? 0 : 1;
 }
 
 export function runVersion(ctx: Context, globals: Globals): void {
