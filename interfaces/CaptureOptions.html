@@ -12,7 +12,7 @@
 <h1>Interface CaptureOptions</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">CaptureOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#source">source</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#staging">staging</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onlinebackup-1">onlineBackup</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">source</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">destination</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#quiesce-1">quiesce</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">run</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#vacuuminto-1">vacuumInto</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">source</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">destination</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/backup/capture.ts#L31">core/src/backup/capture.ts:31</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/backup/capture.ts#L31">core/src/backup/capture.ts:31</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,14 +38,14 @@
 <div class="tsd-comment tsd-typography"><p>the live database</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/backup/capture.ts#L33">core/src/backup/capture.ts:33</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/backup/capture.ts#L33">core/src/backup/capture.ts:33</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="staging"><span>staging</span><a href="#staging" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">staging</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>where the consistent copy goes</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/backup/capture.ts#L35">core/src/backup/capture.ts:35</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/backup/capture.ts#L35">core/src/backup/capture.ts:35</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -64,7 +64,7 @@
 <li><span><span class="tsd-kind-parameter">destination</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/backup/capture.ts#L39">core/src/backup/capture.ts:39</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/backup/capture.ts#L39">core/src/backup/capture.ts:39</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="quiesce"><code class="tsd-tag">Optional</code><span>quiesce</span><a href="#quiesce" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -79,7 +79,7 @@
 <li><span><span class="tsd-kind-parameter">run</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/backup/capture.ts#L41">core/src/backup/capture.ts:41</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/backup/capture.ts#L41">core/src/backup/capture.ts:41</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="vacuuminto"><code class="tsd-tag">Optional</code><span>vacuum<wbr/>Into</span><a href="#vacuuminto" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -95,7 +95,7 @@
 <li><span><span class="tsd-kind-parameter">destination</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/backup/capture.ts#L37">core/src/backup/capture.ts:37</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/backup/capture.ts#L37">core/src/backup/capture.ts:37</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

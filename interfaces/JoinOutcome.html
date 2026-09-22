@@ -12,7 +12,7 @@
 <h1>Interface JoinOutcome</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">JoinOutcome</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#accepted">accepted</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#countered">countered</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#refused">refused</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">reason</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/cluster/scope.ts#L47">core/src/cluster/scope.ts:47</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/cluster/scope.ts#L47">core/src/cluster/scope.ts:47</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -31,21 +31,21 @@
 <h3 class="tsd-anchor-link" id="accepted"><span>accepted</span><a href="#accepted" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">accepted</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/cluster/scope.ts#L48">core/src/cluster/scope.ts:48</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/cluster/scope.ts#L48">core/src/cluster/scope.ts:48</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="countered"><span>countered</span><a href="#countered" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">countered</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span></div>
 <div class="tsd-comment tsd-typography"><p>the negotiated keys the child countered on</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/cluster/scope.ts#L52">core/src/cluster/scope.ts:52</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/cluster/scope.ts#L52">core/src/cluster/scope.ts:52</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="refused"><span>refused</span><a href="#refused" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">refused</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">reason</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>the keys the child could not satisfy; a join refuses rather than joining degraded</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/cluster/scope.ts#L50">core/src/cluster/scope.ts:50</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/cluster/scope.ts#L50">core/src/cluster/scope.ts:50</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

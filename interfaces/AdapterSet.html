@@ -12,7 +12,7 @@
 <h1>Interface AdapterSet</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AdapterSet</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#ai">ai</a><span class="tsd-signature-symbol">?:</span> <a href="AiStore.html" class="tsd-signature-type tsd-kind-interface">AiStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#analytics">analytics</a><span class="tsd-signature-symbol">?:</span> <a href="../classes/DataPointWindow.html" class="tsd-signature-type tsd-kind-class">DataPointWindow</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#browser">browser</a><span class="tsd-signature-symbol">?:</span> <a href="BrowserStore.html" class="tsd-signature-type tsd-kind-interface">BrowserStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#cache">cache</a><span class="tsd-signature-symbol">:</span> <a href="CacheStore.html" class="tsd-signature-type tsd-kind-interface">CacheStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#email">email</a><span class="tsd-signature-symbol">?:</span> <a href="EmailStore.html" class="tsd-signature-type tsd-kind-interface">EmailStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#images">images</a><span class="tsd-signature-symbol">?:</span> <a href="ImageStore.html" class="tsd-signature-type tsd-kind-interface">ImageStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#kv">kv</a><span class="tsd-signature-symbol">:</span> <a href="KeyValueStore.html" class="tsd-signature-type tsd-kind-interface">KeyValueStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#queues">queues</a><span class="tsd-signature-symbol">:</span> <a href="KeyValueStore.html" class="tsd-signature-type tsd-kind-interface">KeyValueStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#r2">r2</a><span class="tsd-signature-symbol">:</span> <a href="KeyValueStore.html" class="tsd-signature-type tsd-kind-interface">KeyValueStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#sql">sql</a><span class="tsd-signature-symbol">?:</span> <a href="SqlStore.html" class="tsd-signature-type tsd-kind-interface">SqlStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenant">tenant</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#vectorize">vectorize</a><span class="tsd-signature-symbol">?:</span> <a href="VectorStore.html" class="tsd-signature-type tsd-kind-interface">VectorStore</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#assets-1">assets</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">path</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">bytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">contentType</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L17">core/src/adapters/server.ts:17</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L17">core/src/adapters/server.ts:17</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -46,76 +46,76 @@
 <div class="tsd-comment tsd-typography"><p>Workers AI has no capnp binding either; same mechanism, different endpoint</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L27">core/src/adapters/server.ts:27</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L27">core/src/adapters/server.ts:27</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="analytics"><code class="tsd-tag">Optional</code><span>analytics</span><a href="#analytics" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">analytics</span><span class="tsd-signature-symbol">?:</span> <a href="../classes/DataPointWindow.html" class="tsd-signature-type tsd-kind-class">DataPointWindow</a></div>
 <div class="tsd-comment tsd-typography"><p>analytics engine without the --experimental flag its native binding is gated behind</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L37">core/src/adapters/server.ts:37</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L37">core/src/adapters/server.ts:37</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="browser"><code class="tsd-tag">Optional</code><span>browser</span><a href="#browser" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">browser</span><span class="tsd-signature-symbol">?:</span> <a href="BrowserStore.html" class="tsd-signature-type tsd-kind-interface">BrowserStore</a></div>
 <div class="tsd-comment tsd-typography"><p>a headless browser on the host, which a Worker cannot fork and bastion can</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L35">core/src/adapters/server.ts:35</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L35">core/src/adapters/server.ts:35</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="cache"><span>cache</span><a href="#cache" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">cache</span><span class="tsd-signature-symbol">:</span> <a href="CacheStore.html" class="tsd-signature-type tsd-kind-interface">CacheStore</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L18">core/src/adapters/server.ts:18</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L18">core/src/adapters/server.ts:18</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="email"><code class="tsd-tag">Optional</code><span>email</span><a href="#email" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">email</span><span class="tsd-signature-symbol">?:</span> <a href="EmailStore.html" class="tsd-signature-type tsd-kind-interface">EmailStore</a></div>
 <div class="tsd-comment tsd-typography"><p>outbound mail over the operator's own smtp server; a worker cannot open port 25, bastion can</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L31">core/src/adapters/server.ts:31</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L31">core/src/adapters/server.ts:31</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="images"><code class="tsd-tag">Optional</code><span>images</span><a href="#images" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">images</span><span class="tsd-signature-symbol">?:</span> <a href="ImageStore.html" class="tsd-signature-type tsd-kind-interface">ImageStore</a></div>
 <div class="tsd-comment tsd-typography"><p>native image transformation, which is not bounded by what fits in an isolate</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L33">core/src/adapters/server.ts:33</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L33">core/src/adapters/server.ts:33</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="kv"><span>kv</span><a href="#kv" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">kv</span><span class="tsd-signature-symbol">:</span> <a href="KeyValueStore.html" class="tsd-signature-type tsd-kind-interface">KeyValueStore</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L19">core/src/adapters/server.ts:19</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L19">core/src/adapters/server.ts:19</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="queues"><span>queues</span><a href="#queues" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">queues</span><span class="tsd-signature-symbol">:</span> <a href="KeyValueStore.html" class="tsd-signature-type tsd-kind-interface">KeyValueStore</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L21">core/src/adapters/server.ts:21</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L21">core/src/adapters/server.ts:21</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="r2"><span>r2</span><a href="#r2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">r2</span><span class="tsd-signature-symbol">:</span> <a href="KeyValueStore.html" class="tsd-signature-type tsd-kind-interface">KeyValueStore</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L20">core/src/adapters/server.ts:20</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L20">core/src/adapters/server.ts:20</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sql"><code class="tsd-tag">Optional</code><span>sql</span><a href="#sql" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">sql</span><span class="tsd-signature-symbol">?:</span> <a href="SqlStore.html" class="tsd-signature-type tsd-kind-interface">SqlStore</a></div>
 <div class="tsd-comment tsd-typography"><p>D1 has no capnp binding, so a bundle reaches sql through the wrapped shim</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L25">core/src/adapters/server.ts:25</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L25">core/src/adapters/server.ts:25</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenant"><code class="tsd-tag">Optional</code><span>tenant</span><a href="#tenant" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenant</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>the tenant every analytics write is labelled with</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L39">core/src/adapters/server.ts:39</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L39">core/src/adapters/server.ts:39</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="vectorize"><code class="tsd-tag">Optional</code><span>vectorize</span><a href="#vectorize" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">vectorize</span><span class="tsd-signature-symbol">?:</span> <a href="VectorStore.html" class="tsd-signature-type tsd-kind-interface">VectorStore</a></div>
 <div class="tsd-comment tsd-typography"><p>Vectorize, same mechanism again over whatever index the operator runs</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L29">core/src/adapters/server.ts:29</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L29">core/src/adapters/server.ts:29</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -133,7 +133,7 @@
 <li><span><span class="tsd-kind-parameter">path</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">bytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Uint8Array</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">contentType</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/adapters/server.ts#L23">core/src/adapters/server.ts:23</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L23">core/src/adapters/server.ts:23</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
