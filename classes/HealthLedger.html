@@ -15,9 +15,18 @@
 <p>The <code>undo</code> column is the part that matters more than the automation. Break-glass is the
 requirement: every automatic repair records what it did, is reversible, and <code>bastion diagnose</code>
 explains it. A repair nobody can reverse is a repair nobody should have run.</p>
+<p><strong>Findings live in a file, because the process that finds them is not the process that reports
+them.</strong> <code>serve</code> detects; <code>bastion health</code> and <code>bastion diagnose</code> run later, from a different
+process, often after a restart. Held in memory this was a ledger created empty by each CLI
+invocation, read, and thrown away: every one of the 33 tripwires was unreachable by construction
+and nothing ever called <code>record</code>.</p>
+<p>A file rather than the management API for the reason the plan already gives for logs: a
+partitioned node has to stay diagnosable from itself, so reading its own health must need no
+credential and no network. Append-only and replayed on load, which is also what reconstructs the
+strike counts and quarantine timestamps a crash would otherwise lose.</p>
 </div></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L43">core/src/health/ledger.ts:43</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L67">core/src/health/ledger.ts:67</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,6 +47,7 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <a href="#setdegraded" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Degraded</span></a>
 <a href="#state" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>state</span></a>
 <a href="#tree" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>tree</span></a>
+<a href="#trim" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>trim</span></a>
 </div></section></div></details></section></section>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Constructors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="constructors-1">Constructors<a href="#constructors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
@@ -46,15 +56,16 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <h3 class="tsd-anchor-link" id="constructor"><span>constructor</span><a href="#constructor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="constructorhealthledger"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">HealthLedger</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ctx</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">HealthLedger</a><a href="#constructorhealthledger" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="constructorhealthledger"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">HealthLedger</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ctx</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">state</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">HealthLedger</a><a href="#constructorhealthledger" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">ctx</span>: <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a></span></li></ul></div>
+<li><span><span class="tsd-kind-parameter">ctx</span>: <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a></span></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">state</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">HealthLedger</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L49">core/src/health/ledger.ts:49</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L75">core/src/health/ledger.ts:75</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="accessors-1">Accessors<a href="#accessors-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -66,7 +77,7 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/LedgerEntry.html" class="tsd-signature-type tsd-kind-interface">LedgerEntry</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L53">core/src/health/ledger.ts:53</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L142">core/src/health/ledger.ts:142</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -85,7 +96,7 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <li><span><span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">auto</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">undo</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol"> = {}</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/LedgerEntry.html" class="tsd-signature-type tsd-kind-interface">LedgerEntry</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L68">core/src/health/ledger.ts:68</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L157">core/src/health/ledger.ts:157</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="recovered"><span>recovered</span><a href="#recovered" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -99,7 +110,7 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <li><span><span class="tsd-kind-parameter">code</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L85">core/src/health/ledger.ts:85</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L175">core/src/health/ledger.ts:175</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="setdegraded"><span>set<wbr/>Degraded</span><a href="#setdegraded" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -112,7 +123,7 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <li><span><span class="tsd-kind-parameter">value</span>: <span class="tsd-signature-type">boolean</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L57">core/src/health/ledger.ts:57</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L146">core/src/health/ledger.ts:146</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="state"><span>state</span><a href="#state" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -126,7 +137,7 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <li><span><span class="tsd-kind-parameter">code</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/LadderState.html" class="tsd-signature-type tsd-kind-interface">LadderState</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L62">core/src/health/ledger.ts:62</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L151">core/src/health/ledger.ts:151</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tree"><span>tree</span><a href="#tree" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -137,7 +148,25 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/HealthNode.html" class="tsd-signature-type tsd-kind-interface">HealthNode</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/health/ledger.ts#L91">core/src/health/ledger.ts:91</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L182">core/src/health/ledger.ts:182</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="trim"><span>trim</span><a href="#trim" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="trim-1"><span class="tsd-kind-call-signature">trim</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">maxBytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><a href="#trim-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Drops the oldest lines once the file passes a ceiling.</p>
+<p>The same rule the audit and runtime logs carry, for the same measured reason: an append-only
+file with no bound is how miniflare's observability reached 20.75 GB and decayed the
+generator ceiling with nothing reporting it.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">maxBytes</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/health/ledger.ts#L129">core/src/health/ledger.ts:129</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -158,7 +187,7 @@ explains it. A repair nobody can reverse is a repair nobody should have run.</p>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Accessors"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Accessors</summary>
 <div><a href="#all"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Accessor"><use href="../assets/icons.svg#icon-262144"></use></svg><span>all</span></a></div></details>
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
-<div><a href="#record"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>record</span></a><a href="#recovered"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>recovered</span></a><a href="#setdegraded"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Degraded</span></a><a href="#state"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>state</span></a><a href="#tree"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>tree</span></a></div></details></div></details></div>
+<div><a href="#record"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>record</span></a><a href="#recovered"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>recovered</span></a><a href="#setdegraded"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Degraded</span></a><a href="#state"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>state</span></a><a href="#tree"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>tree</span></a><a href="#trim"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>trim</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">bastion - v1.0.0</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

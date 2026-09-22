@@ -15,10 +15,10 @@
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="handleadapterrequest"><span class="tsd-kind-call-signature">handleAdapterRequest</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">adapters</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/AdapterSet.html" class="tsd-signature-type tsd-kind-interface">AdapterSet</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">request</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Request</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Response</span><span class="tsd-signature-symbol">&gt;</span><a href="#handleadapterrequest" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>The request handler workerd's bound services reach over the unix socket.</p>
-<p>A pure function of a <code>Request</code>, so the gate lane drives every branch without binding a socket.
-The service is selected by the first path segment, which is how one listener serves all of a
-tenant's adapters.</p>
+<div class="tsd-comment tsd-typography"><p>Serves a request whose first path segment names the slot.</p>
+<p>What the wrapped shims send, because a shim writes its own URL: <code>POST /sql</code>, <code>/ai/run</code>,
+<code>/vectorize/query</code>. Kept separate from <a href="handleSlot.html" class="tsd-kind-function">handleSlot</a> so a socket that knows its own slot
+never has to guess from a path the runtime chose.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -27,7 +27,7 @@ tenant's adapters.</p>
 <li><span><span class="tsd-kind-parameter">request</span>: <span class="tsd-signature-type">Request</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">Response</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/adapters/server.ts#L49">core/src/adapters/server.ts:49</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/adapters/server.ts#L96">core/src/adapters/server.ts:96</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

@@ -9,17 +9,9 @@
 <div class="tsd-page-title">
 <ul class="tsd-breadcrumb" aria-label="Breadcrumb">
 <li><a href="" aria-current="page">TokenStore</a></li></ul>
-<h1>Class TokenStore</h1></div>
-<section class="tsd-panel tsd-comment">
-<div class="tsd-comment tsd-typography"><p>Scoped, revocable API tokens, separate from sessions.</p>
-<p>A tenant-scoped token is what makes self-service work: a signup form calls the management API to
-create a site under the <code>students</code> tenant, and it cannot reach another tenant or the host because
-the token carries the tenant exactly the way a session does.</p>
-<p>The secret is shown once. Storing it would make the token list a credential dump, and there is
-no operation that needs the plaintext after issue.</p>
-</div></section><aside class="tsd-sources">
+<h1>Class TokenStore</h1></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/serve/tokens.ts#L35">core/src/serve/tokens.ts:35</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/serve/tokens.ts#L37">core/src/serve/tokens.ts:37</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -43,15 +35,20 @@ no operation that needs the plaintext after issue.</p>
 <h3 class="tsd-anchor-link" id="constructor"><span>constructor</span><a href="#constructor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="constructortokenstore"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">TokenStore</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ctx</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">TokenStore</a><a href="#constructortokenstore" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="constructortokenstore"><span class="tsd-signature-keyword">new</span> <span class="tsd-kind-constructor-signature">TokenStore</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ctx</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">state</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="" class="tsd-signature-type tsd-kind-class">TokenStore</a><a href="#constructortokenstore" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">ctx</span>: <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a></span></li></ul></div>
+<li><span><span class="tsd-kind-parameter">ctx</span>: <a href="../interfaces/Context.html" class="tsd-signature-type tsd-kind-interface">Context</a></span></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">state</span>: <span class="tsd-signature-type">string</span></span>
+<div class="tsd-comment tsd-typography"><p>the state directory; without one the store is memory-only, which is the gate
+lane. A real box always passes it: the process that mints a token is never the process that
+checks it, so a token held only in memory is a token that has never worked.</p>
+</div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="" class="tsd-signature-type tsd-kind-class">TokenStore</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/serve/tokens.ts#L39">core/src/serve/tokens.ts:39</a></li></ul></aside></div></li></ul></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/serve/tokens.ts#L47">core/src/serve/tokens.ts:47</a></li></ul></aside></div></li></ul></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -70,7 +67,7 @@ no operation that needs the plaintext after issue.</p>
 <li><span><span class="tsd-kind-parameter">expiresAt</span>: <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol"> = null</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">secret</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">token</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/ApiToken.html" class="tsd-signature-type tsd-kind-interface">ApiToken</a> <span class="tsd-signature-symbol">}</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/serve/tokens.ts#L43">core/src/serve/tokens.ts:43</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/serve/tokens.ts#L80">core/src/serve/tokens.ts:80</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="list"><span>list</span><a href="#list" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -79,7 +76,7 @@ no operation that needs the plaintext after issue.</p>
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/ApiToken.html" class="tsd-signature-type tsd-kind-interface">ApiToken</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/serve/tokens.ts#L65">core/src/serve/tokens.ts:65</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/serve/tokens.ts#L104">core/src/serve/tokens.ts:104</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="resolve"><span>resolve</span><a href="#resolve" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -94,7 +91,7 @@ no operation that needs the plaintext after issue.</p>
 <li><span><span class="tsd-kind-parameter">secret</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="../interfaces/Principal.html" class="tsd-signature-type tsd-kind-interface">Principal</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/serve/tokens.ts#L77">core/src/serve/tokens.ts:77</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/serve/tokens.ts#L119">core/src/serve/tokens.ts:119</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="revoke"><span>revoke</span><a href="#revoke" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -107,7 +104,7 @@ no operation that needs the plaintext after issue.</p>
 <li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/f71eb7420b0d310ef68c93de83b9207a8b940088/core/src/serve/tokens.ts#L69">core/src/serve/tokens.ts:69</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/c07cb43e7e893e9075385fb13ba40fa3dc2ebc4f/core/src/serve/tokens.ts#L109">core/src/serve/tokens.ts:109</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

@@ -40,10 +40,11 @@ Documented in `bastion manual getting-started`.
 
 start every tenant, the front door and the dashboard
 
-| flag             | meaning                              |
-| ---------------- | ------------------------------------ |
-| `--no-dashboard` | do not start the management listener |
-| `--mode <mode>`  | solo, hardened or isolated           |
+| flag                                           | meaning                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `--no-dashboard`                               | do not start the management listener                            |
+| `--mode <mode>`                                | solo, hardened or isolated                                      |
+| `--i-understand-this-is-not-multi-tenant-safe` | accept that this mode puts no security boundary between tenants |
 
 Documented in `bastion manual running`.
 
@@ -57,11 +58,19 @@ Documented in `bastion manual running`.
 
 stop and start, keeping the configuration
 
+| flag                                           | meaning                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `--i-understand-this-is-not-multi-tenant-safe` | accept that this mode puts no security boundary between tenants |
+
 Documented in `bastion manual running`.
 
 ### `bastion reload`
 
-restart only the tenants whose generated capnp changed
+swap the tenants whose configuration changed, leaving the rest resident
+
+| flag      | meaning                                       |
+| --------- | --------------------------------------------- |
+| `--check` | report what is out of date and change nothing |
 
 Documented in `bastion manual running`.
 
@@ -69,9 +78,10 @@ Documented in `bastion manual running`.
 
 run in the foreground; what a unit file calls
 
-| flag            | meaning                    |
-| --------------- | -------------------------- |
-| `--mode <mode>` | solo, hardened or isolated |
+| flag                                           | meaning                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `--mode <mode>`                                | solo, hardened or isolated                                      |
+| `--i-understand-this-is-not-multi-tenant-safe` | accept that this mode puts no security boundary between tenants |
 
 Documented in `bastion manual running`.
 
@@ -335,12 +345,14 @@ add a site to a tenant
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
 
-| flag                | meaning                                                        |
-| ------------------- | -------------------------------------------------------------- |
-| `--tenant <name>`   | the tenant to add it to                                        |
-| `--bundle <path>`   | the site payload                                               |
-| `--template <url>`  | pull a worker template and read its bindings from its manifest |
-| `--probe <profile>` | the profile that proves a boot                                 |
+| flag                  | meaning                                             |
+| --------------------- | --------------------------------------------------- |
+| `--tenant <name>`     | the tenant to add it to                             |
+| `--bundle <path       | url>`                                               | the site payload                                               |
+| `--template <path     | url>`                                               | pull a worker template and read its bindings from its manifest |
+| `--probe <profile>`   | the profile that proves a boot                      |
+| `--checksum <sha256>` | the digest a download must hash to                  |
+| `--insecure-source`   | accept a plaintext download, or one on this network |
 
 Documented in `bastion manual sites`.
 
@@ -351,6 +363,11 @@ read a worker template and report what bastion would and would not carry
 | argument | required | meaning              |
 | -------- | -------- | -------------------- |
 | `source` | yes      | a url or a directory |
+
+| flag                  | meaning                                             |
+| --------------------- | --------------------------------------------------- |
+| `--checksum <sha256>` | the digest a download must hash to                  |
+| `--insecure-source`   | accept a plaintext download, or one on this network |
 
 Documented in `bastion manual sites`.
 
@@ -376,11 +393,15 @@ Documented in `bastion manual sites`.
 
 ### `bastion site probe <host>`
 
-render the probe path and report what came back
+ask this box to serve the site and report what came back
 
 | argument | required | meaning      |
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
+
+| flag       | meaning                                                            |
+| ---------- | ------------------------------------------------------------------ |
+| `--public` | resolve the hostname instead, checking dns and the certificate too |
 
 Documented in `bastion manual sites`.
 
@@ -390,10 +411,15 @@ Documented in `bastion manual sites`.
 
 upload a bundle and point the site at it
 
-| argument | required | meaning               |
-| -------- | -------- | --------------------- |
-| `host`   | yes      | the hostname          |
-| `bundle` | yes      | the payload to upload |
+| argument | required | meaning                                |
+| -------- | -------- | -------------------------------------- |
+| `host`   | yes      | the hostname                           |
+| `bundle` | yes      | the payload to upload, a path or a url |
+
+| flag                  | meaning                                             |
+| --------------------- | --------------------------------------------------- |
+| `--checksum <sha256>` | the digest a download must hash to                  |
+| `--insecure-source`   | accept a plaintext download, or one on this network |
 
 Documented in `bastion manual deploying`.
 
@@ -449,10 +475,10 @@ send a share of traffic to a version
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
 
-| flag             | meaning                        |
-| ---------------- | ------------------------------ |
-| `--version <id>` | the version to send traffic to |
-| `--percent <n>`  | the share, 0 to 100            |
+| flag            | meaning                        |
+| --------------- | ------------------------------ |
+| `--to <id>`     | the version to send traffic to |
+| `--percent <n>` | the share, 0 to 100            |
 
 Documented in `bastion manual deploying`.
 
@@ -999,7 +1025,12 @@ Documented in `bastion manual isolation`.
 
 ### `bastion cluster init`
 
-make this node the control node
+make this node the control node and mint a join token
+
+| flag          | meaning                                           |
+| ------------- | ------------------------------------------------- |
+| `--node <id>` | the id this node answers to                       |
+| `--rotate`    | mint a fresh join token on a node already control |
 
 Documented in `bastion manual clustering`.
 
@@ -1007,10 +1038,11 @@ Documented in `bastion manual clustering`.
 
 dial out to a control node and join
 
-| flag                  | meaning                 |
-| --------------------- | ----------------------- |
-| `--control <address>` | the control node        |
-| `--token <token>`     | the one-time join token |
+| flag                  | meaning                     |
+| --------------------- | --------------------------- |
+| `--control <address>` | the control node            |
+| `--token <token>`     | the one-time join token     |
+| `--node <id>`         | the id this node answers to |
 
 Documented in `bastion manual clustering`.
 
@@ -1034,9 +1066,10 @@ choose a primary and replicas for a site
 | -------- | -------- | ------------ |
 | `site`   | yes      | the hostname |
 
-| flag             | meaning                |
-| ---------------- | ---------------------- |
-| `--replicas <n>` | how many replica nodes |
+| flag                    | meaning                                                         |
+| ----------------------- | --------------------------------------------------------------- |
+| `--replicas <n>`        | how many replica nodes                                          |
+| `--owner-token <token>` | the site's own token, which copying its data to a replica needs |
 
 Documented in `bastion manual clustering`.
 
@@ -1068,7 +1101,6 @@ install bastion on hosts over SSH and join them
 | flag                             | meaning                                                    |
 | -------------------------------- | ---------------------------------------------------------- |
 | `--dry-run`                      | print the plan and change nothing; the default for a range |
-| `--yes`                          | act rather than printing the plan                          |
 | `--only <hosts>`                 | narrow a range                                             |
 | `--exclude <hosts>`              | skip hosts in a range                                      |
 | `--i-know-this-is-a-large-range` | required above a /24                                       |
@@ -1171,10 +1203,6 @@ execute the plan, resumable per site
 | -------- | -------- | ------------------------------------- |
 | `source` | yes      | an ssh target, a URL, or --cloudflare |
 
-| flag    | meaning                       |
-| ------- | ----------------------------- |
-| `--yes` | act; the default is a dry run |
-
 Documented in `bastion manual migrating`.
 
 ### `bastion migrate resume`
@@ -1191,9 +1219,13 @@ Documented in `bastion manual migrating`.
 
 ## Api
 
-### `bastion api token create`
+### `bastion api token create [name]`
 
 issue a scoped API token
+
+| argument | required | meaning               |
+| -------- | -------- | --------------------- |
+| `name`   | no       | a label for the token |
 
 | flag              | meaning                       |
 | ----------------- | ----------------------------- |

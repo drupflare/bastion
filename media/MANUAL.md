@@ -25,6 +25,7 @@ binary, so a host with no network still has it.
 - [Isolation](#isolation)
 - [Clustering](#clustering)
 - [Access](#access)
+- [Keys and Credentials](#credentials)
 - [Auditing](#auditing)
 - [Adapters](#adapters)
 - [Updating](#updating)
@@ -518,6 +519,47 @@ class without a binding, or a binding without a class, is refused at validation:
 produces a configuration workerd will not start, and a startup failure reads as a broken bundle
 rather than a typo.
 
+### The Default Payload
+
+A site that declares no `worker` block gets the drupflare shape: the Durable Object class
+`SitePhpDurableObject` bound as `SITE`, static files bound as `ASSETS`, and the two KV
+namespaces `CONFIG_KV` and `PAGE_KV`. That is the release artifact from
+`github.com/drupflare/worker`, which carries Drupal and its PHP interpreter compiled to
+WebAssembly, the modules and themes, a per-file pack of core under `assets/drupal-pf/`, and a
+`manifest.json` listing every file with its sha256.
+
+    bastion site add www.example.edu --tenant acme --bundle ./payload.tar.gz --probe drupflare
+
+`probe: drupflare` is the only place in bastion a CMS is named. It sets the ignore file the
+bundle ships beside its assets to `.assetsignore` and the header that proves a boot to
+`x-cfw-php-booted`. `site probe` asks for a path outside the payload's `prefill.json` and
+reads that header, so an answer served from the prefill set cannot pass for a render.
+
+An unknown profile name is not an error. It falls back to the generic profile, which expects no
+boot header, because a worker that is not a CMS sets none.
+
+### Installing From a URL
+
+`--bundle`, `--template` and the `deploy` argument take a path or an https url.
+
+    bastion deploy www.example.edu https://releases.example.edu/payload-1.0.2.tar.gz \
+      --checksum sha256:<hex>
+
+A url is fetched once. The config records the file it landed in under `<state>/bundles/<host>/`,
+so a later start does not re-download and a site's code does not change because someone else's
+server did.
+
+bastion asks with HEAD before it spends the bandwidth, and refuses four things: a scheme that is
+not http, a plaintext url, a name resolving into loopback, link local or the private ranges, and a
+body over 256 MiB. Every hop of a redirect chain is checked rather than only the url that was
+typed, and the chain stops at five hops.
+
+`--checksum` takes `sha256:<hex>` or the bare hex. Without one the digest of what arrived is
+still computed and printed, so it can be recorded and demanded next time.
+
+`--insecure-source` accepts plaintext and a private address, for a mirror on the operator's own
+network. It is per invocation and there is no configuration key that turns it on permanently.
+
 ## Deploying
 
 <a id="deploying"></a>
@@ -526,8 +568,9 @@ Versions are content addressed, so two identical uploads are one version and a
 rollback is a pointer move rather than a re-upload.
 
     bastion deploy www.example.edu ./payload-1.0.2.tar.gz
+    bastion deploy www.example.edu https://releases.example.edu/payload-1.0.2.tar.gz
     bastion versions list www.example.edu
-    bastion rollout www.example.edu --version <id> --percent 10
+    bastion rollout www.example.edu --to <id> --percent 10
     bastion rollback www.example.edu
 
 The rollout split is real: the front door sends that share of traffic to the canary version.
@@ -836,6 +879,42 @@ staying patched.
 A mechanism that used to be present and now is not never downgrades the mode. bastion refuses and
 names what disappeared.
 
+### What Isolated Needs Before It Will Start
+
+Three things, none of which bastion ships, and the mode refuses by name when any is missing.
+
+    /dev/kvm            the host must expose it, and bastion must be able to open it
+    firecracker+jailer  1.15.1 or newer, at /usr/bin/firecracker and /usr/bin/jailer
+    a guest image       a kernel and a root filesystem carrying workerd
+
+`/dev/kvm` is owned by `root:kvm` on a stock Ubuntu, so the account running bastion joins that
+group. The change takes effect on the next login:
+
+    sudo usermod -aG kvm bastion
+    ls -l /dev/kvm
+
+A bare-metal host, or a VM with nested virtualisation turned on, can do this. Most VPS instances
+cannot, and `bastion doctor` says which case a host is in rather than letting it fail later.
+
+The hypervisor is a release binary from the Firecracker project. The release archive names its
+binaries after the version, so install them under the plain names bastion looks for:
+
+    tar xzf firecracker-v1.17.0-x86_64.tgz
+    sudo install -m 0755 release-v1.17.0-x86_64/firecracker-v1.17.0-x86_64 /usr/bin/firecracker
+    sudo install -m 0755 release-v1.17.0-x86_64/jailer-v1.17.0-x86_64 /usr/bin/jailer
+
+A symlink works too. The jailer canonicalises the binary it is given and names each guest's chroot
+after what that resolves to, so a link to a versioned filename puts the version in the chroot path;
+bastion follows the same resolution, so the two agree either way.
+
+The guest image is the operator's. It needs a kernel with virtio block and vsock support, and a
+root filesystem whose init starts workerd against the capnp bastion mounts at `/config.capnp`.
+The tenant's storage arrives as a separate writable device; nothing else in the guest is writable.
+
+Each guest's serial console is written to `/var/log/bastion/guests/<tenant>.log`. A guest that
+fails to boot says why there and nowhere else, so that file is the first thing to read when a
+tenant will not start.
+
 ## Clustering
 
 <a id="clustering"></a>
@@ -843,13 +922,32 @@ names what disappeared.
 workerd has no clustering: objects are always local to one instance of the runtime.
 bastion supplies the cluster itself.
 
-    bastion cluster init
-    bastion cluster join --control 10.0.0.1:8788 --token <token>
+    bastion cluster init --node node-a                 # prints a join token
+    bastion cluster join --control node-a:8787 --token <token> --node node-b
     bastion cluster provision 10.0.1.0/24
-    bastion cluster place www.example.edu --replicas 1
+    bastion cluster place www.example.edu --replicas 1 --owner-token <token>
+    bastion cluster nodes
 
 Children dial out to the control node and it never dials in, so a child behind NAT needs no
-inbound rule.
+inbound rule. A join is refused unless it carries a token, and a refused join leaves the box
+exactly as it was rather than half joined.
+
+**Each node advertises where its peers can reach it.** That cannot be read off the listener: a
+node binds `0.0.0.0` to accept from every interface and no peer can dial that. The advertised
+host defaults to the node id and is set explicitly where the id is not resolvable:
+
+    cluster:
+      role: child
+      control: { address: node-a:8787 }
+      node: { id: node-b, advertise: 10.0.1.7 }
+
+A node that advertises an address no peer can dial is reported as such on the first forward,
+rather than quietly answering from the wrong box.
+
+**The cluster wire is plaintext unless the management listener has a certificate.** A child dials
+that listener, so on a cluster it binds more than loopback, and `up` says so on every start. The
+join token and the node credential both cross it. Put the cluster on a private network, or issue a
+certificate for the management address and point `--control` at `https://`.
 
 Each site has one primary node holding the authoritative object, plus zero or more replica nodes.
 Writes and anything off the serving path go to the primary. Reads on the serving path are served
@@ -861,6 +959,13 @@ Host header, because Drupal derives its session cookie name from the host and a 
 different one renders every visitor anonymous. And a node join renders a form-bearing page and
 verifies the private key exists first, because that key is minted lazily and a freshly migrated
 site without one refuses every replica for a reason that reads like a capacity limit.
+
+**Placement routes reads; it does not copy data.** A replica node holding no copy of the site
+answers those reads from an empty object. Copying it needs the SITE's own owner token, which
+bastion mints at claim and does not keep, so `cluster place` takes it as a flag. Without one the
+placement is recorded, the command exits 3, and it says the data was not copied. It also says so
+when the cluster had nowhere to put a replica: asking for one and silently getting none is how an
+operator comes to believe a site is replicated.
 
 Promotion is not free. Making a replica authoritative loses anything not yet replicated, bounded
 by the replication lag. `cluster promote` prints the worst-case window before it acts.
@@ -894,6 +999,99 @@ body parameter. No route accepts a tenant name from the client.
 Quota is what makes delegation safe. A tenant-admin cannot exhaust the box because `maxSites`
 and the tenant's cgroup bound them, so handing a department self-service costs the operator
 nothing to watch.
+
+## Keys and Credentials
+
+<a id="credentials"></a>
+
+Every secret bastion holds, where it comes from and where it lives. Paths are relative
+to `state:` in the configuration, which defaults to `/var/lib/bastion`.
+
+    state/tokens.json                API tokens, hashed
+    state/console.json               the outstanding dashboard claim, hashed
+    state/cluster-credentials.json   the join token and per-node credentials, hashed
+    state/cluster.json               this node's own cluster credential, in full
+    state/certs/                     certificates and their private keys
+
+**The state directory's permissions are the access control.** bastion writes the four files above
+`0600`, and anything that can read `state/cluster.json` can act as this node. Keep the
+directory owned by the user bastion runs as and mode `0700`.
+
+### The Dashboard Claim
+
+The console has no password and stores no accounts. Signing in exchanges a one-time claim token
+for a session, which is minted at a shell on the box:
+
+    bastion dashboard token
+
+It is spent by the first sign-in, and running the command again replaces the outstanding one. The
+session cookie carries the `__Host-` prefix, which a browser keeps only over https, so a console
+with no certificate serves the app and cannot be signed into. Issue one first:
+
+    bastion cert self-sign 127.0.0.1
+
+### API Tokens
+
+    bastion api token create ci --role tenant-admin --tenant acme
+    bastion api token list
+    bastion api token revoke <id>
+
+The secret prints once and is never stored; only its SHA-256 is kept. A token reaches the routes
+the table marks token-usable and no others, so an unattended credential cannot install software or
+read a secret. Revoke by id; there is no way to recover a lost secret, and no need to, because
+issuing another costs nothing.
+
+### SSH Keys for Provisioning
+
+`cluster provision` installs bastion on other boxes over SSH. It runs `ssh` with
+`BatchMode=yes`, so the key must be one that needs no passphrase prompt: either an unencrypted
+key, or one already loaded into an agent.
+
+    ssh-keygen -t ed25519 -C "bastion provisioning" -f ~/.ssh/bastion_provision
+    ssh-copy-id -i ~/.ssh/bastion_provision.pub root@10.0.1.5
+
+Keep the private half on the control node only, mode `0600`, and give it to nothing else. It
+installs software as root on every box it reaches, so it is the most powerful credential in the
+cluster. An agent is the better answer where one is available:
+
+    eval "$(ssh-agent -s)"
+    ssh-add ~/.ssh/bastion_provision
+
+Host keys are accepted on first use (`StrictHostKeyChecking=accept-new`), so a host that
+changes its key later fails rather than being trusted silently. Pre-seed
+`~/.ssh/known_hosts` with `ssh-keyscan` where first-use trust is not acceptable.
+
+### Cluster Join Tokens
+
+`cluster init` mints one and prints it once. It expires in an hour, is spent by the first join,
+and buys that node a long-lived credential of its own:
+
+    bastion cluster init --node node-a       # prints the token
+    bastion cluster init --rotate            # mints another
+
+Carry it to the child however you already carry secrets. It is a bearer token in transit, which
+is why it is short-lived and single-use rather than a shared cluster password.
+
+### Certificates
+
+    bastion cert self-sign www.example.edu   # a local certificate, no internet needed
+    bastion cert issue www.example.edu       # ACME, needs the http-01 or dns-01 path open
+    bastion cert import www.example.edu --chain chain.pem --key key.pem
+
+Keys live in `state/certs/` beside their certificates. The local CA is the exception and its
+private key is deliberately NOT here: it is generated off-host, only the public certificate and a
+pre-signed leaf are shipped in, and `bastion cert trust` installs the public half. A CA key on a
+multi-tenant box is a interception capability against every client that trusted it.
+
+### Secrets a Site Needs
+
+Site secrets never go in `bastion.yml`. They go through the configured driver, which is the OS
+keyring by default:
+
+    bastion secrets set SMTP_PASSWORD --value ...
+    bastion secrets list
+
+`secrets get` is audited and the value never appears in a `--json` payload.
 
 ## Auditing
 
