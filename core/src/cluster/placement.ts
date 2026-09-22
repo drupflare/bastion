@@ -1,3 +1,4 @@
+import type { Context } from '../context';
 import { BastionError } from '../errors';
 import type { ClusterNode } from './registry';
 
@@ -121,4 +122,50 @@ export function promote(placement: Placement, to: string): Placement {
 		primary: to,
 		replicas: [...placement.replicas.filter((node) => node !== to), placement.primary]
 	};
+}
+
+export const PLACEMENT_FILE = 'placement.json';
+
+/**
+ * The placement table, held by the control node.
+ *
+ * On disk because it is the answer every child asks for on every heartbeat, and the process
+ * answering that is not the process an operator runs `cluster place` in. A child keeps its own
+ * copy in the membership file, so a partition costs it nothing.
+ */
+export class PlacementStore {
+	private readonly ctx: Context;
+	private readonly path: string;
+
+	constructor(ctx: Context, state: string) {
+		this.ctx = ctx;
+		this.path = `${state}/${PLACEMENT_FILE}`;
+	}
+
+	all(): Placement[] {
+		if (!this.ctx.files.exists(this.path)) return [];
+		try {
+			return JSON.parse(this.ctx.files.readText(this.path)) as Placement[];
+		} catch {
+			return [];
+		}
+	}
+
+	get(site: string): Placement | null {
+		return this.all().find((entry) => entry.site === site) ?? null;
+	}
+
+	/** one placement per site, replaced rather than appended, so a re-place is not a second row */
+	put(placement: Placement): Placement[] {
+		const next = [...this.all().filter((entry) => entry.site !== placement.site), placement];
+		this.ctx.files.writeText(this.path, JSON.stringify(next));
+		return next;
+	}
+
+	remove(site: string): void {
+		this.ctx.files.writeText(
+			this.path,
+			JSON.stringify(this.all().filter((entry) => entry.site !== site))
+		);
+	}
 }

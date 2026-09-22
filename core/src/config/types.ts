@@ -216,7 +216,16 @@ export interface DomainsConfig {
 export interface ClusterConfig {
 	role: 'control' | 'child';
 	control?: { address: string };
-	node: { id: string; labels?: Record<string, string> };
+	/**
+	 * `advertise` is the host OTHER nodes reach this one at.
+	 *
+	 * It cannot be derived from the listener, because a node binds `0.0.0.0` to accept from every
+	 * interface and no peer can dial that. Reported as-is, a node told its peers to reach it at a
+	 * wildcard; every forward then resolved to the forwarding node itself and was answered locally,
+	 * which reads exactly like a cluster that is working. Defaults to the node id, which is a name
+	 * peers already have to resolve to find each other.
+	 */
+	node: { id: string; advertise?: string; labels?: Record<string, string> };
 }
 
 export interface RetentionConfig {

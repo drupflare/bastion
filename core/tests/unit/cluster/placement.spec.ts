@@ -9,6 +9,7 @@ const node = (
 ): ClusterNode => ({
 	id,
 	address: `${id}:8788`,
+	serves: `${id}:80`,
 	labels,
 	state,
 	lastSeenAt: 0,
