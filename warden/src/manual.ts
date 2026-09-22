@@ -181,7 +181,7 @@ rather than a cached answer.`
 rollback is a pointer move rather than a re-upload.
 
     bastion deploy www.example.edu ./payload-1.0.2.tar.gz
-    bastion version list www.example.edu
+    bastion versions list www.example.edu
     bastion rollout www.example.edu --version <id> --percent 10
     bastion rollback www.example.edu
 

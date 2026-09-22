@@ -386,7 +386,7 @@ export const COMMANDS: CommandSpec[] = [
 	},
 	{
 		group: 'delivery',
-		name: 'version list',
+		name: 'versions list',
 		description: 'every version of a site',
 		manual: 'deploying',
 		args: [{ name: 'host', required: true, description: 'the hostname' }],
@@ -394,7 +394,7 @@ export const COMMANDS: CommandSpec[] = [
 	},
 	{
 		group: 'delivery',
-		name: 'version show',
+		name: 'versions show',
 		description: 'one version',
 		manual: 'deploying',
 		args: [
@@ -405,7 +405,7 @@ export const COMMANDS: CommandSpec[] = [
 	},
 	{
 		group: 'delivery',
-		name: 'version diff',
+		name: 'versions diff',
 		description: 'what changed between two versions',
 		manual: 'deploying',
 		args: [
@@ -417,7 +417,7 @@ export const COMMANDS: CommandSpec[] = [
 	},
 	{
 		group: 'delivery',
-		name: 'version pin',
+		name: 'versions pin',
 		description: 'hold a version so retention cannot remove it',
 		manual: 'deploying',
 		args: [
