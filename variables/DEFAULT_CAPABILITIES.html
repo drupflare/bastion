@@ -10,9 +10,17 @@
 <ul class="tsd-breadcrumb" aria-label="Breadcrumb">
 <li><a href="" aria-current="page">DEFAULT_CAPABILITIES</a></li></ul>
 <h1>Variable DEFAULT_CAPABILITIES<code class="tsd-tag">Const</code></h1></div>
-<div class="tsd-signature"><span class="tsd-kind-variable">DEFAULT_CAPABILITIES</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/TenantCapabilities.html" class="tsd-signature-type tsd-kind-interface">TenantCapabilities</a><span class="tsd-signature-symbol"> = ...</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-kind-variable">DEFAULT_CAPABILITIES</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/TenantCapabilities.html" class="tsd-signature-type tsd-kind-interface">TenantCapabilities</a><span class="tsd-signature-symbol"> = ...</span></div>
+<div class="tsd-comment tsd-typography"><p>Every capability off.</p>
+<p>The optional bindings default to true rather than false, and the distinction is worth stating:
+<code>codegen</code> and the diagnostic routes are declined because granting them is a security decision,
+while Images or Browser are simply unavailable until an operator installs the primitive. Making
+those default false would mean an operator who installed ImageMagick still had to turn it on in
+two places, and a second switch that must agree with the first is a second thing to get wrong.
+The install IS the opt-in; this block is how an operator withdraws it afterwards.</p>
+</div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/config/defaults.ts#L46">core/src/config/defaults.ts:46</a></li></ul></aside></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/config/defaults.ts#L56">core/src/config/defaults.ts:56</a></li></ul></aside></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

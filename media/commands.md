@@ -89,6 +89,22 @@ what this host can and cannot do, and which limits are enforced
 
 Documented in `bastion manual diagnosing`.
 
+### `bastion capability list`
+
+every optional binding, whether its primitive is installed, and what installs it
+
+Documented in `bastion manual diagnosing`.
+
+### `bastion capability install <slot>`
+
+install the host software one optional binding needs
+
+| argument | required | meaning           |
+| -------- | -------- | ----------------- |
+| `slot`   | yes      | images or browser |
+
+Documented in `bastion manual diagnosing`.
+
 ### `bastion health`
 
 the health tree and every open finding
@@ -319,10 +335,22 @@ add a site to a tenant
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
 
-| flag              | meaning                 |
-| ----------------- | ----------------------- |
-| `--tenant <name>` | the tenant to add it to |
-| `--bundle <path>` | the site payload        |
+| flag                | meaning                                                        |
+| ------------------- | -------------------------------------------------------------- |
+| `--tenant <name>`   | the tenant to add it to                                        |
+| `--bundle <path>`   | the site payload                                               |
+| `--template <url>`  | pull a worker template and read its bindings from its manifest |
+| `--probe <profile>` | the profile that proves a boot                                 |
+
+Documented in `bastion manual sites`.
+
+### `bastion site template <source>`
+
+read a worker template and report what bastion would and would not carry
+
+| argument | required | meaning              |
+| -------- | -------- | -------------------- |
+| `source` | yes      | a url or a directory |
 
 Documented in `bastion manual sites`.
 

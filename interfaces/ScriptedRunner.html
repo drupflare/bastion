@@ -20,14 +20,14 @@ a spec asserts step order across the two.</p>
 <p><code>execFile</code>, never a shell, so no argument is word-split.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ScriptedRunner</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#calls">calls</a><span class="tsd-signature-symbol">:</span> <a href="RecordedCall.html" class="tsd-signature-type tsd-kind-interface">RecordedCall</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#run-1">run</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">command</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">args</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <a href="RunOptions.html" class="tsd-signature-type tsd-kind-interface">RunOptions</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="RunResult.html" class="tsd-signature-type tsd-kind-interface">RunResult</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#spawn-1">spawn</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">command</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">args</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <a href="RunOptions.html" class="tsd-signature-type tsd-kind-interface">RunOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="Started.html" class="tsd-signature-type tsd-kind-interface">Started</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="2379">
+<section class="tsd-panel tsd-hierarchy" data-refl="2910">
 <h4>Hierarchy (<a href="../hierarchy.html#ScriptedRunner">View Summary</a>)</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><a href="CommandRunner.html" class="tsd-signature-type tsd-kind-interface">CommandRunner</a>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">ScriptedRunner</span></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/host/exec.ts#L97">core/src/host/exec.ts:97</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/host/exec.ts#L97">core/src/host/exec.ts:97</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -51,7 +51,7 @@ a spec asserts step order across the two.</p>
 <div class="tsd-comment tsd-typography"><p>every call in the order it was made, across both modes</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/host/exec.ts#L99">core/src/host/exec.ts:99</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/host/exec.ts#L99">core/src/host/exec.ts:99</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -70,7 +70,7 @@ a spec asserts step order across the two.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="RunResult.html" class="tsd-signature-type tsd-kind-interface">RunResult</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <p>Inherited from <a href="CommandRunner.html">CommandRunner</a>.<a href="CommandRunner.html#run">run</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/host/exec.ts#L38">core/src/host/exec.ts:38</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/host/exec.ts#L38">core/src/host/exec.ts:38</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="spawn"><span>spawn</span><a href="#spawn" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-inherited">
@@ -86,7 +86,7 @@ a spec asserts step order across the two.</p>
 <h4 class="tsd-returns-title">Returns <a href="Started.html" class="tsd-signature-type tsd-kind-interface">Started</a></h4><aside class="tsd-sources">
 <p>Inherited from <a href="CommandRunner.html">CommandRunner</a>.<a href="CommandRunner.html#spawn">spawn</a></p>
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/host/exec.ts#L39">core/src/host/exec.ts:39</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/host/exec.ts#L39">core/src/host/exec.ts:39</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

@@ -12,7 +12,7 @@
 <h1>Interface Principal</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Principal</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#credential">credential</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;session&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;token&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#id">id</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#role">role</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;operator&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;tenant-admin&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;tenant-viewer&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tenant">tenant</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/api/authz.ts#L6">core/src/api/authz.ts:6</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/api/authz.ts#L6">core/src/api/authz.ts:6</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -34,24 +34,24 @@
 <div class="tsd-comment tsd-typography"><p><code>session</code> or <code>token</code>, so an audit line says which credential was used</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/api/authz.ts#L12">core/src/api/authz.ts:12</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/api/authz.ts#L12">core/src/api/authz.ts:12</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="id"><span>id</span><a href="#id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/api/authz.ts#L7">core/src/api/authz.ts:7</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/api/authz.ts#L7">core/src/api/authz.ts:7</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="role"><span>role</span><a href="#role" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">role</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">&quot;operator&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;tenant-admin&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;tenant-viewer&quot;</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/api/authz.ts#L8">core/src/api/authz.ts:8</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/api/authz.ts#L8">core/src/api/authz.ts:8</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tenant"><span>tenant</span><a href="#tenant" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tenant</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
 <div class="tsd-comment tsd-typography"><p>the tenant this credential is scoped to; null only for an operator</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/274124291d48de363dd92edde07c44edd0b17786/core/src/api/authz.ts#L10">core/src/api/authz.ts:10</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/9df2b4cfcf1fe1508b2b5de357ebaca8c9005bb2/core/src/api/authz.ts#L10">core/src/api/authz.ts:10</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
