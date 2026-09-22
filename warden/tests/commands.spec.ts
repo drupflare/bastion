@@ -300,10 +300,29 @@ describe('delivery', () => {
 		expect(await run(third.ctx, ['versions', 'diff', 'www.example.edu', id, id])).toBe(EXIT.OK);
 	});
 
-	it('refuses a rollout with no --version rather than guessing one', async () => {
+	it('refuses a rollout naming no version rather than guessing one', async () => {
 		const { ctx } = harness(withBundle);
 		await run(ctx, ['deploy', 'www.example.edu', '/srv/payload.tar.gz']);
 		expect(await run(ctx, ['rollout', 'www.example.edu'])).toBe(EXIT.USAGE);
+	});
+
+	/**
+	 * The flag is `--to`, because `--version` never reached this command.
+	 *
+	 * commander answers `--version` from the program's own version option, so
+	 * `bastion rollout <host> --version <id>` printed `1.0.0`, exited 0 and rolled out nothing.
+	 * The spec above passed throughout: it only ever asserted the refusal.
+	 */
+	it('splits traffic to the version named with --to', async () => {
+		const { ctx, io, files } = harness(withBundle);
+		await run(ctx, ['--json', 'deploy', 'www.example.edu', '/srv/payload.tar.gz']);
+		const id = (JSON.parse(io.outText().trim()) as { version: { id: string } }).version.id;
+
+		const second = withDisk(files);
+		expect(
+			await run(second.ctx, ['rollout', 'www.example.edu', '--to', id, '--percent', '25'])
+		).toBe(EXIT.OK);
+		expect(second.io.outText()).toContain('25');
 	});
 
 	it('exits 2 rolling back a site with nothing to go back to', async () => {

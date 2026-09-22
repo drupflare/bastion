@@ -173,17 +173,19 @@ export function runVersionPin(ctx: Context, globals: Globals, host: string, id: 
 
 export function runRollout(
 	ctx: Context,
-	globals: Globals & { version?: string; percent?: string },
+	globals: Globals & { to?: string; percent?: string },
 	host: string
 ): void {
 	const loaded = load(ctx, globals);
 	siteOrRefuse(loaded, host);
-	if (globals.version === undefined) {
-		throw new BastionError('usage', 'name the version to roll out with --version');
+	// `--to` rather than `--version`, which commander answers from the program's own version flag:
+	// `bastion rollout <host> --version <id>` printed the bastion version and rolled out nothing
+	if (globals.to === undefined) {
+		throw new BastionError('usage', 'name the version to roll out with --to');
 	}
 	const percent = Number(globals.percent ?? '10');
 	const versions = store(ctx, loaded);
-	const deployment = versions.rollout(host, globals.version, percent, 'operator', ctx.now());
+	const deployment = versions.rollout(host, globals.to, percent, 'operator', ctx.now());
 	// shown against a real key, so the split reads as the router will actually apply it
 	const sample = pickVersion(deployment, 'example-session');
 	emit(ctx, globals, { deployment, sample }, () =>
