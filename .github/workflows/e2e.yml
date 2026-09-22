@@ -74,9 +74,6 @@ jobs:
         run: REQUIRE_WORKERD=1 bun run test:e2e
       - name: Run the Operator Lane
         run: REQUIRE_FLOW=1 bun run test:e2e
-      # each spec refuses rather than skipping when its flag is set and a prerequisite is absent,
-      # so neither step above can go green without having run. This asserts that refusal still
-      # works: point the lane at a binary that is not there and it has to fail
       - name: Refuse Rather Than Skip
         run: |
           set -euo pipefail
