@@ -35,6 +35,24 @@ export interface FileHost {
 	/** POSIX mode bits, or null where the path is absent */
 	mode(path: string): number | null;
 	chmod(path: string, mode: number): void;
+	/**
+	 * Hardlinks, falling back to a copy where the two paths are on different filesystems.
+	 *
+	 * A jailer chroot needs the guest kernel and root filesystem INSIDE it, and those are hundreds
+	 * of megabytes; copying them per boot makes a restart cost a disk write of the whole image.
+	 */
+	link(source: string, dest: string): void;
+	/** owning uid and gid, or null where the path is absent */
+	owner(path: string): { uid: number; gid: number } | null;
+	chown(path: string, uid: number, gid: number): void;
+	/**
+	 * Resolves symlinks, answering the path itself where it cannot.
+	 *
+	 * The jailer canonicalizes its `--exec-file` and names the chroot after what it resolves to, so
+	 * a pinned binary reached through a stable symlink puts the chroot somewhere the configured
+	 * path does not name.
+	 */
+	realpath(path: string): string;
 	/** bytes on the filesystem holding this path, or null where it cannot be read */
 	space(path: string): { totalBytes: number; freeBytes: number } | null;
 }
@@ -73,6 +91,30 @@ export function nodeFiles(): FileHost {
 		size: (p) => fs.statSync(p).size,
 		mode: (p) => (fs.existsSync(p) ? fs.statSync(p).mode & 0o7777 : null),
 		chmod: (p, m) => fs.chmodSync(p, m),
+		link: (source, dest) => {
+			fs.mkdirSync(dirname(dest), { recursive: true });
+			fs.rmSync(dest, { force: true });
+			try {
+				fs.linkSync(source, dest);
+			} catch (error) {
+				// a rootfs on its own mount is ordinary, and a hardlink cannot cross one
+				if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+				fs.copyFileSync(source, dest);
+			}
+		},
+		owner: (p) => {
+			if (!fs.existsSync(p)) return null;
+			const stat = fs.statSync(p);
+			return { uid: stat.uid, gid: stat.gid };
+		},
+		chown: (p, uid, gid) => fs.chownSync(p, uid, gid),
+		realpath: (p) => {
+			try {
+				return fs.realpathSync(p);
+			} catch {
+				return p;
+			}
+		},
 		space: (p) => {
 			try {
 				const stat = fs.statfsSync(p);
@@ -94,6 +136,7 @@ export function memoryFiles(
 ): FileHost {
 	const store = new Map<string, Uint8Array>();
 	const modes = new Map<string, number>();
+	const owners = new Map<string, { uid: number; gid: number }>();
 	const dirs = new Set<string>(['/']);
 	const enc = new TextEncoder();
 	const norm = (p: string): string => p.replace(/\/+$/, '') || '/';
@@ -173,6 +216,18 @@ export function memoryFiles(
 		chmod: (p, m) => {
 			modes.set(norm(p), m);
 		},
+		link: (source, dest) => {
+			const bytes = store.get(norm(source));
+			if (bytes === undefined) throw new Error(`ENOENT: ${source}`);
+			store.set(norm(dest), bytes);
+			addParents(dest);
+		},
+		owner: (p) => (host.exists(p) ? (owners.get(norm(p)) ?? { uid: 0, gid: 0 }) : null),
+		chown: (p, uid, gid) => {
+			owners.set(norm(p), { uid, gid });
+		},
+		// the memory host holds no symlinks, so a path already names what it resolves to
+		realpath: (p) => norm(p),
 		space: () => space
 	};
 	return host;
