@@ -12,6 +12,7 @@
 import type { SiteWorkerConfig } from '../config/types';
 import type { Context } from '../context';
 import { BastionError } from '../errors';
+import { fetchRemote, isRemote, type RemoteOptions } from './remote';
 
 /** what happened to one binding in the manifest */
 export interface BindingFinding {
@@ -325,6 +326,8 @@ export interface PullOptions {
 	dest: string;
 	/** substituted in the gate lane; the real one shells out to tar */
 	extract?(archive: string, dest: string): Promise<void>;
+	/** passed through to the download, so a url template answers to the same safety flags */
+	remote?: Partial<RemoteOptions>;
 }
 
 function manifestIn(ctx: Context, dir: string): string {
@@ -363,7 +366,7 @@ export async function pullTemplate(
 	options: PullOptions
 ): Promise<TemplatePlan> {
 	const local = url.startsWith('file://') ? url.slice('file://'.length) : url;
-	if (!/^https?:\/\//.test(url)) {
+	if (!isRemote(url) || url.startsWith('file://')) {
 		if (!ctx.files.exists(local)) {
 			throw new BastionError('usage', `no template at ${local}`, {
 				next: 'bastion site add --template'
@@ -372,21 +375,10 @@ export async function pullTemplate(
 		return readTemplate(ctx, local);
 	}
 
-	const response = await ctx.fetch(url);
-	if (!response.ok) {
-		throw new BastionError('usage', `the template at ${url} answered ${response.status}`, {
-			retryable: response.status >= 500,
-			next: 'bastion site add --template'
-		});
-	}
-	const bytes = new Uint8Array(await response.arrayBuffer());
-	if (bytes.byteLength > MAX_TEMPLATE_BYTES) {
-		throw new BastionError(
-			'usage',
-			`the template at ${url} is ${bytes.byteLength} bytes, over the ${MAX_TEMPLATE_BYTES} ceiling`,
-			{ next: null }
-		);
-	}
+	const { bytes } = await fetchRemote(ctx, url, {
+		maxBytes: MAX_TEMPLATE_BYTES,
+		...options.remote
+	});
 
 	ctx.files.mkdirp(options.dest);
 	const archive = `${options.dest}/.template-download`;
