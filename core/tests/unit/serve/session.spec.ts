@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultContext } from '../../../src/context';
+import { memoryFiles } from '../../../src/host/files';
 import { memoryIo } from '../../../src/io';
 import {
 	SCRYPT_PARAMS,
@@ -159,5 +160,73 @@ describe('SessionStore', () => {
 		const store = new SessionStore(ctx());
 		store.mintClaimToken();
 		expect(store.claim('guessed')).toBe(false);
+	});
+});
+
+/**
+ * The claim token crosses a process boundary, because that is the whole point of it.
+ *
+ * `bastion dashboard token` runs at a shell and the claim is spent by a browser talking to
+ * `serve`. Held in memory it was unusable: every claim answered no, because the process that
+ * minted it had already exited.
+ */
+describe('a claim token between two processes', () => {
+	const stores = () => {
+		const files = memoryFiles({});
+		const ctx = { ...defaultContext(), files, io: memoryIo(), now: () => 1000 };
+		return {
+			files,
+			cli: new SessionStore(ctx, '/var/lib/bastion'),
+			serve: new SessionStore(ctx, '/var/lib/bastion')
+		};
+	};
+
+	it('is minted by one store and spent by another', () => {
+		const { cli, serve } = stores();
+		const token = cli.mintClaimToken();
+		expect(serve.claimed).toBe(false);
+		expect(serve.claim(token)).toBe(true);
+	});
+
+	it('is spent once, and the first store sees that too', () => {
+		const { cli, serve } = stores();
+		const token = cli.mintClaimToken();
+		expect(serve.claim(token)).toBe(true);
+		expect(cli.claim(token)).toBe(false);
+		expect(cli.claimed).toBe(true);
+	});
+
+	it('stores the hash rather than the token, so the file is not a credential', () => {
+		const { cli, files } = stores();
+		const token = cli.mintClaimToken();
+		const written = files.readText('/var/lib/bastion/console.json');
+		expect(written).not.toContain(token);
+		expect(JSON.parse(written).claim).toHaveLength(64);
+	});
+
+	it('answers no when nothing was ever minted', () => {
+		const { serve } = stores();
+		expect(serve.claimed).toBe(true);
+		expect(serve.claim('anything')).toBe(false);
+	});
+
+	it('re-mints, which replaces the one before it', () => {
+		const { cli, serve } = stores();
+		const first = cli.mintClaimToken();
+		const second = cli.mintClaimToken();
+		expect(serve.claim(first)).toBe(false);
+		expect(serve.claim(second)).toBe(true);
+	});
+
+	it('keeps sessions out of the file, since a list of live ids is a credential dump', () => {
+		const { cli, files } = stores();
+		cli.mintClaimToken();
+		const session = cli.adopt({
+			id: 'operator',
+			role: 'operator',
+			tenant: null,
+			credential: 'session'
+		});
+		expect(files.readText('/var/lib/bastion/console.json')).not.toContain(session.id);
 	});
 });

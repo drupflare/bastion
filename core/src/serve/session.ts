@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Principal, Role } from '../api/authz';
 import type { Context } from '../context';
 import { BastionError } from '../errors';
@@ -115,31 +115,85 @@ export function totpValid(secret: string, code: string, at: number, skew = 1): b
  * most needed is the one where the box reaches nothing. A first run prints a one-time claim token
  * rather than shipping a default password.
  */
+export const CONSOLE_FILE = 'console.json';
+
 export class SessionStore {
 	private readonly ctx: Context;
 	private readonly sessions = new Map<string, Session>();
 	private readonly failures = new Map<string, { count: number; until: number }>();
-	private claimToken: string | null = null;
+	private claimHash: string | null = null;
+	private readonly path: string | null;
 
-	constructor(ctx: Context) {
+	/**
+	 * @param state the state directory. Sessions stay in memory on purpose -- a restart signing
+	 * everyone out is correct, and a file of live session ids is a credential dump -- but the CLAIM
+	 * token has to reach another process, because the operator mints it with `bastion dashboard
+	 * token` at a shell and spends it in a browser talking to `serve`. Held in memory it was
+	 * unusable: every claim answered "no", because the process that minted it had exited.
+	 */
+	constructor(ctx: Context, state?: string) {
 		this.ctx = ctx;
+		this.path = state === undefined ? null : `${state}/${CONSOLE_FILE}`;
 	}
 
-	/** the one-time token a first run prints; consumed by the first account created */
+	/** the hash on disk, re-read every time, since another process may have minted or spent it */
+	private storedClaim(): string | null {
+		if (this.path === null) return this.claimHash;
+		if (!this.ctx.files.exists(this.path)) return null;
+		try {
+			return (
+				(JSON.parse(this.ctx.files.readText(this.path)) as { claim?: string }).claim ?? null
+			);
+		} catch {
+			return null;
+		}
+	}
+
+	private writeClaim(hash: string | null): void {
+		this.claimHash = hash;
+		if (this.path === null) return;
+		this.ctx.files.writeText(this.path, JSON.stringify({ claim: hash }));
+		this.ctx.files.chmod(this.path, 0o600);
+	}
+
+	/** the one-time token a first run prints, minted again on demand; only its hash is kept */
 	mintClaimToken(): string {
-		this.claimToken = randomBytes(24).toString('base64url');
-		return this.claimToken;
+		const token = randomBytes(24).toString('base64url');
+		this.writeClaim(createHash('sha256').update(token).digest('hex'));
+		return token;
 	}
 
 	claim(token: string): boolean {
-		if (this.claimToken === null) return false;
-		if (!constantTimeEqual(token, this.claimToken)) return false;
-		this.claimToken = null;
+		const stored = this.storedClaim();
+		if (stored === null) return false;
+		if (!constantTimeEqual(createHash('sha256').update(token).digest('hex'), stored)) {
+			return false;
+		}
+		this.writeClaim(null);
 		return true;
 	}
 
 	get claimed(): boolean {
-		return this.claimToken === null;
+		return this.storedClaim() === null;
+	}
+
+	/**
+	 * The session a spent claim buys.
+	 *
+	 * The operator credential is the claim token rather than a password: bastion stores no
+	 * accounts, so there is nothing to leak and nothing to reset. Re-minting is a command on the
+	 * box, which is the same proof of physical access a password reset would demand anyway.
+	 */
+	adopt(principal: Principal): Session {
+		const session: Session = {
+			id: randomBytes(32).toString('base64url'),
+			principal,
+			csrfToken: randomBytes(32).toString('base64url'),
+			createdAt: this.ctx.now(),
+			expiresAt: this.ctx.now() + SESSION_TTL_MS
+		};
+		this.sessions.set(session.id, session);
+		return session;
 	}
 
 	/** a per-account budget, so a password guess costs an attacker a wait rather than nothing */

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ROUTES } from '../../../src/api/routes';
-import { handleApi, principalFor, type ApiDeps } from '../../../src/api/server';
+import { handleApi, principalFor, SESSION_PATH, type ApiDeps } from '../../../src/api/server';
 import { defaultConfig } from '../../../src/config/defaults';
 import { defaultContext } from '../../../src/context';
 import { memoryIo } from '../../../src/io';
 import { CSRF_HEADER, SESSION_COOKIE } from '../../../src/serve/security';
-import { SessionStore, hashPassword, type Account } from '../../../src/serve/session';
+import { hashPassword, SessionStore, type Account } from '../../../src/serve/session';
 import { TokenStore } from '../../../src/serve/tokens';
 
 const ORIGIN = 'https://127.0.0.1:8787';
@@ -353,5 +353,105 @@ describe('GET /api/session', () => {
 			deps
 		);
 		expect(response.status).toBe(404);
+	});
+});
+
+/**
+ * The claim exchange, which is how a browser gets a credential at all.
+ *
+ * Before this existed the dashboard could render and never sign in: `GET /api/session` answered
+ * 401 forever, there was no route that minted a session, and the claim token `bastion dashboard
+ * token` prints lived in the memory of the process that printed it.
+ */
+describe('POST /api/session', () => {
+	const claimWith = (body: unknown, headers: Record<string, string> = {}) =>
+		new Request(`${ORIGIN}${SESSION_PATH}`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', origin: ORIGIN, ...headers },
+			body: JSON.stringify(body)
+		});
+
+	it('exchanges a freshly minted claim for an operator session', async () => {
+		const { context, deps, sessions } = harness();
+		const claim = sessions.mintClaimToken();
+		const response = await handleApi(context, claimWith({ claim }), deps);
+		expect(response.status).toBe(200);
+		const body = (await response.json()) as { result: { role: string; csrf: string } };
+		expect(body.result.role).toBe('operator');
+		expect(body.result.csrf).toBeTruthy();
+	});
+
+	it('sets a __Host- cookie, which a browser keeps only over tls', async () => {
+		const { context, deps, sessions } = harness();
+		const response = await handleApi(
+			context,
+			claimWith({ claim: sessions.mintClaimToken() }),
+			deps
+		);
+		const cookie = response.headers.get('set-cookie') ?? '';
+		expect(cookie).toContain('__Host-bastion-session=');
+		expect(cookie).toContain('Secure');
+		expect(cookie).toContain('HttpOnly');
+	});
+
+	it('spends the claim, so the same one cannot be used twice', async () => {
+		const { context, deps, sessions } = harness();
+		const claim = sessions.mintClaimToken();
+		expect((await handleApi(context, claimWith({ claim }), deps)).status).toBe(200);
+		expect((await handleApi(context, claimWith({ claim }), deps)).status).toBe(401);
+	});
+
+	it('refuses a wrong claim and a missing one with the same words', async () => {
+		const { context, deps, sessions } = harness();
+		sessions.mintClaimToken();
+		const wrong = await handleApi(context, claimWith({ claim: 'nope' }), deps);
+		const missing = await handleApi(context, claimWith({}), deps);
+		expect(wrong.status).toBe(401);
+		expect(await wrong.text()).toBe(await missing.text());
+	});
+
+	it('refuses when no claim has been minted at all', async () => {
+		const { context, deps } = harness();
+		expect((await handleApi(context, claimWith({ claim: 'anything' }), deps)).status).toBe(401);
+	});
+
+	it('gives the session it minted, which the identity route then reads back', async () => {
+		const { context, deps, sessions } = harness();
+		const minted = await handleApi(
+			context,
+			claimWith({ claim: sessions.mintClaimToken() }),
+			deps
+		);
+		const id = /__Host-bastion-session=([^;]+)/.exec(
+			minted.headers.get('set-cookie') ?? ''
+		)?.[1];
+		const identity = await handleApi(
+			context,
+			get(SESSION_PATH, { cookie: `${SESSION_COOKIE}=${id as string}` }),
+			deps
+		);
+		expect(identity.status).toBe(200);
+		expect(JSON.stringify(await identity.json())).toContain('operator');
+	});
+
+	it('signs out, and the session stops working', async () => {
+		const { context, deps, sessions } = harness();
+		const minted = await handleApi(
+			context,
+			claimWith({ claim: sessions.mintClaimToken() }),
+			deps
+		);
+		const id = /__Host-bastion-session=([^;]+)/.exec(
+			minted.headers.get('set-cookie') ?? ''
+		)?.[1];
+		const cookie = { cookie: `${SESSION_COOKIE}=${id as string}` };
+
+		const out = await handleApi(
+			context,
+			new Request(`${ORIGIN}${SESSION_PATH}`, { method: 'DELETE', headers: cookie }),
+			deps
+		);
+		expect(out.headers.get('set-cookie')).toContain('Max-Age=0');
+		expect((await handleApi(context, get(SESSION_PATH, cookie), deps)).status).toBe(401);
 	});
 });

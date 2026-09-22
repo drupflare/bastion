@@ -3,13 +3,15 @@ import type { Context } from '../context';
 import { BastionError, EXIT } from '../errors';
 import {
 	checkCsrf,
+	clearSessionCookie,
 	CSRF_HEADER,
 	nonce,
 	readCookie,
 	securityHeaders,
-	SESSION_COOKIE
+	SESSION_COOKIE,
+	sessionCookie
 } from '../serve/security';
-import type { SessionStore } from '../serve/session';
+import { SESSION_TTL_MS, type SessionStore } from '../serve/session';
 import { bearer, type TokenStore } from '../serve/tokens';
 import { authorize, tenantFor, type Principal } from './authz';
 import { pathParams, routeFor, type RouteDefinition } from './routes';
@@ -110,6 +112,63 @@ export async function handleApi(ctx: Context, request: Request, deps: ApiDeps): 
 			200,
 			{ ...headers, 'x-bastion-nonce': scriptNonce }
 		);
+	}
+
+	/**
+	 * The one route that mints a credential rather than needing one.
+	 *
+	 * The operator's dashboard credential is the claim token `bastion dashboard token` prints, and
+	 * this is where it becomes a session. It carries no `Action`, so it is answered here rather
+	 * than from the route table, exactly like the identity read above.
+	 *
+	 * The cookie is `__Host-` prefixed and `Secure`, so a browser only keeps it over tls. On a
+	 * console with no certificate the exchange still succeeds and the browser drops the cookie,
+	 * which is why `up` warns and names `bastion cert self-sign`.
+	 */
+	if (request.method === 'POST' && url.pathname === SESSION_PATH) {
+		let offered = '';
+		try {
+			offered = ((await request.json()) as { claim?: string }).claim ?? '';
+		} catch {
+			offered = '';
+		}
+		if (offered === '' || !deps.sessions.claim(offered)) {
+			// one message for a missing claim and a wrong one, and a spent one reads the same
+			return json(
+				{
+					ok: false,
+					error: { code: 'unauthenticated', message: 'that claim is not valid' }
+				},
+				401,
+				headers
+			);
+		}
+		const session = deps.sessions.adopt({
+			id: 'operator',
+			role: 'operator',
+			tenant: null,
+			credential: 'session'
+		});
+		deps.audit?.({
+			event: 'api.session.claim',
+			principal: session.principal.id,
+			tenant: null,
+			detail: { method: 'POST', path: url.pathname }
+		});
+		return json({ ok: true, result: { ...session.principal, csrf: session.csrfToken } }, 200, {
+			...headers,
+			'x-bastion-nonce': scriptNonce,
+			'set-cookie': sessionCookie(session.id, Math.floor(SESSION_TTL_MS / 1000))
+		});
+	}
+
+	if (request.method === 'DELETE' && url.pathname === SESSION_PATH) {
+		const id = readCookie(request.headers.get('cookie'), SESSION_COOKIE);
+		if (id !== null) deps.sessions.logout(id);
+		return json({ ok: true, result: { signedOut: true } }, 200, {
+			...headers,
+			'set-cookie': clearSessionCookie()
+		});
 	}
 
 	const route: RouteDefinition | null = routeFor(request.method, url.pathname);
