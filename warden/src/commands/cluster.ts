@@ -22,11 +22,13 @@ import {
 	provision,
 	readHost,
 	refusingTransport,
+	ReplicaDriver,
 	reportOf,
 	UNREACHABLE_AFTER_MS,
 	writeConfig,
 	type ClusterNode,
 	type DiscoveredSite,
+	type ReplicaResult,
 	type SiteProgress
 } from '@drupflare/bastion';
 import { kv, table } from '../format';
@@ -65,11 +67,11 @@ export function runClusterNodes(ctx: Context, globals: Globals): void {
 	);
 }
 
-export function runClusterPlace(
+export async function runClusterPlace(
 	ctx: Context,
-	globals: Globals & { replicas?: string },
+	globals: Globals & { replicas?: string; ownerToken?: string },
 	site: string
-): void {
+): Promise<number> {
 	const loaded = load(ctx, globals);
 	const self = loaded.config.cluster?.node;
 	if (self === undefined) {
@@ -95,24 +97,107 @@ export function runClusterPlace(
 	if (tenant === '') throw new BastionError('usage', `no tenant holds ${site}`);
 
 	const store = new PlacementStore(ctx, loaded.state);
-	const placed = planPlacement({
+	const previous = store.get(site);
+	const planned = planPlacement({
 		site,
 		tenant,
 		nodes: registry.list(),
 		replicas: Number(globals.replicas ?? '0'),
-		existing: store.all()
+		// this site's own row is excluded, or on a re-place it counts against itself and the
+		// planner moves it to whichever node looks emptier
+		existing: store.all().filter((entry) => entry.site !== site)
 	});
+
+	/**
+	 * A re-place never moves the primary.
+	 *
+	 * The planner is least-loaded-first, so running `cluster place` twice re-elected the primary
+	 * onto the other node. Moving a primary loses every write not yet replicated, which is what
+	 * `cluster promote` exists to say out loud before it acts; doing it silently from a command
+	 * that reads as "add a replica" is the worst version of that.
+	 */
+	const placed =
+		previous === null
+			? planned
+			: {
+					...planned,
+					primary: previous.primary,
+					replicas: planned.replicas.filter((node) => node !== previous.primary)
+				};
 	// written, not just printed: a placement nothing records is one no child ever hears about
 	store.put(placed);
 
-	emit(ctx, globals, placed, () =>
-		kv([
-			['site', placed.site],
-			['tenant', placed.tenant],
-			['primary', placed.primary],
-			['replicas', placed.replicas.join(', ') || '(none)']
-		])
+	/**
+	 * Placement routes reads; it does not copy data.
+	 *
+	 * A replica node that holds no copy of the site answers those reads from an empty object, and
+	 * nothing about the placement itself would say so. Provisioning needs the SITE's own owner
+	 * token, which bastion mints at claim and does not keep, so it is supplied here or the
+	 * placement says plainly that no data moved.
+	 */
+	const steps: ReplicaResult[] = [];
+	const addressOf = (id: string): string => registry.get(id)?.address ?? '';
+	if (placed.replicas.length > 0 && globals.ownerToken !== undefined) {
+		const driver = new ReplicaDriver(ctx, globals.ownerToken, nodeCredentialFor(ctx, loaded));
+		for (const replica of placed.replicas) {
+			steps.push(
+				...(await driver.join(addressOf(placed.primary), addressOf(replica), site, 0))
+			);
+		}
+	}
+	const provisioned = steps.length > 0 && steps.every((step) => step.ok);
+	// asking for two replicas and getting one is a downgrade, and returning it as a success is how
+	// an operator believes a site is replicated when the cluster had nowhere to put a copy
+	const asked = Number(globals.replicas ?? '0');
+	const short = asked > placed.replicas.length;
+
+	emit(ctx, globals, { ...placed, asked, steps, provisioned }, () =>
+		[
+			kv([
+				['site', placed.site],
+				['tenant', placed.tenant],
+				['primary', placed.primary],
+				['replicas', placed.replicas.join(', ') || '(none)'],
+				[
+					'data',
+					placed.replicas.length === 0
+						? '(no replicas)'
+						: provisioned
+							? 'provisioned'
+							: 'NOT copied'
+				]
+			]),
+			...steps.map((step) => `  ${step.action}: ${step.stage} -- ${step.detail}`),
+			...(previous !== null && previous.primary !== planned.primary
+				? [
+						'',
+						`the primary stayed ${previous.primary}: \`cluster promote\` moves one, and ` +
+							'says what it costs first'
+					]
+				: []),
+			...(short
+				? [
+						'',
+						`${asked} replica(s) were asked for and ${placed.replicas.length} placed: no ` +
+							'other node is ready to hold one.'
+					]
+				: []),
+			...(placed.replicas.length === 0 || provisioned
+				? []
+				: [
+						'',
+						'the replica will receive read traffic and holds no copy of the site until it',
+						'is provisioned. Pass --owner-token <token> to copy the data now.'
+					])
+		].join('\n')
 	);
+	// a replica placed with no data, or fewer than were asked for, is a finding rather than success
+	return !short && (placed.replicas.length === 0 || provisioned) ? 0 : 3;
+}
+
+/** this node's own cluster credential, which the endpoint on the far side checks */
+function nodeCredentialFor(ctx: Context, loaded: Loaded): string {
+	return new MembershipStore(ctx, loaded.state).read()?.credential ?? '';
 }
 
 export function runClusterPromote(
@@ -417,10 +502,12 @@ export function runClusterStatus(ctx: Context, globals: Globals): number {
 	const loaded = load(ctx, globals);
 	const cluster = loaded.config.cluster;
 	if (cluster === undefined) {
+		// `nodes` is present and empty rather than absent: a caller that reads it on every answer
+		// should get a list, and the dashboard's cluster page threw on the box that has no cluster
 		emit(
 			ctx,
 			globals,
-			{ clustered: false },
+			{ clustered: false, nodes: [], placement: [] },
 			() => 'this node is not in a cluster; `bastion cluster init` starts one'
 		);
 		return 0;
