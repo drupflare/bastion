@@ -1,0 +1,49 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"compatibility_date": "2026-05-18",
+	"compatibility_flags": ["nodejs_compat"],
+	"triggers": {
+		// inbound-mail poll (no-op unless a mailbox is configured) + daily retention + audit sweeps
+		"crons": ["*/15 * * * *", "0 3 * * *", "30 3 * * *"]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"migrations_table": "_hub_migrations",
+			"migrations_dir": ".output/server/db/migrations/",
+			"database_id": "1a135a81-7a80-40c6-ae5f-ff7186bee513"
+		},
+		{
+			"binding": "DB_SECONDARY",
+			"migrations_table": "_hub_migrations",
+			"migrations_dir": ".output/server/db/migrations/",
+			"database_id": "83126fee-3e52-4bfc-8f3b-960165ec9322"
+		},
+		{
+			"binding": "DB_TERTIARY",
+			"migrations_table": "_hub_migrations",
+			"migrations_dir": ".output/server/db/migrations/",
+			"database_id": "5e232ef7-2111-414f-b337-508fd1f6c534"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "KV",
+			"id": "b509dc355d4547d080495f0547d95627"
+		},
+		{
+			"binding": "CACHE",
+			"id": "a34268e94611463c83eeecb848570801"
+		}
+	],
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1.0
+	},
+	"r2_buckets": [
+		{
+			"binding": "BLOB",
+			"bucket_name": "earth-app-smoke-blob"
+		}
+	]
+}

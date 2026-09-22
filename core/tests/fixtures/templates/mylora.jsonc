@@ -1,0 +1,38 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"migrations_table": "_hub_migrations",
+			"migrations_dir": ".output/server/db/migrations/"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "KV"
+		},
+		{
+			"binding": "CACHE"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "BLOB"
+		}
+	],
+	"ai": {
+		"binding": "AI",
+		"experimental_remote": true
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1.0
+	},
+	"durable_objects": {
+		"bindings": [{ "name": "$DurableObject", "class_name": "$DurableObject" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["$DurableObject"] }],
+	"triggers": {
+		"crons": ["* * * * *"]
+	}
+}
