@@ -437,6 +437,9 @@ drivers:
     driver: openai-compatible
     endpoint: http://127.0.0.1:11434/v1
     allow: [llama3.1:8b, nomic-embed-text]
+  vectorize:
+    driver: memory
+    dimensions: 768
 tenants:
   - name: research
     sites:
@@ -447,6 +450,10 @@ tenants:
           ai: [AI]
           vectorize: [INDEX]
 ```
+
+Both drivers are named because both bindings are. A site that binds a slot whose driver is unset
+is refused by `bastion config validate` with the setting it needs, rather than starting and
+answering 501 the first time somebody uses it.
 
 The worker calls `env.AI.run()` and `env.VECTORIZE.query()` unchanged. Neither has a field in
 workerd's schema, so bastion binds each through `wrapped`: an internal module gets a fetcher for
