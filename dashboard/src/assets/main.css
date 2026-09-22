@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+@theme {
+	--color-ok: #2f855a;
+	--color-warn: #b7791f;
+	--color-bad: #c53030;
+	--color-critical: #822727;
+}
+
+:root {
+	color-scheme: light dark;
+}
+
+/* the app shell is `fixed inset-0`, so nothing else paints the body; without this the browser
+   canvas stays transparent and shows white through an overscroll in dark mode */
+body {
+	@apply bg-default text-default;
+}
+
+/* covers CSS-driven motion only; anything animated from JS or canvas has to check the query
+   itself, so this is the floor rather than the whole answer */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

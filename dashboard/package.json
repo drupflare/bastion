@@ -1,0 +1,39 @@
+{
+	"name": "@drupflare/bastion-dashboard",
+	"version": "1.0.0",
+	"type": "module",
+	"private": true,
+	"description": "The bastion dashboard, prerendered and embedded in the binary",
+	"scripts": {
+		"dev": "bunx nuxi dev --port 3100",
+		"dev:rig": "bun tests/browser/utils/server.ts",
+		"build": "bunx nuxi generate",
+		"postinstall": "bunx nuxi prepare",
+		"typecheck": "bunx vue-tsc --noEmit -p .nuxt/tsconfig.app.json",
+		"test:unit": "vitest run",
+		"test:browser": "playwright test",
+		"test:browser:ui": "playwright test --ui"
+	},
+	"devDependencies": {
+		"@drupflare/bastion": "workspace:*",
+		"@iconify-json/lucide": "^1.2.135",
+		"@nuxt/hints": "^1.1.4",
+		"@nuxt/icon": "^2.4.1",
+		"@nuxt/test-utils": "^4.1.0",
+		"@nuxt/ui": "^4.9.0",
+		"@nuxtjs/color-mode": "^4.0.1",
+		"@playwright/test": "^1.50.0",
+		"@tailwindcss/vite": "^4.1.0",
+		"@vue/test-utils": "^2.4.6",
+		"@vueuse/core": "^14.4.0",
+		"@vueuse/nuxt": "^14.4.0",
+		"happy-dom": "^16.0.0",
+		"nuxt": "~4.5.2",
+		"nuxt-viewport": "^2.6.0",
+		"tailwindcss": "^4.1.0",
+		"vitest": "^4.1.0",
+		"vue": "^3.5.0",
+		"vue-router": "^5.2.0",
+		"vue-tsc": "^3.3.9"
+	}
+}
