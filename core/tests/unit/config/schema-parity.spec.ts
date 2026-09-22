@@ -1,5 +1,6 @@
 import Ajv from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
+import { WRAPPED_SLOTS } from '../../../src/capnp/plan';
 import schema from '../../../src/config/schema.json' with { type: 'json' };
 import { validate } from '../../../src/config/validate';
 
@@ -32,6 +33,21 @@ const accept: [string, unknown][] = [
 	[
 		'a tenant capability block',
 		{ version: 1, tenants: [{ ...tenant, capabilities: { codegen: true } }] }
+	],
+	// derived rather than listed: the schema carried six driver keys while the validator refused a
+	// browser binding for want of `drivers.browser`, so an editor rejected a document the runtime
+	// required. A new wrapped slot now fails here until the schema carries its key too
+	[
+		'a driver for every wrapped slot that names one',
+		{
+			version: 1,
+			drivers: Object.fromEntries(
+				WRAPPED_SLOTS.filter((slot) => slot.driver !== null).map((slot) => [
+					slot.driver,
+					{ driver: 'whatever-the-operator-runs' }
+				])
+			)
+		}
 	]
 ];
 

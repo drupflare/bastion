@@ -40,17 +40,22 @@ export interface AdapterSet {
 }
 
 /**
- * The request handler workerd's bound services reach over the unix socket.
+ * The request handler one adapter's socket answers.
  *
  * A pure function of a `Request`, so the gate lane drives every branch without binding a socket.
- * The service is selected by the first path segment, which is how one listener serves all of a
- * tenant's adapters.
+ *
+ * **The slot is the SOCKET, not the path.** workerd addresses an `external` service by its address
+ * and then sends whatever path the runtime generates: a KV read arrives as `GET /<key>` and a
+ * cache lookup as `GET /<url>`, neither of which names the adapter it belongs to. Routing on the
+ * first path segment worked for the wrapped shims, which write their own URLs, and silently
+ * misrouted every native designator.
  */
-export function handleAdapterRequest(adapters: AdapterSet, request: Request): Promise<Response> {
-	const url = new URL(request.url);
-	const [, slot, ...rest] = url.pathname.split('/');
-	const path = `/${rest.join('/')}`;
-
+export function handleSlot(
+	adapters: AdapterSet,
+	slot: string,
+	request: Request,
+	path: string
+): Promise<Response> {
 	switch (slot) {
 		case 'cache':
 			return handleCache(adapters.cache, request, path);
@@ -80,6 +85,35 @@ export function handleAdapterRequest(adapters: AdapterSet, request: Request): Pr
 			return Promise.resolve(new Response('no such adapter', { status: 404 }));
 	}
 }
+
+/**
+ * Serves a request whose first path segment names the slot.
+ *
+ * What the wrapped shims send, because a shim writes its own URL: `POST /sql`, `/ai/run`,
+ * `/vectorize/query`. Kept separate from {@link handleSlot} so a socket that knows its own slot
+ * never has to guess from a path the runtime chose.
+ */
+export function handleAdapterRequest(adapters: AdapterSet, request: Request): Promise<Response> {
+	const url = new URL(request.url);
+	const [, slot, ...rest] = url.pathname.split('/');
+	return handleSlot(adapters, slot ?? '', request, `/${rest.join('/')}`);
+}
+
+/** every slot that gets its own socket, which is every service `planSite` attaches */
+export const ADAPTER_SLOTS = [
+	'cache',
+	'kv',
+	'r2',
+	'queues',
+	'assets',
+	'sql',
+	'ai',
+	'vectorize',
+	'email',
+	'images',
+	'browser',
+	'analytics'
+] as const;
 
 /**
  * The SQL slot, which the driver has always had and nothing served.

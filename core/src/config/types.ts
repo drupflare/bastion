@@ -54,6 +54,8 @@ export interface DriversConfig {
 	vectorize?: DriverConfig;
 	images?: DriverConfig;
 	email?: DriverConfig;
+	/** absent means no headless browser, and a site binding BROWSER is refused rather than guessed */
+	browser?: DriverConfig;
 }
 
 export interface TenantCapabilities {
@@ -123,6 +125,8 @@ export interface SiteWorkerConfig {
 	queues?: string[];
 	/** D1 bindings; workerd has no d1Database field, so each is a wrapped binding over the sql adapter */
 	d1?: string[];
+	/** Browser rendering bindings, served by the headless browser `drivers.browser` names */
+	browser?: string[];
 	/** Vectorize bindings, served by whatever index `drivers.vectorize` names */
 	vectorize?: string[];
 	/** Images bindings, served natively by whatever `drivers.images` names */

@@ -171,6 +171,15 @@
 				},
 				"vectorize": {
 					"$ref": "#/$defs/driver"
+				},
+				"images": {
+					"$ref": "#/$defs/driver"
+				},
+				"email": {
+					"$ref": "#/$defs/driver"
+				},
+				"browser": {
+					"$ref": "#/$defs/driver"
 				}
 			}
 		},
