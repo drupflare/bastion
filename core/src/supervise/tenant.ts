@@ -33,6 +33,23 @@ export interface SupervisorOptions {
 	/** seam so a spec drives the schedule without waiting */
 	sleep?(ms: number): Promise<void>;
 	random?(): number;
+	/**
+	 * Called with each pid this supervisor starts, including every restart.
+	 *
+	 * The cgroup attach used to happen once, beside the first `start()`, so a process the restart
+	 * loop brought back had no limit on it: the tenant a memory cap exists to bound would come
+	 * back unbounded the first time it was killed for exceeding one.
+	 */
+	onStart?(pid: number): void;
+	/**
+	 * Called before each spawn, including every restart.
+	 *
+	 * What a restart has to clean up is whatever the dead process left holding a name. workerd
+	 * answers `Address already in use` rather than replacing a unix socket, so the first run of this
+	 * loop against a killed tenant respawned five times, failed to bind every time, and opened the
+	 * breaker: a supervisor that could not supervise because nobody removed one file.
+	 */
+	beforeStart?(): void;
 }
 
 /**
@@ -74,6 +91,7 @@ export class TenantSupervisor {
 
 	/** starts the process once; the caller drives the restart loop */
 	start(): Started {
+		this.options.beforeStart?.();
 		const argv = serveArgv(this.options.configPath);
 		const started = this.ctx.runner.spawn(this.options.binary, argv);
 		this.running = started;
@@ -84,6 +102,7 @@ export class TenantSupervisor {
 			attempts: this.process.attempts + 1,
 			startedAt: this.ctx.now()
 		};
+		if (started.pid !== null) this.options.onStart?.(started.pid);
 		return started;
 	}
 

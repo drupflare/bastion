@@ -21,6 +21,15 @@ function exitRunner(codes: number[]): CommandRunner & { calls: RecordedCall[] } 
 			const code = codes[Math.min(n, codes.length - 1)] ?? 0;
 			n++;
 			return { pid: 1000 + n, exited: Promise.resolve(code), kill: () => {} };
+		},
+		signal: (pid, signal) => {
+			calls.push({
+				mode: 'signal',
+				command: 'signal',
+				args: [String(signal), String(pid)],
+				options: {}
+			});
+			return 'delivered';
 		}
 	};
 }
@@ -39,6 +48,7 @@ function harness(codes: number[]): { ctx: Context; io: MemoryIo; calls: Recorded
 			fetch: () => Promise.reject(new Error('no network in the gate lane')),
 			env: {},
 			cwd: '/',
+			platform: 'linux',
 			// each read advances, so the failure window is crossed deterministically
 			now: () => (clock += 1)
 		}
@@ -131,5 +141,46 @@ describe('TenantSupervisor', () => {
 		supervisor.reset();
 		expect(await supervisor.run()).toBe('stopped');
 		expect(calls.filter((c) => c.mode === 'spawn')).toHaveLength(1);
+	});
+
+	/**
+	 * The two hooks fire on EVERY spawn, which is what a restart needs and the first one did not.
+	 *
+	 * `beforeStart` clears what the dead process still holds: workerd answers
+	 * `Address already in use` rather than replacing a unix socket, so the first run of this loop
+	 * against a killed tenant respawned, failed to bind, and opened the breaker. `onStart` puts the
+	 * replacement back in the cgroup, without which a tenant killed for exceeding its memory limit
+	 * comes back with no limit at all.
+	 */
+	it('clears what the last process held before every spawn', async () => {
+		const { ctx } = harness([1, 1, 0]);
+		const cleared: number[] = [];
+		let spawns = 0;
+		const supervisor = new TenantSupervisor(ctx, 'acme', {
+			...options,
+			beforeStart: () => cleared.push(spawns),
+			onStart: () => {
+				spawns += 1;
+			}
+		});
+		await supervisor.run();
+		expect(cleared).toEqual([0, 1, 2]);
+	});
+
+	it('hands out every pid it starts, not only the first', async () => {
+		const { ctx } = harness([1, 1, 0]);
+		const seen: number[] = [];
+		const supervisor = new TenantSupervisor(ctx, 'acme', {
+			...options,
+			onStart: (pid) => seen.push(pid)
+		});
+		await supervisor.run();
+		expect(seen).toHaveLength(3);
+	});
+
+	it('leaves both hooks optional, so a caller that needs neither passes neither', async () => {
+		const { ctx } = harness([0]);
+		const supervisor = new TenantSupervisor(ctx, 'acme', options);
+		expect(await supervisor.run()).toBe('stopped');
 	});
 });
