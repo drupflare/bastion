@@ -14,6 +14,9 @@ Worked flows for things the manual describes one command at a time.
 - [Three Tiers on One Box](#three-tiers-on-one-box)
 - [A Research Site With Inference, Vectors and a Database](#a-research-site-with-inference-vectors-and-a-database)
 - [Running a Model on Your Own Box](#running-a-model-on-your-own-box)
+- [Rendering With a Headless Browser](#rendering-with-a-headless-browser)
+- [Installing From a URL](#installing-from-a-url)
+- [The Default drupflare Payload](#the-default-drupflare-payload)
 - [Bringing Your Own Redis](#bringing-your-own-redis)
 - [Running Under systemd](#running-under-systemd)
 
@@ -483,6 +486,182 @@ drivers:
 
 A model outside `allow` is refused before the request is spent rather than after. An air-gapped
 install leaves this unset and nothing reaches the internet.
+
+## Rendering With a Headless Browser
+
+No server image ships a browser and bastion installs nothing on its own, so the driver is off
+until an operator turns it on:
+
+```sh
+bastion capability list
+bastion capability install browser
+```
+
+Then configure it and grant the tenant the capability:
+
+```yaml
+drivers:
+  browser: { driver: chromium }
+
+tenants:
+  - name: chemistry
+    capabilities: { browser: true }
+    sites:
+      - host: www.chem.example.edu
+        bundle: ./worker.tar.gz
+        worker:
+          main: index.js
+          browser: true
+```
+
+`driver: chromium` runs `chromium` from `PATH`; `driver: chrome` runs `chrome`; `command` names a
+binary somewhere else. `driver: devtools` points at a browser the operator already runs, and takes
+`devtoolsUrl`.
+
+The site calls the binding the way it does on Cloudflare:
+
+```js
+export default {
+  async fetch(request, env) {
+    const png = await env.BROWSER.screenshot({
+      url: 'https://www.chem.example.edu/notice/1',
+      viewport: { width: 1200, height: 630 }
+    });
+    return new Response(png, { headers: { 'content-type': 'image/png' } });
+  }
+};
+```
+
+`screenshot`, `pdf` and `content` each take a `url` or an `html` string. `@cloudflare/puppeteer`
+takes the binding itself and upgrades it to the browser's CDP socket, which bastion proxies rather
+than interprets.
+
+A render fetches a url of the site's choosing from the host's own network position, so three
+targets are refused before a browser starts:
+
+```
+a render may not reach 169.254.169.254; that is the host's own network, not the tenant's
+bastion renders http and https, not file
+renders are limited to example.edu
+```
+
+The first covers loopback, link local and the private ranges, which is the metadata service, the
+management listener and every other tenant's admin port. The second stops a render reading the
+disk. The third is the tenant's own egress allow list, applied to renders as well as to `fetch`.
+In `hardened` and `isolated` the browser runs inside the tenant's network namespace, which is the
+layer that holds when a browser bug gets past the first three.
+
+To run a browser without installing one on the host, the compose stack carries a chromium service:
+
+```sh
+docker compose -f docker/compose.yml up -d --wait chromium
+REQUIRE_DOCKER=1 bun run --cwd core test:e2e -- browser-render
+```
+
+## Installing From a URL
+
+`--bundle`, `--template` and the `deploy` argument each take a path or an `https` url:
+
+```sh
+bastion site add www.example.edu --tenant acme \
+  --template https://github.com/example/worker/releases/download/v2/template.tar.gz
+
+bastion deploy www.example.edu \
+  https://releases.example.edu/payload-1.0.2.tar.gz \
+  --checksum sha256:eb333942340dfa7da54597d78b894f35310289e75ec3a84137a197a37ab1d164
+```
+
+A url is fetched once. What lands on disk is what the config records, so a later `bastion up` does
+not re-download, and a site's code does not change because someone else's server did.
+
+bastion asks with `HEAD` first and refuses on the answer rather than after spending the bandwidth:
+
+```
+https://releases.example.edu/p.tgz is 402653184 bytes, over the 268435456 ceiling
+http://releases.example.edu/p.tgz is plaintext, and this becomes a tenant's code
+mirror.example.edu resolves to 169.254.169.254, which is in 169.254.0.0/16: the host's
+own network, not the internet
+```
+
+Every hop of a redirect chain is checked, not the url that was typed, so a public host cannot
+redirect the download into the private ranges. The chain stops at five hops.
+
+`--checksum` takes `sha256:<hex>` or the bare hex and is compared against what arrived. Without
+one the digest is still computed and printed, so it can be recorded and demanded on the next
+install.
+
+For a mirror on the operator's own network, `--insecure-source` accepts plaintext and a private
+address:
+
+```sh
+bastion deploy www.example.edu http://mirror.internal:8080/payload.tar.gz --insecure-source
+```
+
+## The Default drupflare Payload
+
+A site with no `worker` block gets the drupflare shape, which is what `bundle: ./payload.tar.gz`
+means in every example here. The payload is the release artifact from
+[drupflare/worker](https://github.com/drupflare/worker): Drupal with its PHP interpreter compiled
+to WebAssembly, the modules and themes it ships with, and a per-file pack of core.
+
+```yaml
+tenants:
+  - name: acme
+    sites:
+      - host: www.example.edu
+        bundle: ./payload.tar.gz
+        probe: drupflare
+```
+
+That expands to the bindings bastion emits when a site declares none:
+
+| binding     | what it is                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `SITE`      | the Durable Object, class `SitePhpDurableObject`, one per hostname, holding that site's SQLite database |
+| `ASSETS`    | the static files, served through a worker in front of the disk service rather than off a bare one       |
+| `CONFIG_KV` | settings                                                                                                |
+| `PAGE_KV`   | rendered pages                                                                                          |
+
+The Cache API is wired separately. It is not a binding a site names, and workerd answers every
+request with `500 No Cache was configured` when it is absent, so `drivers.cache` is never off. Its
+hit rate is the difference between the object serving most anonymous traffic and all of it.
+
+Inside the tarball:
+
+| path                                             | what it is                                                                               |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `manifest.json`                                  | the release, the commit, and every file with its size and sha256                         |
+| `.interp/`                                       | the PHP interpreter modules, derived from the alias in the worker's own `wrangler.jsonc` |
+| `assets/core`, `assets/modules`, `assets/themes` | Drupal itself                                                                            |
+| `assets/drupal-pf/core.pf.json`, `core.pf.bin`   | the per-file pack; the site refuses to boot with either one missing                      |
+| `assets/drupal-sql/`                             | the schema the first render installs                                                     |
+| `assets/prefill.json`                            | the paths answered without a render                                                      |
+| `assets/agg/`                                    | the built CSS and JS aggregates, absent from a payload built without them                |
+
+`probe: drupflare` is the only place a CMS is named anywhere in bastion. It sets two things:
+`.assetsignore` as the file the bundle ships to mark assets private, and `x-cfw-php-booted` as the
+header that proves a render happened. `bastion site probe` asks for a path outside
+`prefill.json` and reads that header, so a prefilled answer cannot pass for a boot.
+
+An unknown profile name falls back to the generic profile, which expects no boot header: a worker
+that is not a CMS sets none, and demanding one would fail a site that is serving.
+
+`site.sqlite` is refused whatever the ignore file says. It is on the floor list under every
+profile, because a disk service has no opinion about what it holds and an early smoke lane served
+a whole site database publicly.
+
+To install it from the release:
+
+```sh
+curl -fsSLO https://github.com/drupflare/worker/releases/download/v1.0.1/SHA256SUMS
+
+bastion site add www.example.edu --tenant acme --probe drupflare \
+  --bundle https://github.com/drupflare/worker/releases/download/v1.0.1/drupflare-worker-1.0.1.tar.gz \
+  --checksum "$(grep drupflare-worker-1.0.1.tar.gz SHA256SUMS | cut -d' ' -f1)"
+
+bastion up
+bastion site probe www.example.edu
+```
 
 ## Bringing Your Own Redis
 

@@ -487,7 +487,48 @@ Durable Object alarm, which workerd does run.
 A bundle holding several scripts and naming no entrypoint is refused rather than guessed. Naming a
 class without a binding, or a binding without a class, is refused at validation: either half alone
 produces a configuration workerd will not start, and a startup failure reads as a broken bundle
-rather than a typo.`
+rather than a typo.
+
+### The Default Payload
+
+A site that declares no \`worker\` block gets the drupflare shape: the Durable Object class
+\`SitePhpDurableObject\` bound as \`SITE\`, static files bound as \`ASSETS\`, and the two KV
+namespaces \`CONFIG_KV\` and \`PAGE_KV\`. That is the release artifact from
+\`github.com/drupflare/worker\`, which carries Drupal and its PHP interpreter compiled to
+WebAssembly, the modules and themes, a per-file pack of core under \`assets/drupal-pf/\`, and a
+\`manifest.json\` listing every file with its sha256.
+
+    bastion site add www.example.edu --tenant acme --bundle ./payload.tar.gz --probe drupflare
+
+\`probe: drupflare\` is the only place in bastion a CMS is named. It sets the ignore file the
+bundle ships beside its assets to \`.assetsignore\` and the header that proves a boot to
+\`x-cfw-php-booted\`. \`site probe\` asks for a path outside the payload's \`prefill.json\` and
+reads that header, so an answer served from the prefill set cannot pass for a render.
+
+An unknown profile name is not an error. It falls back to the generic profile, which expects no
+boot header, because a worker that is not a CMS sets none.
+
+### Installing From a URL
+
+\`--bundle\`, \`--template\` and the \`deploy\` argument take a path or an https url.
+
+    bastion deploy www.example.edu https://releases.example.edu/payload-1.0.2.tar.gz \\
+      --checksum sha256:<hex>
+
+A url is fetched once. The config records the file it landed in under \`<state>/bundles/<host>/\`,
+so a later start does not re-download and a site's code does not change because someone else's
+server did.
+
+bastion asks with HEAD before it spends the bandwidth, and refuses four things: a scheme that is
+not http, a plaintext url, a name resolving into loopback, link local or the private ranges, and a
+body over 256 MiB. Every hop of a redirect chain is checked rather than only the url that was
+typed, and the chain stops at five hops.
+
+\`--checksum\` takes \`sha256:<hex>\` or the bare hex. Without one the digest of what arrived is
+still computed and printed, so it can be recorded and demanded next time.
+
+\`--insecure-source\` accepts plaintext and a private address, for a mirror on the operator's own
+network. It is per invocation and there is no configuration key that turns it on permanently.`
 	},
 	{
 		id: 'deploying',
@@ -496,6 +537,7 @@ rather than a typo.`
 rollback is a pointer move rather than a re-upload.
 
     bastion deploy www.example.edu ./payload-1.0.2.tar.gz
+    bastion deploy www.example.edu https://releases.example.edu/payload-1.0.2.tar.gz
     bastion versions list www.example.edu
     bastion rollout www.example.edu --version <id> --percent 10
     bastion rollback www.example.edu
