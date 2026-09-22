@@ -11,6 +11,7 @@ import { defaultContext } from '../../src/context';
 import { memoryKv } from '../../src/drivers/memory-kv';
 import { nodeFiles } from '../../src/host/files';
 import { bindAdapters } from './support/adapters';
+import { gate } from './support/gate';
 import { overSocket, type SocketResponse } from './support/http';
 
 /**
@@ -22,7 +23,6 @@ import { overSocket, type SocketResponse } from './support/http';
  */
 const workerd = process.env.WORKERD_BINARY ?? 'workerd';
 const payload = process.env.PAYLOAD_DIR ?? '';
-const enabled = process.env.REQUIRE_PAYLOAD === '1';
 
 /**
  * Skips only when nobody asked for this lane; refuses when they did and it cannot run.
@@ -31,16 +31,13 @@ const enabled = process.env.REQUIRE_PAYLOAD === '1';
  * that proves the generated configuration boots printed a reason and went green for the whole of
  * development. A skip reads as a pass in every summary that matters.
  */
-function missing(): string | null {
-	if (!enabled) return 'REQUIRE_PAYLOAD=1 is not set';
-	if (payload === '') throw new Error('REQUIRE_PAYLOAD=1 but PAYLOAD_DIR is not set');
-	if (!existsSync(join(payload, 'site.js'))) {
-		throw new Error(`REQUIRE_PAYLOAD=1 but ${payload}/site.js is absent`);
+const reason = gate('REQUIRE_PAYLOAD', [
+	{ what: 'PAYLOAD_DIR is not set', present: payload !== '' },
+	{
+		what: `${payload}/site.js is absent`,
+		present: payload !== '' && existsSync(join(payload, 'site.js'))
 	}
-	return null;
-}
-
-const reason = missing();
+]);
 const children: { kill(signal?: NodeJS.Signals): void }[] = [];
 let bound: { stop(): void; readonly failures: string[] } | null = null;
 

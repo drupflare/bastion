@@ -14,6 +14,7 @@ import { planSite, socketFor } from '../../src/capnp/plan';
 import { memoryKv } from '../../src/drivers/memory-kv';
 import { buildSql } from '../../src/drivers/registry';
 import { DataPointWindow } from '../../src/observe/analytics';
+import { gate } from './support/gate';
 
 /**
  * A real workerd, booted from a configuration bastion generated, serving a worker bastion did not
@@ -38,7 +39,6 @@ import { DataPointWindow } from '../../src/observe/analytics';
  * and can run on any runner that can download workerd.
  */
 const workerd = process.env.WORKERD_BINARY ?? 'workerd';
-const enabled = process.env.REQUIRE_WORKERD === '1';
 
 /**
  * Skips only when nobody asked for this lane; refuses when they did and it cannot run.
@@ -48,15 +48,12 @@ const enabled = process.env.REQUIRE_WORKERD === '1';
  * CI set `REQUIRE_DOCKER=1` and never `REQUIRE_PAYLOAD=1`, so the one lane that proved the
  * generated configuration works printed a skip reason and went green every time.
  */
-function missing(): string | null {
-	if (!enabled) return 'REQUIRE_WORKERD=1 is not set';
-	if (workerd.includes('/') && !existsSync(workerd)) {
-		throw new Error(`REQUIRE_WORKERD=1 but WORKERD_BINARY (${workerd}) is not a file`);
+const reason = gate('REQUIRE_WORKERD', [
+	{
+		what: `WORKERD_BINARY (${workerd}) is not a file`,
+		present: !workerd.includes('/') || existsSync(workerd)
 	}
-	return null;
-}
-
-const reason = missing();
+]);
 const children: { kill(signal?: NodeJS.Signals): void }[] = [];
 const servers: { stop(force?: boolean): void }[] = [];
 const adapterFailures: string[] = [];

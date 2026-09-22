@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { defaultContext } from '../../src/context';
 import { s3ObjectStore } from '../../src/drivers/s3-object';
 import { signRequest } from '../../src/drivers/sigv4';
+import { gate } from './support/gate';
 
 /**
  * The s3 driver against a real minio.
@@ -18,7 +19,7 @@ const CREDENTIALS = {
 	secretAccessKey: process.env.BASTION_E2E_MINIO_SECRET ?? 'bastion-e2e-secret'
 };
 
-const enabled = process.env.REQUIRE_DOCKER === '1' || process.env.BASTION_E2E_INTEGRATION === '1';
+const reason = gate(['REQUIRE_DOCKER', 'BASTION_E2E_INTEGRATION']);
 
 const ctx = defaultContext();
 
@@ -47,7 +48,7 @@ async function createBucket(): Promise<void> {
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);
 
-describe.skipIf(!enabled)('the s3 driver against a real minio', () => {
+describe.skipIf(reason !== null)('the s3 driver against a real minio', () => {
 	beforeAll(async () => {
 		await createBucket();
 	});

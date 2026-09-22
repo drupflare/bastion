@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { gate } from './support/gate';
 
 /**
  * `bastion up`, serving a real request, on a host that can actually run a tenant.
@@ -22,7 +23,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  */
 const run = promisify(execFile);
 
-const enabled = process.env.REQUIRE_SERVING === '1';
 const IMAGE = 'oven/bun:1.4';
 const NAME = `bastion-serving-${process.pid}`;
 const PINNED = '1.20260828.1';
@@ -66,12 +66,7 @@ const MANIFEST = JSON.stringify({
 	d1_databases: [{ binding: 'DB', database_name: 'acme' }]
 });
 
-function missing(): string | null {
-	if (!enabled) return 'REQUIRE_SERVING=1 is not set';
-	return null;
-}
-
-const reason = missing();
+const reason = gate('REQUIRE_SERVING');
 let prepared: string | null = null;
 
 /** runs one command inside the container and never throws, so a spec asserts on the outcome */

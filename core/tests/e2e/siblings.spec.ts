@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SEVERITY } from '../../src/audit/log';
 import { QUARANTINE_STRIKES, ROLLBACK_DWELL_MS, RUNGS } from '../../src/health/ladder';
+import { gate } from './support/gate';
 
 /**
  * bastion's repair vocabulary against the sibling it was copied from.
@@ -18,17 +19,13 @@ import { QUARANTINE_STRIKES, ROLLBACK_DWELL_MS, RUNGS } from '../../src/health/l
  */
 const root =
 	process.env.SIBLING_WORKER ?? join(import.meta.dirname, '..', '..', '..', '..', 'worker');
-const enabled = process.env.REQUIRE_SIBLINGS === '1';
 
-function missing(): string | null {
-	if (!enabled) return 'REQUIRE_SIBLINGS=1 is not set';
-	if (!existsSync(join(root, 'src', 'ops', 'repair.ts'))) {
-		throw new Error(`REQUIRE_SIBLINGS=1 but ${root} holds no worker checkout`);
+const reason = gate('REQUIRE_SIBLINGS', [
+	{
+		what: `${root} holds no worker checkout`,
+		present: existsSync(join(root, 'src', 'ops', 'repair.ts'))
 	}
-	return null;
-}
-
-const reason = missing();
+]);
 
 /** the literal a `const` is assigned, read out of the source rather than evaluated */
 function sourceOf(file: string): string {

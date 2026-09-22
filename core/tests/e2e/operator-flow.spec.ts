@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { gate } from './support/gate';
 
 /**
  * The commands an IT director actually types, against the compiled binary.
@@ -29,7 +30,6 @@ const run = promisify(execFile);
 
 const binary = process.env.BASTION_BINARY ?? '';
 const workerd = process.env.WORKERD_BINARY ?? '';
-const enabled = process.env.REQUIRE_FLOW === '1';
 
 /**
  * Skips only when nobody asked for this lane; refuses when they did and it cannot run.
@@ -37,18 +37,16 @@ const enabled = process.env.REQUIRE_FLOW === '1';
  * `REQUIRE_FLOW=1` means this MUST run. Answering a missing prerequisite with a skip reports
  * success, which is exactly how the workerd boot stayed unexercised through the whole build.
  */
-function missing(): string | null {
-	if (!enabled) return 'REQUIRE_FLOW=1 is not set';
-	if (binary === '' || !existsSync(binary)) {
-		throw new Error(`REQUIRE_FLOW=1 but BASTION_BINARY (${binary}) is not a file`);
+const reason = gate('REQUIRE_FLOW', [
+	{
+		what: `BASTION_BINARY (${binary}) is not a file`,
+		present: binary !== '' && existsSync(binary)
+	},
+	{
+		what: `WORKERD_BINARY (${workerd}) is not a file`,
+		present: workerd !== '' && existsSync(workerd)
 	}
-	if (workerd === '' || !existsSync(workerd)) {
-		throw new Error(`REQUIRE_FLOW=1 but WORKERD_BINARY (${workerd}) is not a file`);
-	}
-	return null;
-}
-
-const reason = missing();
+]);
 
 /** the pin `bastion init` writes, which decides where the runtime has to be staged */
 const PINNED = '1.20260828.1';
