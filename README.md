@@ -306,11 +306,23 @@ REQUIRE_PAYLOAD=1 bun run test:e2e  # the released drupflare payload, unmodified
 REQUIRE_CLUSTER=1 bun run test:e2e  # two nodes on one docker network, joined and routing
 REQUIRE_DOCKER=1 bun run test:e2e   # the compose stack: redis, minio, postgres, chromium, an ssh target
 REQUIRE_SIBLINGS=1 bun run test:e2e # the repair vocabulary against the worker's own source
+REQUIRE_KVM=1 bun run test:e2e      # a tenant boots in its own microVM
 ```
 
 A lane whose flag is set and whose prerequisite is absent fails and names what is missing. It never
 skips: a skip reads as a pass in every summary, and the lanes that matter most are the ones with a
 prerequisite. `WORKERD_BINARY`, `BASTION_BINARY` and `PAYLOAD_DIR` point at them.
+
+Every lane above runs in CI except the microVM one. It needs `/dev/kvm`, which no hosted runner
+guarantees, so it is run by hand on a machine with hardware virtualisation. Build its hypervisor,
+kernel and guest image first:
+
+```sh
+core/scripts/microvm-rig.sh # writes ~/bastion-rig/fc
+REQUIRE_KVM=1 bun run test:e2e
+```
+
+`docs/measurement.md` records what that lane last read, on which machine and when.
 
 ## License
 

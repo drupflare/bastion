@@ -8,7 +8,8 @@ import { gate } from '../e2e/support/gate';
  *
  * Each key selects an e2e lane, and a lane that never runs looks exactly like a lane that passed.
  * The two directions here are the same rule `check:reachability` applies to tripwires: a key no
- * spec reads is stale documentation, and a key no workflow sets is a lane CI never runs.
+ * spec reads is stale documentation, and a key no workflow sets is a lane CI never runs, unless
+ * the hardware is one no runner has and the exemption below says which.
  */
 const repo = join(import.meta.dirname, '..', '..', '..');
 const e2e = join(repo, 'core', 'tests', 'e2e');
@@ -27,6 +28,22 @@ function gatedOn(source: string): string[] {
 
 const gates = new Map(specs.map((spec) => [spec.name, gatedOn(spec.source)]));
 const keys = [...new Set([...gates.values()].flat())].filter((key) => key.startsWith('REQUIRE_'));
+
+/**
+ * Lanes no hosted runner can run, with the mechanism each one needs.
+ *
+ * An exemption is not a way to quiet the rule below; it is the statement that CI cannot host the
+ * lane at all, so the lane is run by hand and its result is recorded rather than inferred. A key
+ * listed here that a workflow DOES set is a stale exemption, which the second direction catches.
+ *
+ * `REQUIRE_KVM` needs `/dev/kvm`, and a shared runner is itself a VM that does not pass it through:
+ * a hypervisor connection there fails on permission rather than running slowly. GitHub's LARGER
+ * runners do hardware acceleration, which is what the Android emulator action relies on, so the
+ * capability reads as available until the label is the free one.
+ */
+const HOSTED_RUNNER_CANNOT: Record<string, string> = {
+	REQUIRE_KVM: '/dev/kvm'
+};
 
 const readme = readFileSync(join(repo, 'README.md'), 'utf8');
 const workflows = readdirSync(join(repo, '.github', 'workflows'))
@@ -49,8 +66,33 @@ describe('the e2e gate keys', () => {
 		for (const key of new Set(documented)) expect(keys, key).toContain(key);
 	});
 
-	it('runs every key in a workflow', () => {
-		for (const key of keys) expect(workflows, key).toContain(`${key}=1`);
+	it('runs every key in a workflow, or states why no runner can host it', () => {
+		for (const key of keys) {
+			if (key in HOSTED_RUNNER_CANNOT) continue;
+			expect(workflows, key).toContain(`${key}=1`);
+		}
+	});
+
+	/** an exemption for a lane CI turns out to run is documentation of a rule nobody applies */
+	it('drops an exemption once a workflow runs that lane after all', () => {
+		for (const key of Object.keys(HOSTED_RUNNER_CANNOT)) {
+			expect(workflows, key).not.toContain(`${key}=1`);
+		}
+	});
+
+	it('exempts only a key some lane actually gates on', () => {
+		for (const key of Object.keys(HOSTED_RUNNER_CANNOT)) expect(keys, key).toContain(key);
+	});
+
+	/** the lane still has to be runnable by hand, so the manual names the mechanism and the script */
+	it('says in the readme how an exempt lane is run instead', () => {
+		for (const [key, needs] of Object.entries(HOSTED_RUNNER_CANNOT)) {
+			expect(readme, key).toContain(`${key}=1 bun run test`);
+			expect(
+				readme.includes(needs),
+				`${key}: the readme does not say it needs ${needs}`
+			).toBe(true);
+		}
 	});
 });
 
