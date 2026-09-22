@@ -370,3 +370,49 @@ describe('an api token', () => {
 		expect(write.status).toBe(403);
 	});
 });
+
+/**
+ * The shape each dashboard page destructures, asserted against what the route actually answers.
+ *
+ * Every route can answer 200 and still render nothing: the page reads `result.tenants`, the handler
+ * returns `{rows}`, and neither side fails. Two were wrong when this was written. `/api/metrics`
+ * answered Prometheus text to a page expecting rows, and `/api/cluster` on a box in no cluster
+ * answered `{clustered:false}` to a page that reads `.nodes` straight off it.
+ *
+ * The keys come from `dashboard/src`, read rather than restated, so a page that starts reading a
+ * new field fails here instead of in a browser.
+ */
+describe('the shape the dashboard reads', () => {
+	const PAGES: { path: string; needs: string[] }[] = [
+		{ path: '/api/status', needs: ['running', 'tenants'] },
+		{ path: '/api/doctor', needs: ['limits'] },
+		{ path: '/api/capabilities', needs: ['capabilities'] },
+		{ path: '/api/health', needs: ['tree'] },
+		{ path: '/api/capacity', needs: ['recommended', 'maximum', 'bindingTerm'] },
+		{ path: '/api/logs?level=info', needs: ['lines'] },
+		{ path: '/api/tenants', needs: ['tenants'] },
+		{ path: '/api/sites', needs: ['sites'] },
+		{ path: '/api/backups', needs: ['backups'] },
+		{ path: '/api/audit', needs: ['entries'] },
+		{ path: '/api/cluster', needs: ['nodes'] },
+		{ path: '/api/versions?host=www.example.edu', needs: ['versions'] }
+	];
+
+	for (const page of PAGES) {
+		it(`answers ${page.path} with ${page.needs.join(', ')}`, async () => {
+			const { call } = harness();
+			const answer = await call('GET', page.path);
+			expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+			const result = answer.body.result as Record<string, unknown>;
+			for (const key of page.needs) {
+				expect(Object.keys(result), `${page.path} is missing ${key}`).toContain(key);
+			}
+		});
+	}
+
+	it('answers /api/cluster with an empty list rather than nothing on an unclustered box', async () => {
+		const { call } = harness();
+		const result = (await call('GET', '/api/cluster')).body.result as { nodes: unknown[] };
+		expect(result.nodes).toEqual([]);
+	});
+});
