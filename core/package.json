@@ -1,0 +1,53 @@
+{
+	"name": "@drupflare/bastion",
+	"version": "1.0.0",
+	"type": "module",
+	"description": "A hardened operating environment for self-hosted workerd",
+	"license": "MIT",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"registry": "https://registry.npmjs.org",
+		"access": "public"
+	},
+	"sideEffects": false,
+	"files": [
+		"src",
+		"LICENSE",
+		"README.md"
+	],
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run --project=unit",
+		"test:watch": "vitest --project=unit",
+		"test:coverage": "vitest run --project=unit --coverage",
+		"test:e2e": "vitest run --project=e2e"
+	},
+	"dependencies": {
+		"yaml": "^2.8.1"
+	},
+	"devDependencies": {
+		"@types/node": "^26.0.0",
+		"@vitest/coverage-v8": "^4.1.0",
+		"ajv": "^8.17.1",
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.0"
+	},
+	"author": "Gregory Mitchell <me@gmitch215.xyz>",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/drupflare/bastion.git",
+		"directory": "core"
+	},
+	"keywords": [
+		"workerd",
+		"self-hosted",
+		"drupflare",
+		"multi-tenant",
+		"firecracker",
+		"sandbox"
+	]
+}
