@@ -1,4 +1,10 @@
-import type { BastionConfig, Context, TenantConfig } from '@drupflare/bastion';
+import type {
+	BastionConfig,
+	Context,
+	SiteConfig,
+	TemplatePlan,
+	TenantConfig
+} from '@drupflare/bastion';
 import {
 	BY_CODE,
 	BackupEngine,
@@ -13,7 +19,9 @@ import {
 	capacity,
 	defaultCostModel,
 	firecrackerHypervisor,
+	pullTemplate,
 	readHost,
+	refusals,
 	retain,
 	writeConfig
 } from '@drupflare/bastion';
@@ -157,11 +165,11 @@ export function runSiteList(ctx: Context, globals: Globals): void {
 	);
 }
 
-export function runSiteAdd(
+export async function runSiteAdd(
 	ctx: Context,
-	globals: Globals & { tenant?: string; bundle?: string },
+	globals: Globals & { tenant?: string; bundle?: string; template?: string; probe?: string },
 	host: string
-): void {
+): Promise<void> {
 	const loaded = load(ctx, globals);
 	const name = globals.tenant ?? loaded.config.tenants[0]?.name;
 	const tenant = loaded.config.tenants.find((entry) => entry.name === name);
@@ -181,7 +189,22 @@ export function runSiteAdd(
 	const admitted = admitSite(tenant.sites.length, answer, tenant.limits?.maxSites);
 	if (admitted.warning !== null) ctx.io.err(admitted.warning);
 
-	const site = { host, bundle: globals.bundle ?? './payload.tar.gz', probe: 'drupflare' };
+	// a template states its own bindings, so the site inherits them rather than the drupflare shape
+	let plan: TemplatePlan | null = null;
+	if (globals.template !== undefined) {
+		plan = await pullTemplate(ctx, globals.template, {
+			dest: `${loaded.config.state}/templates/${host}`
+		});
+	}
+	const sibling = tenant.sites[0];
+	const probe = globals.probe ?? (plan === null ? (sibling?.probe ?? 'drupflare') : undefined);
+
+	const site: SiteConfig = {
+		host,
+		bundle: globals.bundle ?? sibling?.bundle ?? './payload.tar.gz',
+		...(probe === undefined ? {} : { probe }),
+		...(plan === null ? {} : { worker: plan.worker })
+	};
 	const config = {
 		...loaded.config,
 		tenants: loaded.config.tenants.map((entry) =>
@@ -189,12 +212,74 @@ export function runSiteAdd(
 		)
 	};
 	const path = write(ctx, loaded.path, config);
+
+	// a binding that does not carry is named at install time; finding out from a 500 in production
+	// is the failure this whole reader exists to prevent
+	const dropped = plan === null ? [] : refusals(plan);
+	for (const finding of dropped) {
+		ctx.io.err(`not carried: ${finding.name} (${finding.type}) -- ${finding.reason}`);
+	}
+	if (plan !== null && plan.crons.length > 0) {
+		ctx.io.err(
+			`not scheduled: ${plan.crons.join(', ')} -- bastion has no cron scheduler, so these never fire`
+		);
+	}
+
 	emit(
 		ctx,
 		globals,
-		{ site, tenant: name, warning: admitted.warning, wrote: path },
-		() => `added ${host} to tenant ${name} in ${path}`
+		{
+			site,
+			tenant: name,
+			warning: admitted.warning,
+			wrote: path,
+			template:
+				plan === null ? null : { name: plan.name, crons: plan.crons, refused: dropped }
+		},
+		() =>
+			`added ${host} to tenant ${name} in ${path}` +
+			(dropped.length === 0 ? '' : `\n${dropped.length} binding(s) not carried`)
 	);
+}
+
+/**
+ * Reads a template and reports what would carry, changing nothing.
+ *
+ * The dry run for `site add --template`: an operator evaluating whether a Worker can move here
+ * should get the answer without writing a site into the configuration first.
+ */
+export async function runSiteTemplate(
+	ctx: Context,
+	globals: Globals,
+	source: string
+): Promise<number> {
+	const loaded = load(ctx, globals);
+	const plan = await pullTemplate(ctx, source, {
+		dest: `${loaded.config.state}/templates/.inspect`
+	});
+	const dropped = refusals(plan);
+	emit(ctx, globals, { source, ...plan }, () =>
+		[
+			kv([
+				['template', plan.name ?? '(unnamed)'],
+				['entrypoint', plan.worker.main ?? '(inferred from the bundle)'],
+				['durable object', plan.worker.durableObjectClass ?? '(none)'],
+				['assets', plan.worker.assets ?? '(none)'],
+				['kv', plan.worker.kv?.join(', ') || '(none)'],
+				['r2', plan.worker.r2?.join(', ') || '(none)'],
+				['queues', plan.worker.queues?.join(', ') || '(none)'],
+				['crons', plan.crons.join(', ') || '(none)']
+			]),
+			'',
+			dropped.length === 0
+				? 'every binding carries'
+				: table(
+						['binding', 'declared as', 'why it does not carry'],
+						dropped.map((f) => [f.name, f.type, f.reason])
+					)
+		].join('\n')
+	);
+	return dropped.length === 0 ? 0 : 3;
 }
 
 export function runSiteRm(ctx: Context, globals: Globals, host: string): void {

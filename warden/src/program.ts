@@ -58,6 +58,8 @@ import {
 	runDomainVerify
 } from './commands/domains';
 import {
+	runCapabilityInstall,
+	runCapabilityList,
 	runCapacity,
 	runDiagnose,
 	runHealth,
@@ -135,6 +137,7 @@ import {
 	runSiteAdd,
 	runSiteList,
 	runSiteRm,
+	runSiteTemplate,
 	runTenantAdd,
 	runTenantList,
 	runTenantRm,
@@ -177,6 +180,9 @@ export const HANDLERS: Record<string, Handler> = {
 	metrics: (ctx, globals) => runMetrics(ctx, globals),
 	logs: (ctx, globals) => runLogs(ctx, globals),
 	capacity: (ctx, globals) => runCapacity(ctx, globals),
+	'capability list': (ctx, globals) => runCapabilityList(ctx, globals),
+	'capability install': (ctx, globals, args) =>
+		runCapabilityInstall(ctx, globals, args[0] as string),
 	version: (ctx, globals) => runVersion(ctx, globals),
 
 	'config show': (ctx, globals) => runConfigShow(ctx, globals),
@@ -190,6 +196,7 @@ export const HANDLERS: Record<string, Handler> = {
 	'tenant rm': (ctx, globals, args) => runTenantRm(ctx, globals, args[0] as string),
 	'site list': (ctx, globals) => runSiteList(ctx, globals),
 	'site add': (ctx, globals, args) => runSiteAdd(ctx, globals, args[0] as string),
+	'site template': (ctx, globals, args) => runSiteTemplate(ctx, globals, args[0] as string),
 	'site rm': (ctx, globals, args) => runSiteRm(ctx, globals, args[0] as string),
 
 	repair: (ctx, globals, args) => runRepair(ctx, globals, args[0] as string),

@@ -114,6 +114,25 @@ export const COMMANDS: CommandSpec[] = [
 	},
 	{
 		group: 'inspect',
+		name: 'capability list',
+		description:
+			'every optional binding, whether its primitive is installed, and what installs it',
+		manual: 'diagnosing',
+		offline: true,
+		exits: [JSON_EXIT],
+		surface: '/'
+	},
+	{
+		group: 'inspect',
+		name: 'capability install',
+		description: 'install the host software one optional binding needs',
+		manual: 'diagnosing',
+		args: [{ name: 'slot', required: true, description: 'images or browser' }],
+		exits: [JSON_EXIT],
+		surface: '/'
+	},
+	{
+		group: 'inspect',
 		name: 'health',
 		description: 'the health tree and every open finding',
 		manual: 'diagnosing',
@@ -341,8 +360,22 @@ export const COMMANDS: CommandSpec[] = [
 		args: [{ name: 'host', required: true, description: 'the hostname' }],
 		options: [
 			{ flags: '--tenant <name>', description: 'the tenant to add it to' },
-			{ flags: '--bundle <path>', description: 'the site payload' }
+			{ flags: '--bundle <path>', description: 'the site payload' },
+			{
+				flags: '--template <url>',
+				description: 'pull a worker template and read its bindings from its manifest'
+			},
+			{ flags: '--probe <profile>', description: 'the profile that proves a boot' }
 		],
+		exits: [JSON_EXIT],
+		surface: '/tenants'
+	},
+	{
+		group: 'sites',
+		name: 'site template',
+		description: 'read a worker template and report what bastion would and would not carry',
+		manual: 'sites',
+		args: [{ name: 'source', required: true, description: 'a url or a directory' }],
 		exits: [JSON_EXIT],
 		surface: '/tenants'
 	},
