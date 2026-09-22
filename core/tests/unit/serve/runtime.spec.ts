@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig } from '../../../src/config/defaults';
-import type { BastionConfig } from '../../../src/config/types';
+import type { BastionConfig, SiteConfig } from '../../../src/config/types';
 import { defaultContext } from '../../../src/context';
 import { recordingListenerHost } from '../../../src/front/listener';
 import { scriptedRunner } from '../../../src/host/exec';
@@ -152,6 +152,82 @@ describe('Runtime.startTenant', () => {
 			platform: 'linux'
 		});
 		await expect(runtime.startTenant('acme')).rejects.toThrow(/no workerd binary/);
+	});
+});
+
+/**
+ * The supervisor took a `configPath` from the first commit and nothing ever produced the file, so
+ * `up` spawned workerd against a path that did not exist. These read the file off the seam.
+ */
+describe('Runtime.startTenant writes the config workerd is pointed at', () => {
+	function withSite(site: SiteConfig) {
+		const h = harness({
+			state: '/var/lib/bastion',
+			tenants: [{ name: 'acme', sites: [site] }]
+		});
+		h.files.writeText('/var/lib/bastion/tenants/acme/bundle/index.js', 'export default {}');
+		return {
+			h,
+			runtime: new Runtime(h.ctx, {
+				config: h.config,
+				host: h.host,
+				upstream: h.upstream,
+				binary: '/usr/local/bin/workerd',
+				platform: 'linux'
+			})
+		};
+	}
+
+	const CAPNP = '/var/lib/bastion/tenants/acme/config.capnp';
+
+	it('writes it before the process is spawned', async () => {
+		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: './w' });
+		await runtime.startTenant('acme');
+		expect(h.files.exists(CAPNP)).toBe(true);
+		expect(h.files.readText(CAPNP)).toContain('sockets = [');
+	});
+
+	it('generates an arbitrary worker with no object when the site says so', async () => {
+		const { h, runtime } = withSite({
+			host: 'api.example.edu',
+			bundle: './w',
+			worker: {
+				durableObjectClass: null,
+				durableObject: undefined,
+				assets: undefined,
+				kv: []
+			}
+		});
+		await runtime.startTenant('acme');
+		const config = h.files.readText(CAPNP);
+		expect(config).not.toContain('durableObjectNamespaces');
+		expect(config).toContain('cacheApiOutbound');
+	});
+
+	it('keeps the drupflare shape for a site that declares no worker block', async () => {
+		const { h, runtime } = withSite({
+			host: 'www.example.edu',
+			bundle: './p',
+			probe: 'drupflare'
+		});
+		await runtime.startTenant('acme');
+		const config = h.files.readText(CAPNP);
+		expect(config).toContain('className = "SitePhpDurableObject"');
+		expect(config).toContain('kvNamespace');
+	});
+
+	it('takes the entrypoint from the bundle rather than from a fixed name', async () => {
+		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: './w' });
+		h.files.writeText('/var/lib/bastion/tenants/acme/bundle/lib.wasm', 'x');
+		await runtime.startTenant('acme');
+		const config = h.files.readText(CAPNP);
+		expect(config.indexOf('index.js')).toBeLessThan(config.indexOf('lib.wasm'));
+	});
+
+	it('refuses a bundle with no entrypoint instead of writing an unstartable config', async () => {
+		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: './w' });
+		h.files.remove('/var/lib/bastion/tenants/acme/bundle/index.js');
+		await expect(runtime.startTenant('acme')).rejects.toThrow(/no modules/);
 	});
 });
 

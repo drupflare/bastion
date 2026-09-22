@@ -1,5 +1,12 @@
 import { handleApi, type ApiDeps, type ApiHandler } from '../api/server';
-import type { BastionConfig } from '../config/types';
+import { renderConfig } from '../capnp/generate';
+import { modulesFrom, planSite } from '../capnp/plan';
+import {
+	DEFAULT_COMPATIBILITY_DATE,
+	DEFAULT_COMPATIBILITY_FLAGS,
+	resolveSiteWorker
+} from '../config/defaults';
+import type { BastionConfig, TenantConfig } from '../config/types';
 import type { Context } from '../context';
 import { BastionError } from '../errors';
 import { buildFront, listenerSpec } from '../front/door';
@@ -111,6 +118,48 @@ export class Runtime {
 	}
 
 	/**
+	 * Writes the `config.capnp` the supervisor is about to point workerd at.
+	 *
+	 * The supervisor took this path as an input from the start and nothing ever produced the file,
+	 * so `up` spawned workerd against a path that did not exist. Generating it here is what makes
+	 * the declarative config the thing that actually runs, for any bundle rather than one shape.
+	 */
+	private writeCapnp(tenant: TenantConfig, paths: SandboxPaths): void {
+		const config = this.options.config;
+		const site = tenant.sites[0];
+		if (site === undefined) return;
+
+		const worker = resolveSiteWorker(site.worker);
+		const bundle = `${paths.state}/bundle`;
+		const plan = planSite({
+			tenant,
+			site,
+			paths: {
+				bundle,
+				storage: `${paths.state}/storage`,
+				assets: `${paths.state}/assets`,
+				adapterSocket: `${paths.state}/adapter.sock`,
+				listenSocket: `${paths.state}/http.sock`
+			},
+			modules: modulesFrom(this.ctx, bundle, worker.main),
+			compatibilityDate: worker.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+			compatibilityFlags: worker.compatibilityFlags ?? DEFAULT_COMPATIBILITY_FLAGS,
+			uniqueKey: `${tenant.name}:${site.host}`,
+			durableObjectClass: worker.durableObjectClass ?? undefined,
+			residency: config.runtime.residency,
+			bindings: {
+				durableObject: worker.durableObject,
+				assets: worker.assets,
+				kv: worker.kv,
+				r2: worker.r2,
+				queues: worker.queues
+			},
+			vars: site.bindings ?? {}
+		});
+		this.ctx.files.writeText(paths.config, renderConfig(plan));
+	}
+
+	/**
 	 * Brings one tenant up with its wall around it.
 	 *
 	 * The cgroup exists before the process so `attachPid` has somewhere to write the moment the
@@ -128,6 +177,7 @@ export class Runtime {
 
 		const paths = this.pathsFor(tenant);
 		this.ctx.files.mkdirp(paths.state);
+		this.writeCapnp(declared, paths);
 		applyCgroup(this.ctx, tenant, declared.limits ?? {});
 
 		if (config.mode === 'hardened') {
