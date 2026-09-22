@@ -332,6 +332,22 @@ export type {
 export { parseSize, validate, type Problem, type ValidationResult } from './config/validate';
 export { defaultContext, type Context } from './context';
 export {
+	MAX_BUNDLE_BYTES,
+	MAX_HOPS,
+	addressBytes,
+	assertFetchable,
+	bundleName,
+	deniedRange,
+	fetchRemote,
+	isRemote,
+	probeRemote,
+	pullBundle,
+	type BundleOptions,
+	type Downloaded,
+	type RemoteOptions,
+	type RemoteSource
+} from './deploy/remote';
+export {
 	MANIFEST_NAMES,
 	MAX_TEMPLATE_BYTES,
 	UNSUPPORTED,
@@ -657,10 +673,13 @@ export {
 	type SecretStore
 } from './secrets/store';
 export {
+	RELOAD_OUTCOME,
+	RELOAD_REQUEST,
 	RUNTIME_DIGEST,
 	RUNTIME_PIDFILE,
 	Runtime,
 	tenantDigest,
+	type ReloadOutcome,
 	type RuntimeOptions,
 	type RuntimeState
 } from './serve/runtime';
