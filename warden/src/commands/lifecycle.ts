@@ -35,6 +35,19 @@ const STARTUP_GRACE_MS = 1500;
  */
 const STARTUP_LOG_LINES = 12;
 
+/**
+ * How often the box checks itself.
+ *
+ * Every condition a tripwire covers moves on the scale of minutes or slower: a disk filling, a
+ * certificate approaching its ladder, a tenant crash-looping into the breaker. Sweeping per request
+ * would cost something on the hot path and answer no faster.
+ *
+ * A second rather than a minute because the same tick also picks up a reload request, and an
+ * operator who typed `bastion reload` is waiting at a terminal. The sweep itself is a handful of
+ * comparisons over a snapshot, so the cost of the shorter period is nothing.
+ */
+const SWEEP_INTERVAL_MS = 1000;
+
 export function runInit(ctx: Context, globals: Globals & { force?: boolean }): void {
 	const path = globals.config ?? `${ctx.cwd}/bastion.yml`;
 	if (ctx.files.exists(path) && globals.force !== true) {
@@ -141,6 +154,8 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 		host: bunListenerHost(),
 		upstream: unixUpstream(ctx, socketPaths(loaded.state)),
 		acknowledgeUnsafeMode: acknowledged(globals),
+		// so a reload can read the file again rather than comparing the startup config with itself
+		...(loaded.path === null ? {} : { configPath: loaded.path }),
 		...(binary === null ? {} : { binary })
 	});
 }
@@ -161,9 +176,30 @@ export async function runServe(ctx: Context, globals: Globals & { mode?: string 
 		].join('\n')
 	);
 
+	// the sweep is what turns a tripwire from a table entry into a finding on disk. On a timer
+	// rather than on every request: the conditions are a disk filling, a certificate approaching
+	// and a tenant crash-looping, none of which move per request
+	runtime.health();
+	const sweeping = setInterval(() => {
+		try {
+			runtime.health();
+			// the same timer picks up a reload the CLI asked for: a poll cannot miss the way an
+			// inotify watch on a network filesystem can, and a missed one is a swap that silently
+			// never happens
+			void runtime.serveReloadRequest();
+		} catch (error) {
+			// a probe that throws must not take the box down with it; it is diagnostics
+			ctx.io.err(
+				`health sweep failed: ${error instanceof Error ? error.message : String(error)}`
+			);
+		}
+	}, SWEEP_INTERVAL_MS);
+	sweeping.unref?.();
+
 	// serve runs in the foreground; a unit file is what restarts it
 	await new Promise<void>((resolve) => {
 		const stop = (): void => {
+			clearInterval(sweeping);
 			void runtime.down().then(resolve);
 		};
 		process.once('SIGTERM', stop);

@@ -101,16 +101,29 @@ export function runStatus(ctx: Context, globals: Globals): void {
 	);
 }
 
-export function runHealth(ctx: Context, globals: Globals & { tree?: boolean }): void {
-	const ledger = new HealthLedger(ctx);
+/**
+ * Every open finding, read from the file the running box writes.
+ *
+ * The ledger used to be built empty by this command and thrown away at the end of it, so `health`
+ * on a box with a full disk and a quarantined tenant printed `health: info`. It is file-backed now,
+ * which is also what makes it readable with the network down and after a restart.
+ *
+ * It exits 3 on anything above `info`, because a finding is something the box found rather than a
+ * failure of this command.
+ */
+export function runHealth(ctx: Context, globals: Globals & { tree?: boolean }): number {
+	const loaded = load(ctx, globals);
+	const ledger = new HealthLedger(ctx, loaded.state);
 	const tree = ledger.tree();
 	emit(ctx, globals, { severity: tree.severity, tree }, () =>
 		globals.tree === true ? renderTree(tree) : `health: ${tree.severity}`
 	);
+	return tree.severity === 'info' || tree.severity === 'debug' ? 0 : 3;
 }
 
 export function runDiagnose(ctx: Context, globals: Globals & { code?: string }): void {
-	const ledger = new HealthLedger(ctx);
+	const loaded = load(ctx, globals);
+	const ledger = new HealthLedger(ctx, loaded.state);
 	if (globals.code === undefined) {
 		emit(ctx, globals, { tripwires: TRIPWIRES }, () =>
 			table(

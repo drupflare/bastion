@@ -2,6 +2,8 @@ import type { Context } from '@drupflare/bastion';
 import {
 	BackupEngine,
 	BastionError,
+	RELOAD_OUTCOME,
+	RELOAD_REQUEST,
 	RUNTIME_DIGEST,
 	SessionStore,
 	backupTarget,
@@ -11,7 +13,8 @@ import {
 	tenantDigest,
 	trustLocalCa,
 	untrustLocalCa,
-	writeConfig
+	writeConfig,
+	type ReloadOutcome
 } from '@drupflare/bastion';
 import { kv, table } from '../format';
 import { emit, load, writePath, type Globals } from '../state';
@@ -19,18 +22,24 @@ import { emit, load, writePath, type Globals } from '../state';
 // #region lifecycle
 
 /**
- * Which tenants are running with a configuration that has since changed.
+ * Applies the configuration to the tenants whose own has changed, and leaves the rest resident.
  *
  * workerd has no in-place reload: `--watch` re-executes the binary over itself and loses every
- * in-memory Durable Object. So the unit of a reload is the tenant, and a tenant whose configuration
- * did not change is left alone rather than restarted for symmetry.
+ * in-memory Durable Object, so a swap is a process swap whatever it is called. What this buys over
+ * `restart` is the blast radius -- the tenants that did not change keep their objects -- which on a
+ * box holding a department's sites is the difference between one site blinking and all of them.
  *
- * **This reports; it does not restart.** It said `1 tenant will restart`, exited 0 and changed
- * nothing: an operator who raised a memory limit was told it had been applied and kept serving on
- * the old one. Reaching the running `serve` from a separate CLI process is a mechanism bastion does
- * not have yet, so the command names `bastion restart` rather than implying a swap it cannot do.
+ * It reaches the running process through a request file under `state`, because this is a different
+ * process: a signal carries no payload, and the management API needs a credential and a listener
+ * that may be the thing that is broken. `--check` reports and changes nothing.
+ *
+ * This command used to print `1 tenant will restart`, exit 0 and restart nothing, so an operator
+ * who raised a memory limit was told it had been applied and kept serving on the old one.
  */
-export function runReload(ctx: Context, globals: Globals): number {
+export async function runReload(
+	ctx: Context,
+	globals: Globals & { check?: boolean }
+): Promise<number> {
 	const loaded = load(ctx, globals);
 	const changed: string[] = [];
 	const unchanged: string[] = [];
@@ -42,10 +51,8 @@ export function runReload(ctx: Context, globals: Globals): number {
 			continue;
 		}
 		// the digest of what this tenant is configured with, against what the running process
-		// recorded when it started. Comparing the source avoids rendering a whole config to find
-		// that nothing moved, and the runtime writes the baseline so this reads the box rather than
-		// its own last answer: nothing recorded one, so the first run always said every tenant had
-		// changed and the second always said none had
+		// recorded when it started. The runtime writes that baseline, so this reads the box rather
+		// than its own last answer
 		const digest = tenantDigest(loaded.config, tenant);
 		const path = `${loaded.state}/tenants/${tenant.name}/${RUNTIME_DIGEST}`;
 		const current = ctx.files.exists(path) ? ctx.files.readText(path).trim() : null;
@@ -56,24 +63,92 @@ export function runReload(ctx: Context, globals: Globals): number {
 		changed.push(tenant.name);
 	}
 
-	emit(ctx, globals, { changed, unchanged, suspended, applied: false }, () =>
-		[
-			kv([
-				['out of date', changed.length === 0 ? '(nothing)' : changed.join(', ')],
-				['unchanged', unchanged.length === 0 ? '(none)' : unchanged.join(', ')],
-				['suspended', suspended.length === 0 ? '(none)' : suspended.join(', ')]
-			]),
-			'',
-			changed.length === 0
-				? 'every tenant is running the configuration on disk'
-				: `${changed.length} tenant${changed.length === 1 ? '' : 's'} ` +
-					`${changed.length === 1 ? 'is' : 'are'} running an older configuration. ` +
-					'Nothing has been restarted: run `bastion restart` to apply it, which restarts ' +
-					'every tenant and drops the Durable Objects they hold'
-		].join('\n')
+	const report = (applied: string[] | null, failed: ReloadOutcome['failed'] = []): void => {
+		emit(ctx, globals, { changed, unchanged, suspended, applied, failed }, () =>
+			[
+				kv([
+					['out of date', changed.length === 0 ? '(nothing)' : changed.join(', ')],
+					['unchanged', unchanged.length === 0 ? '(none)' : unchanged.join(', ')],
+					['suspended', suspended.length === 0 ? '(none)' : suspended.join(', ')],
+					...(applied === null
+						? []
+						: ([
+								['swapped', applied.length === 0 ? '(nothing)' : applied.join(', ')]
+							] as [string, string][]))
+				]),
+				'',
+				...failed.map((entry) => `${entry.tenant} did not come back: ${entry.reason}`),
+				changed.length === 0
+					? 'every tenant is running the configuration on disk'
+					: applied === null
+						? `${changed.length} tenant${changed.length === 1 ? '' : 's'} ` +
+							`${changed.length === 1 ? 'is' : 'are'} running an older configuration. ` +
+							'Run `bastion reload` without --check to swap them'
+						: `${applied.length} tenant${applied.length === 1 ? '' : 's'} swapped; the ` +
+							'rest kept their Durable Objects resident'
+			].join('\n')
+		);
+	};
+
+	if (globals.check === true) {
+		report(null);
+		// a finding rather than a success: something is configured that is not running
+		return changed.length === 0 ? 0 : 3;
+	}
+
+	if (changed.length === 0) {
+		report([]);
+		return 0;
+	}
+
+	const pidfile = `${loaded.state}/bastion.pid`;
+	if (!ctx.files.exists(pidfile)) {
+		throw new BastionError('usage', 'bastion is not running, so there is nothing to reload', {
+			next: 'bastion up'
+		});
+	}
+
+	ctx.files.writeText(
+		`${loaded.state}/${RELOAD_REQUEST}`,
+		`${JSON.stringify({ at: ctx.now(), tenants: changed })}\n`
 	);
-	// a finding rather than a success: something is configured that is not running
-	return changed.length === 0 ? 0 : 3;
+
+	const outcome = await awaitOutcome(ctx, loaded.state);
+	if (outcome === null) {
+		throw new BastionError(
+			'workerd-boot',
+			'the running bastion did not pick the reload up within ' +
+				`${Math.round(RELOAD_TIMEOUT_MS / 1000)}s`,
+			{ next: 'bastion status' }
+		);
+	}
+	report(outcome.swapped, outcome.failed);
+	return outcome.failed.length === 0 ? 0 : 3;
+}
+
+/** how long the CLI waits for the running process to answer before saying it did not */
+const RELOAD_TIMEOUT_MS = 30_000;
+const RELOAD_POLL_MS = 25;
+
+/**
+ * Waits for the outcome the running process writes.
+ *
+ * The outcome file is removed first, so a stale one from an earlier reload cannot be read as this
+ * one's answer -- which would report a swap that did not happen.
+ */
+async function awaitOutcome(ctx: Context, state: string): Promise<ReloadOutcome | null> {
+	const path = `${state}/${RELOAD_OUTCOME}`;
+	ctx.files.remove(path);
+	for (let waited = 0; waited < RELOAD_TIMEOUT_MS; waited += RELOAD_POLL_MS) {
+		await new Promise((resolve) => setTimeout(resolve, RELOAD_POLL_MS));
+		if (!ctx.files.exists(path)) continue;
+		try {
+			return JSON.parse(ctx.files.readText(path)) as ReloadOutcome;
+		} catch {
+			return null;
+		}
+	}
+	return null;
 }
 
 /**
