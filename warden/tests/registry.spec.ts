@@ -86,9 +86,17 @@ describe('the program', () => {
 		expect(registered.sort()).toEqual(IMPLEMENTED.map((c) => c.name).sort());
 	});
 
-	it('accepts a global flag in either position for every implemented command', async () => {
-		for (const command of IMPLEMENTED) {
-			if ((command.args ?? []).some((arg) => arg.required)) continue;
+	/**
+	 * One case per command rather than one loop over all of them.
+	 *
+	 * Every case builds the whole 125-command program twice, so the loop form was a single test
+	 * doing 250 of them: 190ms here and over the 5s timeout on a two-core runner sharing itself
+	 * with the other vitest workers. Splitting bounds each case at two builds and names the command
+	 * that failed instead of the loop that contained it.
+	 */
+	it.each(IMPLEMENTED.filter((command) => !(command.args ?? []).some((arg) => arg.required)))(
+		'accepts a global flag in either position for $name',
+		async (command) => {
 			const first = harness();
 			const second = harness();
 			const path = command.name.split(' ');
@@ -101,7 +109,7 @@ describe('the program', () => {
 				'unknown option'
 			);
 		}
-	});
+	);
 
 	it('exits 2 for a command that does not exist rather than doing nothing', async () => {
 		const { ctx } = harness();
