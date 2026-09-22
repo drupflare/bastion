@@ -1,5 +1,6 @@
 import type { Context } from '../context';
 import { BastionError } from '../errors';
+import { CLUSTER_PATHS, CLUSTER_PROTOCOL } from './protocol';
 
 export type ReplicaAction = 'provision' | 'snapshot' | 'status' | 'withdraw';
 
@@ -31,29 +32,50 @@ export interface ReplicaResult {
 export class ReplicaDriver {
 	private readonly ctx: Context;
 	private readonly ownerToken: string;
+	private readonly credential: string;
 
-	constructor(ctx: Context, ownerToken: string) {
+	/**
+	 * @param ownerToken the SITE's own token, which its `/replica` route checks
+	 * @param credential this NODE's cluster credential, which the endpoint in front of it checks
+	 */
+	constructor(ctx: Context, ownerToken: string, credential = '') {
 		this.ctx = ctx;
 		this.ownerToken = ownerToken;
+		this.credential = credential;
 	}
 
+	/**
+	 * Reaches a node's site `/replica` route through its cluster endpoint.
+	 *
+	 * Not through the front door, which refuses the whole diagnostic set including `/replica` for
+	 * every tenant. Going around that refusal for node traffic would mean opening it for site
+	 * traffic too; the cluster endpoint is the authenticated way in, and it takes a node credential
+	 * rather than an operator one.
+	 */
 	private async call(nodeAddress: string, request: ReplicaRequest): Promise<ReplicaResult> {
-		const url = new URL(`http://${nodeAddress}/replica`);
-		url.searchParams.set('action', request.action);
-		url.searchParams.set('lane', String(request.lane));
-		const response = await this.ctx.fetch(url.toString(), {
+		const response = await this.ctx.fetch(`http://${nodeAddress}${CLUSTER_PATHS.replica}`, {
 			method: 'POST',
 			headers: {
-				'x-cfw-owner-token': this.ownerToken,
-				host: request.site
-			}
+				'content-type': 'application/json',
+				authorization: `Bearer ${this.credential}`
+			},
+			body: JSON.stringify({
+				protocol: CLUSTER_PROTOCOL,
+				site: request.site,
+				action: request.action,
+				lane: request.lane,
+				ownerToken: this.ownerToken
+			})
 		});
-		const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+		const body = (await response.json().catch(() => ({}))) as {
+			result?: { ok?: boolean; detail?: string };
+			error?: { message?: string };
+		};
 		return {
-			ok: response.ok,
+			ok: response.ok && body.result?.ok !== false,
 			action: request.action,
-			stage: String(body.stage ?? (response.ok ? 'ok' : 'failed')),
-			detail: String(body.detail ?? response.status)
+			stage: response.ok ? 'ok' : 'failed',
+			detail: String(body.result?.detail ?? body.error?.message ?? response.status)
 		};
 	}
 
