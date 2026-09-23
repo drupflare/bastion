@@ -41,21 +41,15 @@ fi
 
 [ -e "$KERNEL" ] || curl -sSL -o "$KERNEL" "$KERNEL_URL"
 
-# a guest rootfs whose init prints the marker the lane greps for and then powers the VM off, so a
-# boot that hangs fails the lane instead of timing the suite out. Built in a container because a
-# loop mount and mkfs need privileges the rig user does not have and should not be given
-if [ ! -e guest.ext4 ]; then
-	docker run --rm --privileged -v "$PWD":/work alpine:3.21 sh -c '
-		apk add --no-cache busybox-static e2fsprogs >/dev/null 2>&1
-		mkdir -p /g/sbin /g/bin /g/proc /g/dev
-		cp /bin/busybox.static /g/bin/busybox
-		ln -sf /bin/busybox /g/bin/sh
-		printf "#!/bin/sh\n/bin/busybox mount -t proc proc /proc\necho BASTION_GUEST_UP\n/bin/busybox sync\necho o > /proc/sysrq-trigger\n" > /g/sbin/init
-		chmod +x /g/sbin/init
-		truncate -s 48M /work/guest.ext4
-		mkfs.ext4 -q -d /g -F /work/guest.ext4'
-	docker run --rm -v "$PWD":/work alpine:3.21 chown "$(id -u):$(id -g)" /work/guest.ext4
-fi
+echo "hypervisor and kernel ready in ${RIG}:"
+ls -lh firecracker jailer "$KERNEL"
 
-echo "microVM rig ready in ${RIG}:"
-ls -lh firecracker jailer "$KERNEL" guest.ext4
+# the rootfs carries the pinned workerd, so it is built separately against a binary this script
+# has no way to choose. Both microVM lanes boot the same image an operator would run
+if [ -e guest.ext4 ]; then
+	ls -lh guest.ext4
+else
+	echo
+	echo "next, build the guest image against the pinned runtime:"
+	echo "  core/scripts/guest-image.sh ${RIG} /path/to/workerd"
+fi
