@@ -875,8 +875,8 @@ Then name it, and the hypervisor if it is not on the default path:
 
     runtime:
       guest:
-        kernel: /var/lib/bastion/guest/vmlinux
-        rootfs: /var/lib/bastion/guest/rootfs.ext4
+        kernel: /var/lib/bastion/guest/vmlinux-6.1.128
+        rootfs: /var/lib/bastion/guest/guest.ext4
         firecracker: /usr/bin/firecracker     # optional
         jailer: /usr/bin/jailer               # optional
 
