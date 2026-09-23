@@ -1,6 +1,6 @@
 {
 	"name": "@drupflare/warden",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"type": "module",
 	"description": "The CLI for bastion, the manager of a bastion",
 	"license": "MIT",
