@@ -18,9 +18,9 @@ import {
 	buildObjects,
 	capacity,
 	defaultCostModel,
-	firecrackerHypervisor,
 	pullBundle,
 	pullTemplate,
+	readGuests,
 	readHost,
 	refusals,
 	retain,
@@ -445,19 +445,16 @@ export function runVmList(ctx: Context, globals: Globals): number {
 		);
 		return 2;
 	}
-	const hypervisor = firecrackerHypervisor();
-	const reason = hypervisor.unavailableReason(ctx);
-	if (reason !== null) {
-		ctx.io.err(reason);
-		return 3;
-	}
-	const guests = hypervisor.list();
+	// reading the list does not need a hypervisor, and building one here refused on a box that was
+	// running guests happily: `serve` was pointed at a rig this process knows nothing about
+	// from the file `serve` writes, because the guest map belongs to the object that created it
+	const guests = readGuests(ctx, loaded.config.state);
 	emit(ctx, globals, { guests }, () =>
 		guests.length === 0
 			? 'no guests are running'
 			: table(
-					['tenant', 'state', 'pid'],
-					guests.map((guest) => [guest.tenant, guest.state, String(guest.pid ?? '-')])
+					['tenant', 'pid', 'console'],
+					guests.map((guest) => [guest.tenant, String(guest.pid ?? '-'), guest.console])
 				)
 	);
 	return 0;
