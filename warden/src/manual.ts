@@ -1174,6 +1174,13 @@ workerd is pinned by binary SHA-256 rather than by tag, because a tag is a mutab
 release someone else owns and the reason a pin exists is that the bytes are the ones that were
 tested.
 
+**What that check covers, exactly.** bastion records the digest the first time it resolves a staged
+binary, beside it as \`workerd-<version>.sha256\`, and compares on every start after that. A binary
+replaced on disk after it was staged is refused by name. It is not a check on the download: bastion
+ships no manifest of published digests, so the first sighting is trusted. Put the published digest
+in \`runtime.workerd.digest\` to check that too, and the configured value wins over the recorded
+one. \`verify: none\` records nothing and compares nothing.
+
 Two refusals guard a change. Below the CVE floor, bastion refuses and names the CVE the floor
 closes; \`--force-below-floor\` accepts it and records which CVE was accepted in the audit log.
 Across a storage format change it refuses without \`--restore-from\` naming a verified backup,
