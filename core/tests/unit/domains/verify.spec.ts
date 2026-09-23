@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureResolver, isAbsent } from '../../../src/domains/dns';
-import {
-	assertReady,
-	challengeName,
-	challengeToken,
-	checkDomain
-} from '../../../src/domains/verify';
+import { challengeName, challengeToken, checkDomain } from '../../../src/domains/verify';
 
 const SECRET = 'install-secret';
 const HOST = 'www.example.edu';
@@ -172,26 +167,6 @@ describe('checkDomain', () => {
 		const report = await checkDomain(resolver(), SECRET, 'acme', HOST, { addresses: [] });
 		expect(report.checks.find((c) => c.id === 'dns')?.state).toBe('unknown');
 		expect(report.ready).toBe(false);
-	});
-});
-
-describe('assertReady', () => {
-	it('passes a ready report', async () => {
-		expect(() =>
-			assertReady({ host: HOST, tenant: 'acme', ready: true, checks: [], instructions: [] })
-		).not.toThrow();
-	});
-
-	it('names every failed check and the records to publish', async () => {
-		const report = await checkDomain(resolver({ txt: {} }), SECRET, 'acme', HOST, options);
-		try {
-			assertReady(report);
-			expect.unreachable('should have refused');
-		} catch (e) {
-			expect((e as Error).message).toContain('ownership');
-			expect((e as Error).message).toContain('publish these records');
-			expect((e as { next: string }).next).toContain('bastion domain verify');
-		}
 	});
 });
 

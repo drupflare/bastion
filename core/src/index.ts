@@ -439,7 +439,6 @@ export {
 } from './domains/provider';
 export {
 	CHALLENGE_PREFIX,
-	assertReady,
 	challengeName,
 	challengeToken,
 	checkDomain,
@@ -682,7 +681,6 @@ export {
 } from './migrate/plan';
 export {
 	MigrationRun,
-	refuseDirectSeed,
 	type MigrationHooks,
 	type SiteProgress,
 	type SiteStage

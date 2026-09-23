@@ -1,5 +1,4 @@
 import type { Context } from '../context';
-import { BastionError } from '../errors';
 import type { MigrationPlan, SitePlan } from './plan';
 
 export type SiteStage = 'pending' | 'exporting' | 'provisioning' | 'replaying' | 'done' | 'failed';
@@ -138,7 +137,3 @@ export const DIRECT_SEED_REFUSED =
 	'bastion replays a site through the same path a running site uses rather than writing the ' +
 	'object file directly; the object id is derived from a workerd internal and seeding it would ' +
 	'route around the acceptance test that the same payload runs unmodified';
-
-export function refuseDirectSeed(): never {
-	throw new BastionError('capability-refused', DIRECT_SEED_REFUSED);
-}

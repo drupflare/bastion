@@ -1,5 +1,4 @@
 import { createHmac } from 'node:crypto';
-import { BastionError } from '../errors';
 import type { DnsResolver } from './dns';
 
 export const CHALLENGE_PREFIX = '_bastion-challenge';
@@ -168,20 +167,4 @@ export async function checkDomain(
 		checks,
 		instructions
 	};
-}
-
-export function assertReady(report: DomainReport): void {
-	if (report.ready) return;
-	const failed = report.checks.filter((check) => check.state !== 'pass');
-	throw new BastionError(
-		'capability-refused',
-		[
-			`${report.host} is not ready for a certificate:`,
-			...failed.map((check) => `  ${check.id}: ${check.detail}`),
-			...(report.instructions.length === 0
-				? []
-				: ['', 'publish these records:', ...report.instructions.map((line) => `  ${line}`)])
-		].join('\n'),
-		{ next: `bastion domain verify ${report.host}`, retryable: true }
-	);
 }

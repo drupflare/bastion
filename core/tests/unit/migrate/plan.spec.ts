@@ -9,7 +9,7 @@ import {
 	buildPlan,
 	type DiscoveredSite
 } from '../../../src/migrate/plan';
-import { MigrationRun, refuseDirectSeed, type MigrationHooks } from '../../../src/migrate/run';
+import { DIRECT_SEED_REFUSED, MigrationRun, type MigrationHooks } from '../../../src/migrate/run';
 
 const GiB = 1024 ** 3;
 const host: HostReading = {
@@ -159,8 +159,17 @@ describe('MigrationRun', () => {
 	});
 });
 
-describe('refuseDirectSeed', () => {
-	it('refuses, and records why rather than leaving it to be re-proposed', () => {
-		expect(() => refuseDirectSeed()).toThrow(/runs unmodified/);
+/**
+ * Seeding the object file directly stays refused, and the reason stays written down.
+ *
+ * A throwing guard for it existed and nothing called it, because nothing implements the path it
+ * refused. What has to survive is the reasoning, so a later pass does not re-propose it as an
+ * optimisation: the object id comes from a workerd internal, and writing it by hand would route
+ * around the one acceptance test that matters.
+ */
+describe('the direct seed refusal', () => {
+	it('records why rather than leaving it to be re-proposed', () => {
+		expect(DIRECT_SEED_REFUSED).toMatch(/runs unmodified/);
+		expect(DIRECT_SEED_REFUSED).toMatch(/derived from a workerd internal/);
 	});
 });
