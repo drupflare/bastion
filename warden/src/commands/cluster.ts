@@ -1,5 +1,6 @@
 import type { Context } from '@drupflare/bastion';
 import {
+	assertPlanFits,
 	BastionError,
 	buildPlan,
 	capacity,
@@ -661,6 +662,10 @@ export async function runMigrateRun(
 		);
 		return 3;
 	}
+
+	// the dry run prints a `fits` column and `--yes` used to move everything regardless, so a
+	// destination that could not hold the sites found out by filling up
+	assertPlanFits(plan);
 
 	const run = new MigrationRun(ctx, `${loaded.state}/migrations/run.json`, plan);
 	const progress = await run.run(plan, {
