@@ -29,7 +29,7 @@ export interface HealthInput {
 	backups?: BackupSample[];
 	audit?: { chainOk: boolean; brokenAt?: number };
 	vms?: VmSample[];
-	isolation?: { configured: string; available: string };
+	isolation?: { configured: string; available: string | null };
 }
 
 export interface HostSample {
@@ -568,12 +568,14 @@ export const PROBES: Probe[] = [
 			if (configured === undefined || available === undefined || configured === available) {
 				return null;
 			}
+			// `null` is a host that can run no mode at all, which reads worse than any downgrade
+			// and must still name the mode that was asked for
 			// bastion refuses rather than downgrading, so this records the mechanism that
 			// disappeared: serving `hardened` where the operator configured `isolated` silently is
 			// the exact failure the project exists to prevent
 			return finding('isolation.mode_downgraded', 'isolation', at(input), {
 				configured,
-				available
+				available: available ?? 'none'
 			});
 		}
 	}
