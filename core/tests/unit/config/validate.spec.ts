@@ -399,3 +399,35 @@ describe('a binding whose primitive nobody installed', () => {
 		expect(withWorker({ durableObjectClass: null, kv: ['SESSIONS'] }).ok).toBe(true);
 	});
 });
+
+/**
+ * A header rule that names a reserved header is refused, not dropped.
+ *
+ * `checkHeaderPolicy` existed for this and was called by nothing, so a rule the front door would
+ * ignore validated and saved cleanly. An operator who sets a header believes it is set, and the
+ * first thing that tells them otherwise is whatever the header was supposed to prevent.
+ */
+describe('front header rules', () => {
+	const withHeaders = (rules: unknown) => validate({ version: 1, front: { headers: rules } });
+
+	it('refuses a request rule that would forge the client address', () => {
+		const result = withHeaders({
+			request: [{ path: '/', set: { 'cf-connecting-ip': '1.2.3.4' } }]
+		});
+		expect(result.ok).toBe(false);
+		expect(result.problems.map((problem) => problem.path)).toContain('front.headers.request');
+	});
+
+	it('accepts an ordinary rule', () => {
+		expect(
+			withHeaders({ response: [{ path: '/', set: { 'x-frame-options': 'DENY' } }] }).ok
+		).toBe(true);
+	});
+
+	it('names the header in the message, so the fix is the line it points at', () => {
+		const result = withHeaders({
+			request: [{ path: '/', set: { 'cf-connecting-ip': '1.2.3.4' } }]
+		});
+		expect(result.problems[0]?.message).toContain('cf-connecting-ip');
+	});
+});

@@ -1,4 +1,5 @@
 import { WRAPPED_SLOTS } from '../capnp/plan';
+import { checkHeaderPolicy, type HeaderPolicy } from '../front/headers';
 import {
 	DEFAULT_CAPABILITIES,
 	LIMIT_FLOORS,
@@ -102,6 +103,7 @@ export function validate(raw: unknown, options: { testLane?: boolean } = {}): Va
 	const groups = validateGroups(doc.groups, problems);
 	const tenants = validateTenants(doc.tenants, problems, doc.drivers, groups);
 	validateCluster(doc.cluster, problems);
+	validateHeaders(doc.front, problems);
 
 	// residency: pin is refused HERE rather than detected at runtime, because the alternative is an
 	// OOM kill that takes every in-memory Durable Object in the tenant with it
@@ -547,5 +549,25 @@ function validateCapabilities(value: unknown, path: string, problems: Problem[])
 		if (typeof given !== 'boolean') {
 			problems.push({ path: `${path}.${key}`, message: 'must be true or false' });
 		}
+	}
+}
+
+/**
+ * Header rules, refused at configuration time rather than dropped at serve time.
+ *
+ * `checkHeaderPolicy` was written for exactly this and called by nothing, so a rule naming a
+ * reserved header validated, saved, and was then ignored by the front door. An operator who sets a
+ * header believes it is set, and the first thing that tells them otherwise is whatever the header
+ * was supposed to prevent.
+ */
+function validateHeaders(front: unknown, problems: Problem[]): void {
+	if (front === null || typeof front !== 'object') return;
+	const headers = (front as { headers?: unknown }).headers;
+	if (headers === null || typeof headers !== 'object') return;
+	for (const problem of checkHeaderPolicy(headers as HeaderPolicy)) {
+		problems.push({
+			path: `front.headers.${problem.where}`,
+			message: `${problem.header}: ${problem.reason}`
+		});
 	}
 }
