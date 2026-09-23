@@ -12,7 +12,7 @@
 <h1>Interface SupervisorOptions</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">SupervisorOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#binary">binary</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#configpath">configPath</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#policy">policy</a><span class="tsd-signature-symbol">?:</span> <a href="BackoffPolicy.html" class="tsd-signature-type tsd-kind-interface">BackoffPolicy</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#beforestart-1">beforeStart</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onstart-1">onStart</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">pid</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#random-1">random</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#sleep-1">sleep</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ms</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L28">core/src/supervise/tenant.ts:28</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L28">core/src/supervise/tenant.ts:28</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,19 +38,19 @@
 <h3 class="tsd-anchor-link" id="binary"><span>binary</span><a href="#binary" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">binary</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L29">core/src/supervise/tenant.ts:29</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L29">core/src/supervise/tenant.ts:29</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="configpath"><span>config<wbr/>Path</span><a href="#configpath" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">configPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>the generated config.capnp for this tenant</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L31">core/src/supervise/tenant.ts:31</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L31">core/src/supervise/tenant.ts:31</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="policy"><code class="tsd-tag">Optional</code><span>policy</span><a href="#policy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">policy</span><span class="tsd-signature-symbol">?:</span> <a href="BackoffPolicy.html" class="tsd-signature-type tsd-kind-interface">BackoffPolicy</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L32">core/src/supervise/tenant.ts:32</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L32">core/src/supervise/tenant.ts:32</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -68,7 +68,7 @@ breaker: a supervisor that could not supervise because nobody removed one file.<
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L52">core/src/supervise/tenant.ts:52</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L52">core/src/supervise/tenant.ts:52</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onstart"><code class="tsd-tag">Optional</code><span>on<wbr/>Start</span><a href="#onstart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -86,7 +86,7 @@ back unbounded the first time it was killed for exceeding one.</p>
 <li><span><span class="tsd-kind-parameter">pid</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L43">core/src/supervise/tenant.ts:43</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L43">core/src/supervise/tenant.ts:43</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="random"><code class="tsd-tag">Optional</code><span>random</span><a href="#random" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -95,7 +95,7 @@ back unbounded the first time it was killed for exceeding one.</p>
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L35">core/src/supervise/tenant.ts:35</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L35">core/src/supervise/tenant.ts:35</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sleep"><code class="tsd-tag">Optional</code><span>sleep</span><a href="#sleep" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -110,7 +110,7 @@ back unbounded the first time it was killed for exceeding one.</p>
 <li><span><span class="tsd-kind-parameter">ms</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/supervise/tenant.ts#L34">core/src/supervise/tenant.ts:34</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/753f6711009fb671efc8e31d886b55d19f795b74/core/src/supervise/tenant.ts#L34">core/src/supervise/tenant.ts:34</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
