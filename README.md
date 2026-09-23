@@ -101,6 +101,14 @@ win.
 A mechanism that a preflight used to find and no longer finds never downgrades the mode. bastion
 refuses and names what disappeared.
 
+`isolated` needs three things the other modes do not: `/dev/kvm`, firecracker with its jailer, and
+a guest image carrying the pinned workerd. bastion ships none of them and refuses to start without
+`runtime.guest` rather than falling back. `core/scripts/guest-image.sh` builds the image.
+
+Inside a guest there is no network interface at all. Serving traffic arrives over vsock and every
+adapter the site binds leaves the same way, so egress is the absence of a device rather than a rule
+that could be wrong.
+
 ## Platform Limits
 
 Standalone workerd enforces no isolate memory cap, no CPU limit, no subrequest cap and no startup
@@ -132,6 +140,9 @@ listeners:
 runtime:
   workerd: { version: '1.20260828.1', verify: sha256 }
   residency: evict
+  guest:
+    kernel: /var/lib/bastion/guest/vmlinux-6.1.128
+    rootfs: /var/lib/bastion/guest/guest.ext4
 tenants:
   - name: acme
     limits: { cpu: '2', memory: 4Gi, maxSites: 40 }
@@ -314,11 +325,12 @@ skips: a skip reads as a pass in every summary, and the lanes that matter most a
 prerequisite. `WORKERD_BINARY`, `BASTION_BINARY` and `PAYLOAD_DIR` point at them.
 
 Every lane above runs in CI except the microVM one. It needs `/dev/kvm`, which no hosted runner
-guarantees, so it is run by hand on a machine with hardware virtualisation. Build its hypervisor,
-kernel and guest image first:
+guarantees, so it is run by hand on a machine with hardware virtualisation. Build the hypervisor
+and kernel, then the guest image against the pinned runtime:
 
 ```sh
-core/scripts/microvm-rig.sh # writes ~/bastion-rig/fc
+core/scripts/microvm-rig.sh                            # firecracker, jailer, a guest kernel
+core/scripts/guest-image.sh ~/bastion-rig/fc ./workerd # the rootfs that carries workerd
 REQUIRE_KVM=1 bun run test:e2e
 ```
 
