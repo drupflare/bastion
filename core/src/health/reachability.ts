@@ -74,3 +74,66 @@ export function unreadConfigKeys(
 		.filter((leaf) => !exempt.includes(leaf))
 		.filter((leaf) => !new RegExp(`\\b${leaf}\\b`).test(haystack));
 }
+
+/** one export the build found, and where it lives */
+export interface ExportedSymbol {
+	name: string;
+	file: string;
+}
+
+/**
+ * Every exported function a source file declares.
+ *
+ * Deliberately regex rather than a parser: this runs in the gate lane and a TypeScript program
+ * would cost more than the rule saves. It matches the one declaration form this codebase uses.
+ */
+export function exportedFunctions(file: string, source: string): ExportedSymbol[] {
+	return [...source.matchAll(/^export (?:async )?function (\w+)/gm)].map((match) => ({
+		name: match[1] as string,
+		file
+	}));
+}
+
+/**
+ * Guards that nothing calls.
+ *
+ * The class that made `isolated` a claim rather than a boundary: a refusal written, unit-tested,
+ * exported and then invoked by no code path, so the property it describes simply does not hold
+ * while every spec stays green. A tripwire with no repair already fails the build; so does this.
+ *
+ * Scoped to guard-shaped names on purpose. A plain helper with no caller is untidy, and a REFUSAL
+ * with no caller is a security control an operator believes is running.
+ */
+export function uncalledGuards(
+	declared: ExportedSymbol[],
+	sources: { file: string; source: string }[],
+	exempt: string[] = []
+): ExportedSymbol[] {
+	// `check` is in the set because `checkHeaderPolicy` was exactly this class and its name kept it
+	// out. It also matches several honest non-guards, which is what the exemption list is for
+	const guard = /^(assert|refuse|require|deny|forbid|check)[A-Z]/;
+	return declared
+		.filter((symbol) => guard.test(symbol.name) && !exempt.includes(symbol.name))
+		.filter((symbol) => {
+			// a guard its own module calls from an exported wrapper IS wired, so the home file
+			// counts; what does not count is the declaration itself, or a barrel re-exporting it
+			const uses = sources
+				.filter((candidate) => !candidate.file.endsWith('index.ts'))
+				.reduce((total, candidate) => {
+					const body =
+						candidate.file === symbol.file
+							? candidate.source.replace(
+									new RegExp(
+										`^export (?:async )?function ${symbol.name}\\b`,
+										'gm'
+									),
+									''
+								)
+							: candidate.source;
+					return (
+						total + (body.match(new RegExp(`\\b${symbol.name}\\b`, 'g')) ?? []).length
+					);
+				}, 0);
+			return uses === 0;
+		});
+}

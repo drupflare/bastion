@@ -8,7 +8,13 @@ import { ROUTES } from '../src/api/routes';
 import { defaultConfig } from '../src/config/defaults';
 import { CODES } from '../src/errors';
 import { PROBES } from '../src/health/probes';
-import { checkTripwires, configKeys, unreadConfigKeys } from '../src/health/reachability';
+import {
+	checkTripwires,
+	configKeys,
+	exportedFunctions,
+	uncalledGuards,
+	unreadConfigKeys
+} from '../src/health/reachability';
 import { TRIPWIRES } from '../src/health/tripwires';
 
 /**
@@ -17,6 +23,19 @@ import { TRIPWIRES } from '../src/health/tripwires';
  * Without this the check could not fail: every key is named in its own type and its own defaults,
  * so a key read by nothing still matched itself. Caught by planting one.
  */
+/**
+ * Refusals a caller reaches another way, each with the reason.
+ *
+ * An exemption is not a way to quiet the rule: it is the statement that the property holds through
+ * a different path, and it names that path so the claim can be checked.
+ */
+const GUARD_EXEMPTIONS: string[] = [
+	// both nodes are handed the SAME site host by `ReplicaDriver.join`, so the two cannot derive
+	// different cookie names without that call changing shape. The property is asserted across two
+	// real nodes in `cluster-flow.spec.ts` rather than by a runtime check that cannot fire
+	'assertSameCookieName'
+];
+
 const DECLARATIONS = [
 	'config/defaults.ts',
 	'config/types.ts',
@@ -35,12 +54,42 @@ function sources(dir: string, out: string[] = []): string[] {
 	return out;
 }
 
+/** the same walk, keeping the file name, which the uncalled-guard rule compares against */
+function files(dir: string, out: { file: string; source: string }[] = []) {
+	for (const entry of readdirSync(dir)) {
+		const path = join(dir, entry);
+		if (statSync(path).isDirectory()) files(path, out);
+		else if (path.endsWith('.ts')) out.push({ file: path, source: readFileSync(path, 'utf8') });
+	}
+	return out;
+}
+
 const root = new URL('..', import.meta.url).pathname;
 const violations = checkTripwires();
 const unread = unreadConfigKeys(configKeys(defaultConfig()), [
 	...sources(join(root, 'src')),
 	...sources(join(root, '..', 'warden', 'src'))
 ]);
+
+/**
+ * A refusal nothing calls.
+ *
+ * `assertChildMaySet` was written, unit-tested and invoked by nothing, so a child in a cluster
+ * could lower a key the control node owns and every spec stayed green. The same shape left
+ * `isolated` running workerd on the host. An exemption here has to name why.
+ */
+const production = [
+	...files(join(root, 'src')),
+	...files(join(root, '..', 'warden', 'src')),
+	// the scripts are production too: this file is the only caller of `checkTripwires`
+	...files(join(root, 'scripts')),
+	...files(join(root, '..', 'warden', 'scripts'))
+];
+const uncalled = uncalledGuards(
+	production.flatMap((entry) => exportedFunctions(entry.file, entry.source)),
+	production,
+	GUARD_EXEMPTIONS
+);
 
 const topics = new Set(MANUAL.map((section) => section.id));
 
@@ -231,10 +280,17 @@ for (const violation of violations) {
 for (const key of unread) {
 	process.stderr.write(`config-unread: ${key} -- nothing in the source reads this key\n`);
 }
+for (const guard of uncalled) {
+	process.stderr.write(
+		`guard-uncalled: ${guard.name} -- declared in ${guard.file} and called by nothing, ` +
+			'so the property it refuses does not hold\n'
+	);
+}
 
 const total =
 	violations.length +
 	unread.length +
+	uncalled.length +
 	undocumented.length +
 	unsurfaced.length +
 	deadButtons.length +
@@ -249,7 +305,7 @@ const total =
 if (total === 0) {
 	process.stdout.write(
 		`reachability: every one of the ${TRIPWIRES.length} tripwires has a probe that raises it, ` +
-			'a repair or a button, every config key is read, and ' +
+			'a repair or a button, every config key is read, every refusal is called, and ' +
 			`every one of the ${IMPLEMENTED.length} commands has a manual section and a ` +
 			'dashboard surface or a stated exemption, every button and next step names a ' +
 			`command that exists, and every one of the ${ROUTES.length} management routes has a ` +
