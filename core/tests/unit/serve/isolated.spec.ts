@@ -282,3 +282,95 @@ describe('the isolation the health tree reports', () => {
 		expect(sample.isolation?.configured).toBe('isolated');
 	});
 });
+
+/**
+ * The egress drift reading, which nothing ever took.
+ *
+ * `egress.policy_drift` had a probe, a repair and a button, and `input.egress` was never populated
+ * by anything, so a rule added by hand to bastion's own nftables table was undetectable. The
+ * tripwire passed every reachability rule the build had, because the rule checked that a probe
+ * existed rather than that anything fed it.
+ */
+describe('reading the live egress table', () => {
+	const withRules = (nft: { code: number; stdout: string; stderr: string }) => {
+		const files = memoryFiles({ ...LINUX });
+		const runner = scriptedRunner({ nft });
+		const ctx = {
+			...defaultContext(),
+			files,
+			runner,
+			io: memoryIo(),
+			env: { PATH: '/usr/bin' },
+			platform: 'linux',
+			now: () => 1000
+		};
+		const config: BastionConfig = {
+			...defaultConfig(),
+			mode: 'hardened',
+			state: '/var/lib/bastion',
+			tenants: [
+				{
+					name: 'acme',
+					egress: { allow: ['smtp.example.edu:587'] },
+					sites: [{ host: 'www.example.edu', bundle: BUNDLE }]
+				}
+			]
+		};
+		return new Runtime(ctx, {
+			config,
+			host: recordingListenerHost(),
+			upstream: () => Promise.resolve(new Response('ok')),
+			platform: 'linux',
+			adapters: memoryAdapters
+		});
+	};
+
+	it('leaves the reading absent until one has been taken', () => {
+		expect(withRules({ code: 0, stdout: '', stderr: '' }).sample().egress).toBeUndefined();
+	});
+
+	it('reports drift when the live table is not what bastion computed', async () => {
+		const runtime = withRules({ code: 0, stdout: 'ip daddr 9.9.9.9 accept', stderr: '' });
+		await runtime.refreshEgress();
+		expect(runtime.sample().egress?.drifted).toBe(true);
+	});
+
+	/** a host with no nft answers nothing, rather than reporting every tenant as drifted */
+	it('stays silent when the table cannot be read at all', async () => {
+		const files = memoryFiles({ ...LINUX });
+		const ctx = {
+			...defaultContext(),
+			files,
+			runner: {
+				run: () => Promise.reject(new Error('nft: not found')),
+				spawn: () => {
+					throw new Error('unused');
+				},
+				signal: () => 'gone' as const
+			},
+			io: memoryIo(),
+			env: {},
+			platform: 'linux',
+			now: () => 0
+		};
+		const runtime = new Runtime(ctx, {
+			config: {
+				...defaultConfig(),
+				mode: 'hardened',
+				tenants: [
+					{
+						name: 'acme',
+						egress: { allow: ['smtp.example.edu:587'] },
+						sites: [{ host: 'www.example.edu', bundle: BUNDLE }]
+					}
+				]
+			},
+			host: recordingListenerHost(),
+			upstream: () => Promise.resolve(new Response('ok')),
+			platform: 'linux',
+			adapters: memoryAdapters
+		});
+		await runtime.refreshEgress();
+		expect(runtime.sample().egress).toBeUndefined();
+	});
+});

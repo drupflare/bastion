@@ -20,6 +20,7 @@ import {
 import { loadConfig } from '../config/file';
 import type { BastionConfig, SiteConfig, TenantConfig } from '../config/types';
 import type { Context } from '../context';
+import { checkDrift, rulesFor } from '../egress/policy';
 import { BastionError } from '../errors';
 import { buildFront, listenerSpec } from '../front/door';
 import { handleRequest, type FrontDeps } from '../front/handler';
@@ -1101,6 +1102,9 @@ export class Runtime {
 				slowloris: this.unattributed.get('slowloris') ?? 0,
 				windowMs: this.ctx.now() - this.startedAt
 			},
+			// left absent until a reading has been taken, so an unmeasured table does not read as
+			// a clean one
+			...(this.egressDrift === undefined ? {} : { egress: { drifted: this.egressDrift } }),
 			isolation: {
 				configured: config.mode,
 				// asking the host rather than echoing the configuration back: this reported the
@@ -1136,6 +1140,33 @@ export class Runtime {
 	health(): Finding[] {
 		return sweep(this.ledger, this.sample());
 	}
+
+	/**
+	 * Reads the live nftables table and remembers whether it matches the policy.
+	 *
+	 * Separate from `sample()` because it shells out and `sample()` is synchronous, and driven from
+	 * the same timer as the sweep. Without it `input.egress` was never populated at all, so
+	 * `egress.policy_drift` had a probe, a repair and a button and could not fire: a rule added by
+	 * hand to bastion's own table was undetectable, which is the case the tripwire exists for.
+	 */
+	async refreshEgress(): Promise<void> {
+		if (this.options.config.mode === 'solo') return;
+		let drifted = false;
+		for (const tenant of this.options.config.tenants) {
+			const rules = rulesFor(tenant);
+			if (rules.length === 0) continue;
+			try {
+				if ((await checkDrift(this.ctx, tenant.name, rules)).drifted) drifted = true;
+			} catch {
+				// a host with no nft answers nothing rather than reporting every tenant as drifted
+				return;
+			}
+		}
+		this.egressDrift = drifted;
+	}
+
+	/** the last drift reading, or undefined until one has been taken */
+	private egressDrift: boolean | undefined = undefined;
 
 	get running(): string[] {
 		return [...this.supervisors.keys()];
