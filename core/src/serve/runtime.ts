@@ -31,6 +31,16 @@ import { HealthLedger } from '../health/ledger';
 import { sweep, type HealthInput } from '../health/probes';
 import type { Finding } from '../health/tripwires';
 import { applyCgroup, attachPid } from '../isolation/cgroups';
+import { firecrackerHypervisor } from '../isolation/firecracker';
+import {
+	adapterVsockPath,
+	buildImage,
+	ensureStateImage,
+	forgetGuest,
+	guestPaths,
+	recordGuest
+} from '../isolation/guest';
+import type { Hypervisor } from '../isolation/hypervisor';
 import { assertModeSafe } from '../isolation/modes';
 import { modeAvailable, preflight } from '../isolation/preflight';
 import {
@@ -39,6 +49,7 @@ import {
 	sandboxArgv,
 	type SandboxPaths
 } from '../isolation/sandbox';
+import { nodeConnector, VSOCK_PORTS, vsockFetch, type StreamConnector } from '../isolation/vsock';
 import { AnalyticsWindow, DataPointWindow } from '../observe/analytics';
 import { TenantSupervisor } from '../supervise/tenant';
 import { ACME_CHALLENGE_PREFIX, httpResponder } from '../tls/acme';
@@ -62,6 +73,12 @@ export interface RuntimeOptions {
 	tokens?: ApiDeps['tokens'];
 	/** the resolved workerd binary; absent means do not start tenants */
 	binary?: string;
+	/** the hypervisor `isolated` boots guests with; a seam so the gate lane drives it */
+	hypervisor?: Hypervisor;
+	/** opens a stream to a guest's vsock socket; a seam for the same reason */
+	connector?: StreamConnector;
+	/** the guest kernel and root filesystem every tenant boots, which the operator supplies */
+	guestImage?: { kernel: string; rootfs: string };
 	acknowledgeUnsafeMode?: boolean;
 	/** a seam so the gate lane drives both sides of the platform refusal */
 	platform?: string;
@@ -287,18 +304,26 @@ export class Runtime {
 			this.ctx.files.remove(socketFor({ adapterDir: `${paths.state}/adapters` }, slot));
 		}
 
+		// in a guest the capnp names paths inside it, which are not the host paths bastion holds:
+		// the drives are mounted at a fixed layout and the adapter sockets are the guest's own
+		const inGuest = config.mode === 'isolated';
+		const hostModules = modulesFrom(this.ctx, bundle, worker.main, paths.state);
 		const plan = planSite({
 			tenant,
 			site,
-			paths: {
-				bundle,
-				storage: `${paths.state}/storage`,
-				assets: `${paths.state}/assets`,
-				adapterDir: `${paths.state}/adapters`,
-				listenSocket: `${paths.state}/${TENANT_SOCKET}`
-			},
+			paths: inGuest
+				? guestPaths()
+				: {
+						bundle,
+						storage: `${paths.state}/storage`,
+						assets: `${paths.state}/assets`,
+						adapterDir: `${paths.state}/adapters`,
+						listenSocket: `${paths.state}/${TENANT_SOCKET}`
+					},
 			// the embeds resolve against the capnp's own directory, which is the tenant state dir
-			modules: modulesFrom(this.ctx, bundle, worker.main, paths.state),
+			modules: inGuest
+				? hostModules.map((module) => ({ ...module, embed: `bundle/${module.name}` }))
+				: hostModules,
 			compatibilityDate: worker.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
 			compatibilityFlags: worker.compatibilityFlags ?? DEFAULT_COMPATIBILITY_FLAGS,
 			uniqueKey: `${tenant.name}:${site.host}`,
@@ -351,20 +376,164 @@ export class Runtime {
 			...(this.options.clients === undefined ? {} : { clients: this.options.clients })
 		});
 
+		// in a guest the address in the capnp is the GUEST's path, which bastion must not bind. The
+		// guest dials a vsock port and firecracker turns that into a connection to `<uds>_<port>`,
+		// so the same handler is bound there instead
+		const chroot =
+			this.options.config.mode === 'isolated'
+				? this.hypervisor().chrootFor(this.ctx, tenant.name)
+				: null;
+		// the jailer builds this directory, and it does so AFTER these sockets are bound; binding
+		// into a directory nothing has created yet is an ENOENT that reads as a hypervisor fault
+		if (chroot !== null) this.ctx.files.mkdirp(chroot);
+		const vsock = chroot === null ? null : `${chroot}/bastion.vsock`;
+		// a unix socket outlives the process that bound it, and these live in the chroot rather
+		// than beside the tenant's other sockets, so the cleanup there never reached them: the
+		// second `up` on any box met EADDRINUSE and no tenant came back
+		if (vsock !== null) {
+			for (const slot of ADAPTER_SLOTS) {
+				const stale = adapterVsockPath(vsock, slot);
+				if (stale !== null) this.ctx.files.remove(stale);
+			}
+		}
+
 		const bound: Listener[] = [];
 		for (const service of plan.services) {
 			if (service.kind !== 'external') continue;
 			if (!service.address.startsWith('unix:')) continue;
 			const slot = service.name.replace(/^bastion_/, '');
+			const unix =
+				vsock === null
+					? service.address.slice('unix:'.length)
+					: adapterVsockPath(vsock, slot);
+			if (unix === null) continue;
 			bound.push(
-				this.options.host.listen(
-					{ address: '', unix: service.address.slice('unix:'.length) },
-					(request) => handleSlot(set, slot, request, new URL(request.url).pathname)
+				this.options.host.listen({ address: '', unix }, (request) =>
+					handleSlot(set, slot, request, new URL(request.url).pathname)
 				)
 			);
+			// connecting to a unix socket needs WRITE permission on it, and the jailer drops
+			// firecracker to another uid, so the default mode reset every adapter call the guest
+			// made. The chroot around these is 0700 and owned by that uid, so the directory is
+			// what keeps them private rather than the socket's own bits
+			if (vsock !== null) this.ctx.files.chmod(unix, 0o666);
 		}
 		this.adapters.set(tenant.name, bound);
 		return set;
+	}
+
+	/**
+	 * Reaches the tenant's workerd, wherever it is.
+	 *
+	 * On the host that is a unix socket in the tenant's state directory. In a guest there is no
+	 * such socket to dial: the only way in is vsock, and firecracker wants the port named in a
+	 * handshake before the stream carries HTTP.
+	 */
+	private tenantUpstream(): RuntimeOptions['upstream'] {
+		if (this.options.config.mode !== 'isolated') return this.options.upstream;
+		return async (route, request, client) => {
+			void client;
+			const vsock = `${this.hypervisor().chrootFor(this.ctx, route.tenant)}/bastion.vsock`;
+			return await vsockFetch(this.connector(), vsock, VSOCK_PORTS.serve, request);
+		};
+	}
+
+	/** built once and held, because the guest map belongs to the instance that created it */
+	private heldHypervisor: Hypervisor | null = null;
+
+	private hypervisor(): Hypervisor {
+		const guest = this.options.config.runtime.guest;
+		this.heldHypervisor ??=
+			this.options.hypervisor ??
+			firecrackerHypervisor({
+				...(guest?.firecracker === undefined ? {} : { firecracker: guest.firecracker }),
+				...(guest?.jailer === undefined ? {} : { jailer: guest.jailer })
+			});
+		return this.heldHypervisor;
+	}
+
+	private connector(): StreamConnector {
+		return this.options.connector ?? nodeConnector();
+	}
+
+	/**
+	 * Stages everything the guest reads and hands it over as two drives.
+	 *
+	 * The capnp resolves its `embed` paths when workerd parses it, which happens INSIDE the guest,
+	 * so the bundle has to travel with the config rather than stay on the host. Both go on one
+	 * read-only drive; only the tenant's storage is writable.
+	 */
+	private async startGuest(tenant: TenantConfig, paths: SandboxPaths): Promise<null> {
+		const hypervisor = this.hypervisor();
+		const reason = hypervisor.unavailableReason(this.ctx);
+		if (reason !== null) throw new BastionError('preflight-unsupported', reason);
+
+		const image = this.options.guestImage;
+		if (image === undefined) {
+			throw new BastionError(
+				'usage',
+				'`isolated` needs a guest kernel and root filesystem, and none is configured',
+				{ next: 'bastion manual isolation' }
+			);
+		}
+
+		const staging = `${paths.state}/guest`;
+		this.ctx.files.mkdirp(`${staging}/bundle`);
+		this.ctx.files.mkdirp(`${staging}/assets`);
+		this.ctx.files.writeText(`${staging}/config.capnp`, this.ctx.files.readText(paths.config));
+
+		let bytes = this.ctx.files.size(`${staging}/config.capnp`);
+		const site = tenant.sites[0];
+		if (site !== undefined) {
+			for (const [from, into] of [
+				[this.bundleFor(site, paths), `${staging}/bundle`],
+				[`${paths.state}/assets`, `${staging}/assets`]
+			] as const) {
+				if (!this.ctx.files.exists(from)) continue;
+				for (const entry of this.ctx.files.readDir(from)) {
+					if (entry.directory) continue;
+					this.ctx.files.link(`${from}/${entry.name}`, `${into}/${entry.name}`);
+					bytes += this.ctx.files.size(`${into}/${entry.name}`);
+				}
+			}
+		}
+
+		const configImage = `${paths.state}/config.img`;
+		const stateImage = `${paths.state}/state.img`;
+		// ext4 overhead plus room for the site to grow into its own storage
+		await buildImage(
+			this.ctx,
+			staging,
+			configImage,
+			Math.max(64, Math.ceil(bytes / 1048576) + 32)
+		);
+		await ensureStateImage(this.ctx, stateImage, 1024);
+
+		const limits = tenant.limits ?? {};
+		const guest = await hypervisor.create(this.ctx, {
+			tenant: tenant.name,
+			// `cpu` is a share like "2" and `memory` is bytes by the time the validator is done
+			vcpus: Math.max(1, Math.floor(Number(limits.cpu ?? '1')) || 1),
+			memoryMib:
+				limits.memory === undefined
+					? 1024
+					: Math.max(128, Math.floor(limits.memory / 1048576)),
+			kernel: image.kernel,
+			rootfs: image.rootfs,
+			config: configImage,
+			state: stateImage,
+			vsockUds: `${hypervisor.chrootFor(this.ctx, tenant.name)}/bastion.vsock`,
+			guestCid: 3
+		});
+		recordGuest(this.ctx, this.options.config.state, {
+			tenant: guest.tenant,
+			pid: guest.pid,
+			chroot: guest.chroot,
+			vsock: guest.vsock,
+			console: guest.console,
+			startedAt: this.ctx.now()
+		});
+		return null;
 	}
 
 	/**
@@ -374,10 +543,12 @@ export class Runtime {
 	 * process does. A cgroup created after the spawn is a window in which the tenant is unbounded,
 	 * and the window is exactly the startup burst that a memory limit is there to catch.
 	 */
-	async startTenant(tenant: string): Promise<TenantSupervisor> {
+	async startTenant(tenant: string): Promise<TenantSupervisor | null> {
 		const config = this.options.config;
 		const binary = this.options.binary;
-		if (binary === undefined)
+		// in `isolated` the runtime lives in the guest image, and a host that carries workerd
+		// anyway is holding the binary the VM boundary exists to contain
+		if (binary === undefined && config.mode !== 'isolated')
 			throw new BastionError('workerd-missing', 'no workerd binary resolved');
 
 		const declared = config.tenants.find((entry) => entry.name === tenant);
@@ -393,10 +564,16 @@ export class Runtime {
 
 		if (config.mode === 'hardened') {
 			await createNetns(this.ctx, tenant);
-			await installApparmorProfile(this.ctx, tenant, paths, binary);
+			await installApparmorProfile(this.ctx, tenant, paths, binary as string);
 		}
 
-		const wrapped = sandboxArgv({ mode: config.mode, tenant, paths }, binary, []);
+		// `isolated` runs workerd INSIDE a guest, so nothing is spawned on the host at all. This
+		// returned a host process wrapped in nothing, on the grounds that the VM was the boundary,
+		// while no guest was ever created: the mode an operator picks for untrusted tenants was
+		// the weakest of the three rather than the strongest
+		if (config.mode === 'isolated') return await this.startGuest(declared, paths);
+
+		const wrapped = sandboxArgv({ mode: config.mode, tenant, paths }, binary as string, []);
 		const supervisor = new TenantSupervisor(this.ctx, tenant, {
 			binary: wrapped.command,
 			configPath: paths.config,
@@ -464,7 +641,7 @@ export class Runtime {
 		}
 		if (this.front === null) {
 			this.front = buildFront(this.ctx, this.options.config, {
-				upstream: this.options.upstream,
+				upstream: this.tenantUpstream(),
 				hsts: this.options.config.listeners.https !== undefined
 			});
 		}
@@ -577,7 +754,7 @@ export class Runtime {
 			forceHttps: false
 		};
 		try {
-			const answer = await this.options.upstream(
+			const answer = await this.tenantUpstream()(
 				route,
 				new Request(url, {
 					method: 'POST',
@@ -719,8 +896,11 @@ export class Runtime {
 	 */
 	async up(): Promise<RuntimeState> {
 		const { mode, warnings } = this.preflight();
+		// `isolated` has no host binary to look for, and this stopped before the first tenant on
+		// that alone: the box came up reporting `0 tenants running` with nothing saying why
+		const needsBinary = this.options.config.mode !== 'isolated';
 		for (const tenant of this.options.config.tenants) {
-			if (this.options.binary === undefined) break;
+			if (needsBinary && this.options.binary === undefined) break;
 			await this.startTenant(tenant.name);
 		}
 
@@ -785,6 +965,12 @@ export class Runtime {
 			for (const listener of this.adapters.get(tenant) ?? []) await listener.stop(false);
 			this.adapters.delete(tenant);
 			this.supervisors.delete(tenant);
+		}
+		if (this.options.config.mode === 'isolated') {
+			await this.hypervisor().stop(this.ctx, tenant);
+			forgetGuest(this.ctx, this.options.config.state, tenant);
+			for (const listener of this.adapters.get(tenant) ?? []) await listener.stop(false);
+			this.adapters.delete(tenant);
 		}
 		// the capnp is regenerated from the config on disk, which is what makes this a swap rather
 		// than a restart of the same thing
@@ -856,6 +1042,12 @@ export class Runtime {
 
 	async down(): Promise<void> {
 		for (const supervisor of this.supervisors.values()) supervisor.stop();
+		if (this.options.config.mode === 'isolated') {
+			for (const guest of this.hypervisor().list()) {
+				await this.hypervisor().stop(this.ctx, guest.tenant);
+				forgetGuest(this.ctx, this.options.config.state, guest.tenant);
+			}
+		}
 		for (const listener of this.listeners.values()) await listener.stop(false);
 		for (const bound of this.adapters.values()) {
 			for (const listener of bound) await listener.stop(false);
@@ -909,7 +1101,15 @@ export class Runtime {
 				slowloris: this.unattributed.get('slowloris') ?? 0,
 				windowMs: this.ctx.now() - this.startedAt
 			},
-			isolation: { configured: config.mode, available: config.mode }
+			isolation: {
+				configured: config.mode,
+				// asking the host rather than echoing the configuration back: this reported the
+				// mode an operator asked for as the mode they got, which is the one answer a
+				// downgrade check must never give
+				available: modeAvailable(preflight(this.ctx, this.options.platform), config.mode).ok
+					? config.mode
+					: null
+			}
 		};
 	}
 
