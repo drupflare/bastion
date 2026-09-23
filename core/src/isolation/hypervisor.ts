@@ -42,6 +42,13 @@ export interface Hypervisor {
 	id(): string;
 	/** why this host cannot run guests, or null */
 	unavailableReason(ctx: Context): string | null;
+	/**
+	 * Where this tenant's guest WILL live, before one is created.
+	 *
+	 * The adapter sockets have to be bound before the guest boots, and their host paths are
+	 * derived from the chroot, so the answer cannot wait for `create` to return it.
+	 */
+	chrootFor(ctx: Context, tenant: string): string;
 	create(ctx: Context, spec: GuestSpec): Promise<Guest>;
 	stop(ctx: Context, tenant: string): Promise<void>;
 	list(): Guest[];

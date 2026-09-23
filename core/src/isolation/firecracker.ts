@@ -165,6 +165,9 @@ export function firecrackerHypervisor(options: FirecrackerOptions = {}): Hypervi
 	return {
 		id: () => 'firecracker',
 
+		chrootFor: (ctx: Context, tenant: string) =>
+			chrootFor(tenant, ctx.files.realpath(firecracker), chrootBase),
+
 		unavailableReason: (ctx: Context) => {
 			if ((options.platform ?? process.platform) !== 'linux') {
 				return 'microVMs need linux; this host is not';
