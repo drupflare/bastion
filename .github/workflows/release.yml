@@ -352,11 +352,12 @@ jobs:
         if: steps.hub.outputs.enabled == 'true'
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
+          NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           set -euo pipefail
-          TAGS="--tag docker.io/drupflare/bastion:${VERSION}"
+          TAGS="--tag docker.io/${NAMESPACE}/bastion:${VERSION}"
           if [ "${{ github.ref_name }}" = "master" ]; then
-            TAGS="$TAGS --tag docker.io/drupflare/bastion:latest"
+            TAGS="$TAGS --tag docker.io/${NAMESPACE}/bastion:latest"
           fi
           docker buildx imagetools create $TAGS "ghcr.io/drupflare/bastion@${DIGEST}"
       - name: Say Docker Hub Was Skipped
@@ -411,6 +412,7 @@ jobs:
           SKIP_GITHUB_NPM: ${{ github.event.inputs.skip_github_npm }}
           SKIP_CONTAINER: ${{ github.event.inputs.skip_container }}
           DOCKERHUB: ${{ steps.hub.outputs.enabled }}
+          NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           set -euo pipefail
           VERSION=$(node -p "require('./core/package.json').version")
@@ -438,6 +440,6 @@ jobs:
           if [ "$SKIP_CONTAINER" != "true" ]; then
             retry docker manifest inspect "ghcr.io/drupflare/bastion:$VERSION"
             if [ "$DOCKERHUB" = "true" ]; then
-              retry docker manifest inspect "docker.io/drupflare/bastion:$VERSION"
+              retry docker manifest inspect "docker.io/${NAMESPACE}/bastion:$VERSION"
             fi
           fi
