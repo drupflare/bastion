@@ -907,9 +907,34 @@ A symlink works too. The jailer canonicalises the binary it is given and names e
 after what that resolves to, so a link to a versioned filename puts the version in the chroot path;
 bastion follows the same resolution, so the two agree either way.
 
-The guest image is the operator's. It needs a kernel with virtio block and vsock support, and a
-root filesystem whose init starts workerd against the capnp bastion mounts at `/config.capnp`.
-The tenant's storage arrives as a separate writable device; nothing else in the guest is writable.
+The guest image is built rather than downloaded, because it carries the pinned workerd:
+
+    core/scripts/guest-image.sh ~/bastion-rig/fc /path/to/workerd
+
+Then name it, and the hypervisor if it is not on the default path:
+
+    runtime:
+      guest:
+        kernel: /var/lib/bastion/guest/vmlinux-6.1.128
+        rootfs: /var/lib/bastion/guest/guest.ext4
+        firecracker: /usr/bin/firecracker     # optional
+        jailer: /usr/bin/jailer               # optional
+
+`isolated` refuses to start without `runtime.guest`, because there is nothing to boot.
+
+### How a Guest Reaches Its Adapters
+
+The guest has no network interface, so KV, R2, the cache and the rest cannot be sockets on the
+host: nothing in the guest could open them. Every one crosses vsock instead, on a fixed port per
+adapter, and bastion binds the same handler it always did on the host side of that port.
+
+Serving traffic goes the other way. bastion dials the guest's vsock and asks for port 8080, and a
+forwarder inside the guest passes it to workerd's own socket. Nothing is bound on a network
+interface at either end, so the boundary is the absence of a device rather than a rule.
+
+That means the image has three jobs: mount the config drive at `/srv/bastion` and the storage
+drive at `/var/lib/bastion/storage`, bridge each vsock port to the socket its capnp names, and
+exec workerd. The script above builds one that does; an operator replacing it keeps that contract.
 
 Each guest's serial console is written to `/var/log/bastion/guests/<tenant>.log`. A guest that
 fails to boot says why there and nowhere else, so that file is the first thing to read when a
@@ -1194,6 +1219,13 @@ install or the setting it needs, rather than accepted and failed on the first re
 workerd is pinned by binary SHA-256 rather than by tag, because a tag is a mutable pointer at a
 release someone else owns and the reason a pin exists is that the bytes are the ones that were
 tested.
+
+**What that check covers, exactly.** bastion records the digest the first time it resolves a staged
+binary, beside it as `workerd-<version>.sha256`, and compares on every start after that. A binary
+replaced on disk after it was staged is refused by name. It is not a check on the download: bastion
+ships no manifest of published digests, so the first sighting is trusted. Put the published digest
+in `runtime.workerd.digest` to check that too, and the configured value wins over the recorded
+one. `verify: none` records nothing and compares nothing.
 
 Two refusals guard a change. Below the CVE floor, bastion refuses and names the CVE the floor
 closes; `--force-below-floor` accepts it and records which CVE was accepted in the audit log.

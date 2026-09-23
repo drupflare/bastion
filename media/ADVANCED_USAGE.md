@@ -2,6 +2,7 @@
 
 Worked flows for things the manual describes one command at a time.
 
+- [Running a Tenant in a microVM](#running-a-tenant-in-a-microvm)
 - [Bringing Up a Two-Node Cluster](#bringing-up-a-two-node-cluster)
 - [Moving a VPS Onto a Box](#moving-a-vps-onto-a-box)
 - [Wiring an Institutional CA](#wiring-an-institutional-ca)
@@ -19,6 +20,89 @@ Worked flows for things the manual describes one command at a time.
 - [The Default drupflare Payload](#the-default-drupflare-payload)
 - [Bringing Your Own Redis](#bringing-your-own-redis)
 - [Running Under systemd](#running-under-systemd)
+
+## Running a Tenant in a microVM
+
+`isolated` is the only mode that is multi-tenant safe, and it needs three things bastion does not
+ship. Check the first one before anything else:
+
+```sh
+ls -l /dev/kvm
+bastion doctor
+```
+
+`/dev/kvm` is owned by `root:kvm` on a stock Ubuntu, so the account running bastion joins that
+group and logs in again:
+
+```sh
+sudo usermod -aG kvm bastion
+```
+
+A bare-metal host, or a VM with nested virtualisation turned on, can do this. Most VPS instances
+cannot, and `doctor` says which case you are in rather than letting `up` find out.
+
+Second, the hypervisor. The release archive names its binaries after the version, so install them
+under the plain names bastion looks for:
+
+```sh
+tar xzf firecracker-v1.17.0-x86_64.tgz
+sudo install -m 0755 release-*/firecracker-* /usr/bin/firecracker
+sudo install -m 0755 release-*/jailer-* /usr/bin/jailer
+```
+
+Third, the guest image. It carries the pinned workerd, so it is built rather than downloaded:
+
+```sh
+core/scripts/guest-image.sh /var/lib/bastion/guest ./workerd
+```
+
+Then name it and switch the mode:
+
+```yaml
+mode: isolated
+runtime:
+  guest:
+    kernel: /var/lib/bastion/guest/vmlinux-6.1.128
+    rootfs: /var/lib/bastion/guest/guest.ext4
+```
+
+`firecracker` and `jailer` take paths too, for an install somewhere other than `/usr/bin`. Without
+`runtime.guest` the mode refuses to start rather than running the tenant on the host.
+
+```sh
+bastion up
+bastion vm list
+```
+
+Each tenant now boots its own microVM, and no workerd runs on the host at all. The guest takes a
+few seconds longer to answer its first request than a process does, because it is booting a kernel
+and mounting two drives before the runtime starts.
+
+### What Crosses the Boundary
+
+The guest has no network interface. Two drives go in and everything else is vsock:
+
+| what                          | how                                                    |
+| ----------------------------- | ------------------------------------------------------ |
+| the capnp and the bundle      | a read-only drive mounted at `/srv/bastion`            |
+| the site's storage            | the one writable drive, at `/var/lib/bastion/storage`  |
+| a request from the front door | bastion dials the guest's vsock and asks for port 8080 |
+| KV, R2, the cache, SQL        | the guest dials out, one vsock port per adapter        |
+
+That is why the bundle travels with the configuration rather than staying on the host: the capnp
+resolves its `embed` paths when workerd parses it, and workerd is parsing it inside the guest.
+
+### When a Guest Will Not Start
+
+Read its console. A guest that fails says why there and nowhere else:
+
+```sh
+bastion vm list
+tail -40 /var/log/bastion/guests/acme.log
+```
+
+A kernel panic naming `/sbin/init` is the image, not bastion. A guest that boots and then answers
+nothing is usually the runtime failing inside it, which the same file records.
 
 ## Bringing Up a Two-Node Cluster
 
@@ -150,16 +234,23 @@ Nothing in the serving path needs the internet. The three things that normally r
 the workerd download and the backup target.
 
 Use the file secrets driver rather than a KMS, import certificates rather than issuing them, and
-verify the workerd binary against the pin by hand:
+carry the published digest in with the binary:
 
 ```yaml
 runtime:
-  workerd: { version: '1.20260828.1', verify: sha256 }
+  workerd:
+    version: '1.20260828.1'
+    verify: sha256
+    digest: 3f9c1e...
 drivers:
   secrets: { driver: file, path: /var/lib/bastion/secrets/secrets.age }
 backup:
   target: { driver: fs, root: /mnt/backup }
 ```
+
+`digest` is the only way to check the bytes you carried in are the bytes upstream published, because
+nothing on this box can ask. Without it bastion records what the staged binary hashed on first sight
+and compares on every start after that, which catches a later swap on disk and trusts the first one.
 
 `bastion doctor` still works with no network. The manual is embedded in the binary, so
 `bastion manual tls` works too.

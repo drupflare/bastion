@@ -12,7 +12,7 @@
 <h1>Interface ClusterNode</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ClusterNode</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#address">address</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#audithead">auditHead</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#capacity">capacity</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">memoryBytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">sites</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#id">id</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#labels">labels</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#lastseenat">lastSeenAt</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#serves">serves</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#state">state</a><span class="tsd-signature-symbol">:</span> <a href="../types/NodeState.html" class="tsd-signature-type tsd-kind-type-alias">NodeState</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L6">core/src/cluster/registry.ts:6</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L6">core/src/cluster/registry.ts:6</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,48 +38,48 @@
 <div class="tsd-comment tsd-typography"><p>where this node's management listener answers</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L9">core/src/cluster/registry.ts:9</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L9">core/src/cluster/registry.ts:9</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="audithead"><span>audit<wbr/>Head</span><a href="#audithead" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">auditHead</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
 <div class="tsd-comment tsd-typography"><p>the head of this node's own audit chain, so a child rewriting history is detectable</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L18">core/src/cluster/registry.ts:18</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L18">core/src/cluster/registry.ts:18</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="capacity"><span>capacity</span><a href="#capacity" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">capacity</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">memoryBytes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">sites</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
 <div class="tsd-comment tsd-typography"><p>what this node reported it can hold, so placement does not have to ask</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L16">core/src/cluster/registry.ts:16</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L16">core/src/cluster/registry.ts:16</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="id"><span>id</span><a href="#id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L7">core/src/cluster/registry.ts:7</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L7">core/src/cluster/registry.ts:7</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="labels"><span>labels</span><a href="#labels" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">labels</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L12">core/src/cluster/registry.ts:12</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L12">core/src/cluster/registry.ts:12</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="lastseenat"><span>last<wbr/>Seen<wbr/>At</span><a href="#lastseenat" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">lastSeenAt</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L14">core/src/cluster/registry.ts:14</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L14">core/src/cluster/registry.ts:14</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="serves"><span>serves</span><a href="#serves" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">serves</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>where this node serves sites; a forward dials this, not the management address</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L11">core/src/cluster/registry.ts:11</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L11">core/src/cluster/registry.ts:11</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="state"><span>state</span><a href="#state" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">state</span><span class="tsd-signature-symbol">:</span> <a href="../types/NodeState.html" class="tsd-signature-type tsd-kind-type-alias">NodeState</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/a110fead10839cdab496c28e68462c34896f92b7/core/src/cluster/registry.ts#L13">core/src/cluster/registry.ts:13</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/8abfd9ef7ead0e01091d6bc7db6fd0203d01c395/core/src/cluster/registry.ts#L13">core/src/cluster/registry.ts:13</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
