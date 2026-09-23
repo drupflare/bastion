@@ -144,17 +144,21 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 			? loaded.config
 			: { ...loaded.config, mode: globals.mode as typeof loaded.config.mode };
 	// a missing binary is not fatal here: the front door still serves and `doctor` says what is
-	// absent, which is more useful than refusing to start at all
+	// absent, which is more useful than refusing to start at all. `isolated` does not look for one
+	// at all, because the runtime rides in the guest image and a host that carries workerd anyway
+	// is holding the binary the VM boundary exists to contain
 	let binary: string | null = null;
-	try {
-		binary = resolveBinary(ctx, {
-			state: loaded.state,
-			pin: { version: config.runtime.workerd.version },
-			floor: config.runtime.floors.workerd,
-			verify: config.runtime.workerd.verify
-		}).path;
-	} catch (e) {
-		ctx.io.err(e instanceof Error ? e.message : String(e));
+	if (config.mode !== 'isolated') {
+		try {
+			binary = resolveBinary(ctx, {
+				state: loaded.state,
+				pin: { version: config.runtime.workerd.version },
+				floor: config.runtime.floors.workerd,
+				verify: config.runtime.workerd.verify
+			}).path;
+		} catch (e) {
+			ctx.io.err(e instanceof Error ? e.message : String(e));
+		}
 	}
 	const runtime = new Runtime(ctx, {
 		config,
@@ -163,7 +167,9 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 		acknowledgeUnsafeMode: acknowledged(globals),
 		// so a reload can read the file again rather than comparing the startup config with itself
 		...(loaded.path === null ? {} : { configPath: loaded.path }),
-		...(binary === null ? {} : { binary })
+		...(binary === null ? {} : { binary }),
+		// only `isolated` boots guests, and it refuses by name when this is absent
+		...(config.runtime.guest === undefined ? {} : { guestImage: config.runtime.guest })
 	});
 	// without these the management listener answers 503 to everything and the dashboard renders
 	// against nothing; the handlers run the same commands the CLI does, under the same config

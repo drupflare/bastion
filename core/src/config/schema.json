@@ -115,6 +115,25 @@
 						}
 					}
 				},
+				"guest": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["kernel", "rootfs"],
+					"properties": {
+						"kernel": {
+							"type": "string"
+						},
+						"rootfs": {
+							"type": "string"
+						},
+						"firecracker": {
+							"type": "string"
+						},
+						"jailer": {
+							"type": "string"
+						}
+					}
+				},
 				"residency": {
 					"enum": ["evict", "pin"]
 				},

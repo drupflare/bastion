@@ -864,3 +864,23 @@ export {
 	type Comparison,
 	type FloorVerdict
 } from './workerd/version';
+
+export {
+	GUEST_LAYOUT,
+	adapterVsockPath,
+	forgetGuest,
+	guestPaths,
+	readGuests,
+	recordGuest,
+	writeGuests,
+	type GuestRecord
+} from './isolation/guest';
+export {
+	VSOCK_PORTS,
+	guestPort,
+	nodeConnector,
+	vsockFetch,
+	vsockHandshake,
+	type Stream,
+	type StreamConnector
+} from './isolation/vsock';

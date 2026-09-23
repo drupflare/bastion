@@ -35,6 +35,16 @@ export interface RuntimeConfig {
 	residency: Residency;
 	limits: RuntimeLimits;
 	unsafeEval: boolean;
+	/**
+	 * The kernel and root filesystem every guest boots, which only `isolated` reads.
+	 *
+	 * bastion ships neither: the rootfs carries the pinned workerd and the operator builds it with
+	 * `core/scripts/guest-image.sh`. Without this `isolated` has nothing to boot and refuses.
+	 *
+	 * `firecracker` and `jailer` default to `/usr/bin`, and are here because an operator who
+	 * installed the release archive somewhere else otherwise has no way to say so.
+	 */
+	guest?: { kernel: string; rootfs: string; firecracker?: string; jailer?: string };
 }
 
 export interface DriverConfig {
