@@ -1453,6 +1453,65 @@ describe('a command that writes honours --config', () => {
 		expect(files.exists('/etc/bastion/prod.yml')).toBe(true);
 		expect(files.exists('/srv/bastion.yml')).toBe(false);
 	});
+});
+
+/**
+ * A child may not lower what the control node decides.
+ *
+ * The refusal was written and unit-tested and then called by nothing, so a joined child could set
+ * `mode` locally and the cluster reported a posture its weakest node did not have. The join path
+ * already refused an offer it could not satisfy; this is the other direction.
+ */
+describe('config set on a child', () => {
+	const ctxWith = (files: ReturnType<typeof memoryFiles>, io: ReturnType<typeof memoryIo>) =>
+		({
+			files,
+			io,
+			runner: scriptedRunner(),
+			fetch: () => Promise.reject(new Error('no network')),
+			env: {},
+			cwd: '/srv',
+			platform: 'linux',
+			now: () => 0
+		}) as unknown as Context;
+
+	const child = (role: 'control' | 'child') =>
+		memoryFiles({
+			'/srv/bastion.yml': [
+				'version: 1',
+				'mode: isolated',
+				'cluster:',
+				`  role: ${role}`,
+				'  control: { address: "10.0.0.1:8787" }',
+				'  node: { id: node-b }',
+				''
+			].join('\n')
+		});
+
+	it('refuses a cluster-wide key and names why', async () => {
+		const files = child('child');
+		const io = memoryIo();
+		const ctx = ctxWith(files, io);
+		expect(await run(ctx, ['config', 'set', 'mode', 'solo'])).toBe(2);
+		expect(io.errText()).toContain('decided by the control node');
+		expect(files.readText('/srv/bastion.yml')).toContain('mode: isolated');
+	});
+
+	it('allows a node-local key, because a box has its own NICs and disks', async () => {
+		const files = child('child');
+		const io = memoryIo();
+		const ctx = ctxWith(files, io);
+		expect(await run(ctx, ['config', 'set', 'listeners.http.address', '0.0.0.0:8080'])).toBe(0);
+		expect(files.readText('/srv/bastion.yml')).toContain('8080');
+	});
+
+	it('leaves the control node free to set anything', async () => {
+		const files = child('control');
+		const io = memoryIo();
+		const ctx = ctxWith(files, io);
+		expect(await run(ctx, ['config', 'set', 'mode', 'solo'])).toBe(0);
+		expect(files.readText('/srv/bastion.yml')).toContain('mode: solo');
+	});
 
 	it('holds for domain add, which writes through a different helper', async () => {
 		const store = memoryFiles({});

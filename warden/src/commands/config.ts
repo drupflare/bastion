@@ -1,4 +1,5 @@
 import {
+	assertChildMaySet,
 	BastionError,
 	describeProblems,
 	loadConfig,
@@ -127,6 +128,10 @@ function withValue(config: unknown, key: string, value: unknown): unknown {
 /** writes through the same validator the dashboard uses, so the two cannot disagree */
 export function runConfigSet(ctx: Context, options: ConfigOptions, key: string, raw: string): void {
 	const loaded = loadConfig(ctx, { path: options.config });
+	// a child does not get to lower a key the control node decides. Without this the refusal was
+	// written, tested and never called, so `config set mode solo` on a joined child succeeded and
+	// the cluster reported a posture its weakest node did not have
+	if (loaded.config.cluster?.role === 'child') assertChildMaySet(key);
 	const next = withValue(loaded.config, key, coerce(raw)) as typeof loaded.config;
 	// `--config` wins over the working directory: writing to `./bastion.yml` because the named file
 	// did not exist yet edits a different box than the one the operator named
