@@ -5,7 +5,7 @@ import type { FileHost } from '../host/files';
 import { defaultConfig } from './defaults';
 import schema from './schema.json' with { type: 'json' };
 import type { BastionConfig } from './types';
-import { validate, type Problem, type ValidationResult } from './validate';
+import { parseSize, validate, type Problem, type ValidationResult } from './validate';
 
 export const CONFIG_NAME = 'bastion.yml';
 
@@ -116,7 +116,44 @@ export function loadConfig(
 
 	const origins = new Map<string, Setting<unknown>>();
 	collectOrigins(parsed as Record<string, unknown>, '', path, origins);
-	return { config: merge(defaultConfig(), parsed as Record<string, unknown>), path, origins };
+	return {
+		config: toBytes(merge(defaultConfig(), parsed as Record<string, unknown>)),
+		path,
+		origins
+	};
+}
+
+/**
+ * Turns every size a human wrote into the number the rest of the system is typed for.
+ *
+ * `memory: 4Gi` is the documented form and the validator accepts it, but nothing converted it, so
+ * the string reached `memory.max` and the cgroup write failed with EINVAL on the first tenant. The
+ * CLI's own `--memory 4Gi` went through a parser and a hand-edited file did not, which is why
+ * every lane that configures through commands passed.
+ */
+function toBytes(config: BastionConfig): BastionConfig {
+	const size = (value: unknown): number | undefined => {
+		if (value === undefined) return undefined;
+		if (typeof value === 'number') return value;
+		const parsed = parseSize(value, '', []);
+		return parsed ?? undefined;
+	};
+	return {
+		...config,
+		runtime: {
+			...config.runtime,
+			limits: {
+				...config.runtime.limits,
+				isolateMemory:
+					size(config.runtime.limits.isolateMemory) ?? config.runtime.limits.isolateMemory
+			}
+		},
+		tenants: config.tenants.map((tenant) =>
+			tenant.limits?.memory === undefined
+				? tenant
+				: { ...tenant, limits: { ...tenant.limits, memory: size(tenant.limits.memory) } }
+		)
+	};
 }
 
 /** records every key the FILE set; anything absent from this map came from a default */
