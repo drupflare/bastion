@@ -56,6 +56,37 @@ discarded, so a guest that failed to boot reported the failure nowhere.
 That is the shape this project already pays for elsewhere: argv and refusals scored green while the
 thing they described had never run once.
 
+### A site served from inside a guest
+
+Same host, 2026-09-22. `REQUIRE_KVM=1` runs this beside the boot lane.
+
+`bastion up --mode isolated` boots one guest per tenant, and a request reaches workerd inside it:
+
+| reading                        | value                                       |
+| ------------------------------ | ------------------------------------------- |
+| `up` to a guest answering      | about 13 s, most of it the guest's own boot |
+| `GET /` through the front door | 200, from workerd in the guest              |
+| a KV write and read back       | 200, out of the guest over vsock and back   |
+| workerd processes on the host  | 0                                           |
+
+The last row is the measurement. Before this, `isolated` ran workerd **on the host** with no
+namespace, no syscall filter and no VM, because nothing in the serving path ever created a guest
+and `sandboxArgv` returned the command unwrapped on the grounds that the VM was the boundary. The
+mode an operator picks for mutually untrusted tenants was the weakest of the three.
+
+Six more defects surfaced getting from a booting guest to a serving one, and every one of them was
+invisible to a green suite: `up` broke out of the tenant loop whenever there was no host workerd,
+which in this mode there never is; `isolated` demanded that binary anyway; adapter sockets were
+bound into the chroot before the jailer creates it; stale vsock sockets were never cleaned, so the
+second `up` on any box met `EADDRINUSE`; six of the twelve adapter slots had no vsock port at all
+and one was filed under a binding name rather than a slot; and a socket the guest has to _write_ to
+was left at a mode that only allowed reading, which reset every adapter call.
+
+One of them was not about `isolated` at all. **`memory: 4Gi` in `bastion.yml` was never converted
+to bytes**, so the string reached `memory.max` and the cgroup write failed with EINVAL on the first
+tenant, in every mode. The validator accepts the form and the README documents it; every lane
+passed because they all configure through `bastion tenant add --memory 4Gi`, which parses it.
+
 ## Inherited, and not re-run
 
 `J/request` and `J/render` are measured for both runtimes on one RAPL counter and **are at
