@@ -5,6 +5,7 @@ import {
 	acmeConfigured,
 	allocate,
 	assertChain,
+	assertIssuable,
 	backupTarget,
 	bunListenerHost,
 	challengeName,
@@ -333,6 +334,10 @@ export async function issueFor(
 		existing: options.force === true ? null : existing,
 		localCaAvailable: ctx.files.exists(`${loaded.state}/certs/local-ca.pem`)
 	});
+	// a strategy that needs the operator to do something first refuses here and says what. The
+	// renewal loop reports the same condition as an outcome and carries on, because one host must
+	// not abandon the rest of a batch; a command naming one host has no such reason to continue
+	assertIssuable(choice);
 	if (!ACME_STRATEGIES.has(choice.strategy)) {
 		throw new BastionError(
 			'capability-refused',

@@ -206,11 +206,20 @@ describe('cert issue', () => {
 		expect(files.mode('/var/lib/bastion/certs/acme-account.key')).toBe(0o600);
 	});
 
-	it('refuses a name no public CA can validate, and names the command that does apply', async () => {
+	/**
+	 * The refusal names the blocker rather than the category.
+	 *
+	 * `assertIssuable` reports the condition the strategy chooser actually found, and it runs here
+	 * and not in the renewal loop: a batch must carry on past one host, a command naming one host
+	 * has nothing to carry on to. Before it was called, this path only refused a strategy outside
+	 * ACME, so a host that needed the operator to do something first went ahead instead.
+	 */
+	it('refuses with the reason it found, and names what to do about it', async () => {
 		const { ctx } = harness({ '/srv/bastion.yml': NO_ACME });
-		await expect(runCertIssue(ctx, globals, HOST)).rejects.toThrow(
-			/cannot be issued over ACME/
-		);
+		await expect(runCertIssue(ctx, globals, HOST)).rejects.toThrow(/no ACME account/);
+		await expect(runCertIssue(ctx, globals, HOST)).rejects.toMatchObject({
+			next: expect.stringContaining('bastion')
+		});
 	});
 
 	it('refuses to install a certificate the CA issued for a different name', async () => {
