@@ -100,6 +100,10 @@
 						},
 						"verify": {
 							"enum": ["sha256", "none"]
+						},
+						"digest": {
+							"type": "string",
+							"pattern": "^[0-9a-f]{64}$"
 						}
 					}
 				},

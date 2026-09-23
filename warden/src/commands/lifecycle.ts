@@ -152,7 +152,14 @@ export function buildRuntime(ctx: Context, globals: Globals & { mode?: string })
 		try {
 			binary = resolveBinary(ctx, {
 				state: loaded.state,
-				pin: { version: config.runtime.workerd.version },
+				// the published digest when the operator configured one; without it the check
+				// falls back to what this box recorded when the binary was staged
+				pin: {
+					version: config.runtime.workerd.version,
+					...(config.runtime.workerd.digest === undefined
+						? {}
+						: { digest: config.runtime.workerd.digest })
+				},
 				floor: config.runtime.floors.workerd,
 				verify: config.runtime.workerd.verify
 			}).path;
@@ -218,6 +225,9 @@ export async function runServe(ctx: Context, globals: Globals & { mode?: string 
 			// inotify watch on a network filesystem can, and a missed one is a swap that silently
 			// never happens
 			void runtime.serveReloadRequest();
+			// and reads the live nftables table, which is the only way `egress.policy_drift` ever
+			// gets an input; the reading lands in the next sweep rather than this one
+			void runtime.refreshEgress();
 		} catch (error) {
 			// a probe that throws must not take the box down with it; it is diagnostics
 			ctx.io.err(

@@ -124,3 +124,49 @@ describe('resolveBinary', () => {
 		expect(io.errText()).toContain('CVE-2023-48230');
 	});
 });
+
+/**
+ * `verify: sha256` verifying something.
+ *
+ * It verified nothing: the comparison was guarded on `pin.digest`, no manifest of published
+ * digests ships, and the caller passed only a version -- so the key read as a security control and
+ * compared a hash against `undefined` on every start. What it can honestly promise on a
+ * self-hosted box is that the binary running today is the one that was staged.
+ */
+describe('the pinned digest', () => {
+	const pin = { version: '1.20260828.1' };
+	const options = { state: STATE, pin, floor: 'v1.20231121.0', verify: 'sha256' as const };
+
+	it('records what the binary hashed the first time it is resolved', () => {
+		const files = memoryFiles({ [PATH]: BYTES });
+		resolveBinary(ctx(files), options);
+		expect(files.readText(`${PATH}.sha256`).trim()).toBe(DIGEST);
+	});
+
+	it('accepts the same binary on every start after that', () => {
+		const files = memoryFiles({ [PATH]: BYTES });
+		resolveBinary(ctx(files), options);
+		expect(() => resolveBinary(ctx(files), options)).not.toThrow();
+	});
+
+	/** the swap this exists to catch: same path, same version, different bytes */
+	it('refuses a binary that was replaced after it was staged', () => {
+		const files = memoryFiles({ [PATH]: BYTES });
+		resolveBinary(ctx(files), options);
+		files.writeBytes(PATH, new TextEncoder().encode('something else entirely'));
+		expect(() => resolveBinary(ctx(files), options)).toThrow(/hashes .* expected/);
+	});
+
+	it('still prefers a digest the caller configured over the recorded one', () => {
+		const files = memoryFiles({ [PATH]: BYTES });
+		expect(() =>
+			resolveBinary(ctx(files), { ...options, pin: { ...pin, digest: 'deadbeef' } })
+		).toThrow(/expected deadbeef/);
+	});
+
+	it('records nothing when verification is off, so the file is not a surprise', () => {
+		const files = memoryFiles({ [PATH]: BYTES });
+		resolveBinary(ctx(files), { ...options, verify: 'none' });
+		expect(files.exists(`${PATH}.sha256`)).toBe(false);
+	});
+});

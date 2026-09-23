@@ -30,7 +30,14 @@ export interface RuntimeLimits {
 }
 
 export interface RuntimeConfig {
-	workerd: { version: string; verify: 'sha256' | 'none' };
+	/**
+	 * The pinned runtime.
+	 *
+	 * `digest` is the published SHA-256, when the operator has one. Without it bastion records what
+	 * the staged binary hashed and compares on every later start, which catches a swap on disk but
+	 * trusts the first sighting.
+	 */
+	workerd: { version: string; verify: 'sha256' | 'none'; digest?: string };
 	floors: { workerd: string; firecracker: string };
 	residency: Residency;
 	limits: RuntimeLimits;
