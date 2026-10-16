@@ -1,4 +1,4 @@
-FROM oven/bun:1.4-alpine AS build
+FROM oven/bun:1.4 AS build
 WORKDIR /src
 COPY package.json bun.lock ./
 COPY core/package.json core/package.json
@@ -12,11 +12,15 @@ RUN bun run build:dashboard \
 	&& grep -q index.html warden/src/dashboard-assets.ts \
 	&& bun run --cwd warden build:binary
 
-FROM alpine:3.21
-# workerd needs glibc; the compat layer is what lets the pinned binary run on alpine
-RUN apk add --no-cache ca-certificates libstdc++ libgcc gcompat curl \
-	&& addgroup -S bastion \
-	&& adduser -S -G bastion -h /var/lib/bastion bastion \
+FROM debian:bookworm-slim
+# workerd 1.20260828.1 needs glibc symbols (`_dl_find_object`, `sigdescr_np`, `fcntl64`) that
+# alpine's gcompat does not provide: the pinned binary exited 127 on every start. The build stage is
+# glibc too, since a compiled bun binary is linked against the libc of the image that built it
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates curl iproute2 \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& groupadd --system bastion \
+	&& useradd --system --gid bastion --home-dir /var/lib/bastion bastion \
 	&& mkdir -p /var/lib/bastion /etc/bastion \
 	&& chown -R bastion:bastion /var/lib/bastion /etc/bastion
 
