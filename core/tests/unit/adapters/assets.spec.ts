@@ -106,6 +106,17 @@ describe('the ignore list', () => {
 		expect(await resolver('/core/*.js\n')('/core/style.css')).not.toBe(null);
 	});
 
+	// a drupflare payload ships `/*` then `!` lines for its shipping set; read as plain patterns the
+	// `!` lines matched nothing and `/*` hid every file, so the worker's migration manifest was a 404
+	it('brings back a path a later ! rule names, and the last matching rule wins', async () => {
+		const r = resolver('/*\n!/core/\n!/logo.png\n/core/app.js\n');
+		expect(await r('/core/style.css')).not.toBe(null);
+		expect(await r('/logo.png')).not.toBe(null);
+		expect(await r('/core/app.js')).toBe(null);
+		expect(await r('/private/notes.txt')).toBe(null);
+		expect(await r('/drupal-pf/core.pf.bin')).toBe(null);
+	});
+
 	it('ignores comments and blank lines', async () => {
 		const r = resolver('# a comment\n\n/private/\n');
 		expect(await r('/core/style.css')).not.toBe(null);
@@ -115,7 +126,7 @@ describe('the ignore list', () => {
 
 describe('compileIgnore', () => {
 	it('matches across segments with a double star', () => {
-		const [rule] = compileIgnore('/a/**/c');
+		const [rule] = compileIgnore('/a/**/c').map((r) => r.pattern);
 		expect(rule?.test('/a/b/c')).toBe(true);
 		expect(rule?.test('/a/b/d/c')).toBe(true);
 	});
@@ -124,7 +135,7 @@ describe('compileIgnore', () => {
 	// `/a/b/c` is the safe reading rather than a leaky star. The star itself still does not cross
 	// a segment: `/a/*` matches nothing outside `/a`.
 	it('denies what is under a path it matched', () => {
-		const [rule] = compileIgnore('/a/*');
+		const [rule] = compileIgnore('/a/*').map((r) => r.pattern);
 		expect(rule?.test('/a/b')).toBe(true);
 		expect(rule?.test('/a/b/c')).toBe(true);
 		expect(rule?.test('/other/b')).toBe(false);

@@ -58,13 +58,21 @@ export type AssetProfile = ProbeProfile;
 /** the probe profile table, which is the one place a CMS is named */
 export const ASSET_PROFILES = PROBE_PROFILES;
 
-/** one ignore rule; `*` matches within a segment and `**` across them */
-export function compileIgnore(contents: string): RegExp[] {
+/** one ignore rule; `negate` is a leading `!`, which brings back what an earlier rule hid */
+export interface IgnoreRule {
+	pattern: RegExp;
+	negate: boolean;
+}
+
+/** one ignore rule per line; `*` matches within a segment and `**` across them */
+export function compileIgnore(contents: string): IgnoreRule[] {
 	return contents
 		.split('\n')
 		.map((line) => line.trim())
 		.filter((line) => line !== '' && !line.startsWith('#'))
-		.map((line) => {
+		.map((raw) => {
+			const negate = raw.startsWith('!');
+			const line = negate ? raw.slice(1) : raw;
 			const anchored = line.startsWith('/') ? line.slice(1) : line;
 			const escaped = anchored
 				.replace(/[.+^${}()|[\]\\]/g, '\\$&')
@@ -72,8 +80,19 @@ export function compileIgnore(contents: string): RegExp[] {
 				.replace(/\*/g, '[^/]*')
 				.replace(/\u0000/g, '.*');
 			const suffix = line.endsWith('/') ? '.*' : '(/.*)?';
-			return new RegExp(`^/?${escaped}${suffix}$`);
+			return { pattern: new RegExp(`^/?${escaped}${suffix}$`), negate };
 		});
+}
+
+/**
+ * Whether the rules hide a path. The last rule that matches decides, as in a gitignore: a
+ * drupflare payload hides everything with `/*` and brings its shipping set back with `!` lines, so
+ * a matcher that read `!/drupal-sql/` as a pattern hid the whole tree and the site never migrated.
+ */
+export function isIgnored(rules: readonly IgnoreRule[], path: string): boolean {
+	let hidden = false;
+	for (const rule of rules) if (rule.pattern.test(path)) hidden = !rule.negate;
+	return hidden;
 }
 
 export interface AssetResolver {
@@ -99,7 +118,7 @@ export function assetResolver(
 	return async (path: string) => {
 		const clean = normalize(path);
 		if (NEVER_SERVED.some((p) => p.test(clean))) return null;
-		if (ignore.some((p) => p.test(clean))) return null;
+		if (isIgnored(ignore, clean)) return null;
 
 		const full = resolve(base, `.${clean.startsWith('/') ? clean : `/${clean}`}`);
 		if (full !== base && !full.startsWith(`${base}/`)) return null;
