@@ -228,6 +228,11 @@ function serviceEntry(service: ServiceSpec, constName: string): string {
 			if (service.deny !== undefined) {
 				parts.push(`deny = [${service.deny.map(text).join(', ')}]`);
 			}
+			// an open network needs TLS options, or workerd throws "this HttpClient doesn't support
+			// HTTPS" on every https fetch and a worker that does not expect a throw answers 500
+			if ((service.allow ?? []).length > 0) {
+				parts.push('tlsOptions = (trustBrowserCas = true)');
+			}
 			const inner = parts.length === 0 ? '' : ` (${parts.join(', ')})`;
 			return `(name = ${text(service.name)}, network =${inner === '' ? ' ()' : inner})`;
 		}

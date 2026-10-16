@@ -110,6 +110,28 @@ describe('where the generator deliberately differs from the rig', () => {
 		);
 		expect(generated).not.toContain('deny =');
 	});
+
+	// workerd cannot filter by host name, so a tenant that lists egress hosts opens `public` in the
+	// config and leaves the narrowing to the network namespace; a site that could reach nothing at
+	// all had its first request reset
+	it('opens public in the config only for a tenant with an egress list', () => {
+		const withList = renderConfig(
+			planSite({
+				...input,
+				tenant: { ...input.tenant, egress: { allow: ['cloud.example.com:443'] } }
+			})
+		);
+		// and it carries TLS options, without which every https fetch throws inside the tenant
+		expect(withList).toContain(
+			`(name = "${ADAPTER_SERVICES.outbound}", network = (allow = ["public"], tlsOptions = (trustBrowserCas = true)))`
+		);
+		const emptyList = renderConfig(
+			planSite({ ...input, tenant: { ...input.tenant, egress: { allow: [] } } })
+		);
+		expect(emptyList).toContain(
+			`(name = "${ADAPTER_SERVICES.outbound}", network = (allow = []))`
+		);
+	});
 });
 
 describe('capabilities are enforced by absence', () => {

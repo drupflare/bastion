@@ -449,10 +449,13 @@ export function planSite(input: PlanInput): CapnpConfig {
 	}
 	// deny by default, the config layer of the two-layer egress rule with the netns underneath
 	// an empty `allow` is "reach nothing"; `deny = ["public"]` reads the same and refuses to start
+	// workerd filters by address class, never by host name, so a tenant with an egress list opens
+	// `public` here and the netns layer narrows it to the listed hosts; with no list nothing opens.
+	// Without this a Drupal site could not reach anything, and its first request reset the object
 	services.push({
 		kind: 'network',
 		name: ADAPTER_SERVICES.outbound,
-		allow: []
+		allow: (input.tenant.egress?.allow.length ?? 0) > 0 ? ['public'] : []
 	});
 
 	const sockets: SocketSpec[] = [
