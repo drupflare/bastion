@@ -9,3 +9,5 @@ test-results
 .output
 .nuxt
 build-typedoc
+.DS_Store
+
