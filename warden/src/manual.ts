@@ -508,6 +508,16 @@ reads that header, so an answer served from the prefill set cannot pass for a re
 An unknown profile name is not an error. It falls back to the generic profile, which expects no
 boot header, because a worker that is not a CMS sets none.
 
+The ignore file is read the way a gitignore is: the last matching line wins. A payload hides
+everything with \`/*\` and brings its shipping set back with \`!\` lines, so \`!/drupal-sql/\` after
+\`/*\` serves that directory.
+
+A bundle carries no \`wrangler.jsonc\`, so \`site add --bundle\` binds none of the Worker's \`vars\`,
+and drupflare answers 503 with \`pack not reachable\` until they are set. \`site add --template ./worker\`
+reads them from the Worker's own manifest. By hand they go in the site's \`bindings\` map:
+\`CMS: drupal\`, \`LAZY_MOUNT: "1"\`, \`LAZY_FS_BUDGET_BYTES: "4194304"\`, \`GEN_BUCKET_MS: "5000"\` and
+\`ASSET_AGGREGATES: "1"\`. The site's assets are read from \`<state>/tenants/<tenant>/assets\`.
+
 ### Installing From a URL
 
 \`--bundle\`, \`--template\` and the \`deploy\` argument take a path or an https url.
