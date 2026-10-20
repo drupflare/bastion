@@ -65,7 +65,7 @@ services:
       - '127.0.0.1:13306:3306'
 
   sshd:
-    image: linuxserver/openssh-server@sha256:946fa26105e0ec212fdf821b9ddc59aab65f2c2d07c02b25ff0f5001fc332ff0
+    image: linuxserver/openssh-server@sha256:0f535b0faa7448511b23528165e9fbd4f1fe563b861b3dcaa5ddb0ddbfe2254c
     environment:
       PUID: '1000'
       PGID: '1000'
