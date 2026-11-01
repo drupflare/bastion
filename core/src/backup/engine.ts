@@ -25,6 +25,18 @@ export interface BackupOptions {
 const MANIFEST_PREFIX = 'manifests/';
 const PACK_PREFIX = 'packs/';
 
+/** refused rather than falling back to plaintext, on a write or on a read */
+function needsKey(passphrase: string | undefined): string {
+	if (passphrase === undefined || passphrase === '') {
+		throw new BastionError(
+			'capability-refused',
+			'backups are encrypted; the backup key is needed to write or read them',
+			{ next: 'bastion secrets set backup-key' }
+		);
+	}
+	return passphrase;
+}
+
 function manifestKey(site: string, version: number): string {
 	return `${MANIFEST_PREFIX}${site}/${String(version).padStart(10, '0')}.json`;
 }
@@ -46,10 +58,6 @@ export class BackupEngine {
 		this.ctx = ctx;
 		this.store = store;
 		this.options = options;
-	}
-
-	private packOptions(): { passphrase?: string } {
-		return this.options.passphrase === undefined ? {} : { passphrase: this.options.passphrase };
 	}
 
 	async held(site: string): Promise<Set<string>> {
@@ -83,6 +91,7 @@ export class BackupEngine {
 		bytes: Uint8Array,
 		captureMethod = 'vacuum-into'
 	): Promise<{ manifest: Manifest; newFrames: number; reusedFrames: number }> {
+		const passphrase = needsKey(this.options.passphrase);
 		const existing = await this.versions(site);
 		const version = (existing[existing.length - 1]?.version ?? 0) + 1;
 		const held = await this.held(site);
@@ -97,7 +106,7 @@ export class BackupEngine {
 		}
 
 		if (unseen.length > 0) {
-			const pack = buildPack(`${site}-${version}`, unseen, this.packOptions());
+			const pack = buildPack(`${site}-${version}`, unseen, { passphrase });
 			await this.store.put(`${PACK_PREFIX}${site}/${pack.id}`, pack.body);
 			await this.store.put(
 				`${PACK_PREFIX}${site}/${pack.id}.index`,
@@ -125,7 +134,7 @@ export class BackupEngine {
 		};
 	}
 
-	private async loadFrames(site: string): Promise<Map<string, Uint8Array>> {
+	private async loadFrames(site: string, passphrase: string): Promise<Map<string, Uint8Array>> {
 		const page = await this.store.list(`${PACK_PREFIX}${site}/`);
 		const out = new Map<string, Uint8Array>();
 		for (const object of page.objects) {
@@ -139,7 +148,7 @@ export class BackupEngine {
 				body: body.bytes,
 				uncompressedBytes: 0
 			};
-			for (const [digest, frame] of readPack(pack, this.options.passphrase)) {
+			for (const [digest, frame] of readPack(pack, passphrase)) {
 				out.set(digest, frame);
 			}
 		}
@@ -149,21 +158,24 @@ export class BackupEngine {
 	/**
 	 * Reassembles one version.
 	 *
-	 * The whole-database digest is checked at the end. A restore that silently produced a different
-	 * database than the one backed up is the failure a drill exists to catch, and catching it here
-	 * costs one hash.
+	 * The key defaults to the one the engine was built with, so a restore takes the same `passphrase`
+	 * option a backup does. The whole-database digest is checked at the end. A restore that silently
+	 * produced a different database than the one backed up is the failure a drill exists to catch,
+	 * and catching it here costs one hash.
 	 */
 	async restore(
 		site: string,
-		version?: number
+		version?: number,
+		options: Pick<BackupOptions, 'passphrase'> = {}
 	): Promise<{ bytes: Uint8Array; manifest: Manifest }> {
+		const passphrase = needsKey(options.passphrase ?? this.options.passphrase);
 		const all = await this.versions(site);
 		const manifest =
 			version === undefined ? all[all.length - 1] : all.find((m) => m.version === version);
 		if (manifest === undefined) {
 			throw new BastionError('usage', `${site} has no version ${version ?? '(any)'}`);
 		}
-		const available = await this.loadFrames(site);
+		const available = await this.loadFrames(site, passphrase);
 		const parts: Uint8Array[] = [];
 		for (const digest of manifest.digests) {
 			const frame = available.get(digest);
@@ -192,7 +204,7 @@ export class BackupEngine {
 		const manifest =
 			version === undefined ? all[all.length - 1] : all.find((m) => m.version === version);
 		if (manifest === undefined) return { ok: false, missing: ['no such version'] };
-		const available = await this.loadFrames(site);
+		const available = await this.loadFrames(site, needsKey(this.options.passphrase));
 		const missing: string[] = [];
 		for (const digest of manifest.digests) {
 			const frame = available.get(digest);

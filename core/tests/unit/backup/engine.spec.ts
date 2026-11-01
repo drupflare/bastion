@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { capture } from '../../../src/backup/capture';
-import { BackupEngine, DEFAULT_RETENTION, retain, type Manifest } from '../../../src/backup/engine';
+import {
+	BackupEngine,
+	DEFAULT_RETENTION,
+	retain,
+	type BackupOptions,
+	type Manifest
+} from '../../../src/backup/engine';
 import { digestOf, FRAME_BYTES, frames } from '../../../src/backup/frame';
 import {
 	buildPack,
@@ -16,11 +22,11 @@ import { fsObjectStore } from '../../../src/drivers/fs-object';
 import { memoryFiles } from '../../../src/host/files';
 import { memoryIo } from '../../../src/io';
 
-function harness(now = () => 1000) {
+function harness(now = () => 1000, options: BackupOptions = { passphrase: 'key' }) {
 	const files = memoryFiles();
 	const ctx = { ...defaultContext(), files, io: memoryIo(), env: {}, now };
 	const store = fsObjectStore(ctx, '/backups');
-	return { ctx, files, store, engine: new BackupEngine(ctx, store, { passphrase: 'key' }) };
+	return { ctx, files, store, engine: new BackupEngine(ctx, store, options) };
 }
 
 /** a database-shaped buffer: mostly stable pages with a changing region */
@@ -60,6 +66,15 @@ describe('packs', () => {
 
 	it('refuses to build without a key rather than writing databases in the clear', () => {
 		expect(() => buildPack('p1', frames(database(1)), { passphrase: null })).toThrow(
+			/backups are encrypted/
+		);
+		expect(() =>
+			buildPack('p1', frames(database(1)), {} as { passphrase: string | null })
+		).toThrow(/backups are encrypted/);
+	});
+
+	it('refuses an empty-string key, which is a key in name only', () => {
+		expect(() => buildPack('p1', frames(database(1)), { passphrase: '' })).toThrow(
 			/backups are encrypted/
 		);
 	});
@@ -118,6 +133,80 @@ describe('BackupEngine', () => {
 		await engine.snapshot('acme', database(1));
 		await engine.snapshot('acme', database(2));
 		expect((await engine.restore('acme')).manifest.version).toBe(2);
+	});
+
+	it('refuses to back up with no key, before any object is written', async () => {
+		const { engine, store } = harness(undefined, {});
+		await expect(engine.snapshot('acme', database(1))).rejects.toMatchObject({
+			code: 'capability-refused'
+		});
+		expect((await store.list('packs/acme/')).objects).toEqual([]);
+		expect((await store.list('manifests/acme/')).objects).toEqual([]);
+	});
+
+	it('refuses to back up with an empty key, before any object is written', async () => {
+		const { engine, store } = harness(undefined, { passphrase: '' });
+		await expect(engine.snapshot('acme', database(1))).rejects.toMatchObject({
+			code: 'capability-refused'
+		});
+		expect((await store.list('packs/acme/')).objects).toEqual([]);
+		expect((await store.list('manifests/acme/')).objects).toEqual([]);
+	});
+
+	it('refuses to restore with an empty key rather than failing the seal check', async () => {
+		const { ctx, store, engine } = harness();
+		await engine.snapshot('acme', database(1));
+		const keyless = new BackupEngine(ctx, store);
+		await expect(keyless.restore('acme', 1, { passphrase: '' })).rejects.toMatchObject({
+			code: 'capability-refused'
+		});
+	});
+
+	it('restores a keyed backup through an engine that did not write it', async () => {
+		const { ctx, store, engine } = harness();
+		await engine.snapshot('acme', database(1));
+		const reader = new BackupEngine(ctx, store, { passphrase: 'key' });
+		expect(Array.from((await reader.restore('acme', 1)).bytes)).toEqual(
+			Array.from(database(1))
+		);
+	});
+
+	it('refuses to restore a keyed backup with no key', async () => {
+		const { ctx, store, engine } = harness();
+		await engine.snapshot('acme', database(1));
+		const keyless = new BackupEngine(ctx, store);
+		await expect(keyless.restore('acme', 1)).rejects.toMatchObject({
+			code: 'capability-refused'
+		});
+	});
+
+	it('restores with the key passed to restore, the option backup takes', async () => {
+		const { ctx, store, engine } = harness();
+		await engine.snapshot('acme', database(1));
+		const keyless = new BackupEngine(ctx, store);
+		const back = await keyless.restore('acme', 1, { passphrase: 'key' });
+		expect(Array.from(back.bytes)).toEqual(Array.from(database(1)));
+	});
+
+	it('refuses a restore with the wrong key', async () => {
+		const { engine } = harness();
+		await engine.snapshot('acme', database(1));
+		await expect(engine.restore('acme', 1, { passphrase: 'wrong' })).rejects.toMatchObject({
+			code: 'driver-refused'
+		});
+	});
+
+	it('refuses a restore whose pack body was altered, and returns no bytes', async () => {
+		const { engine, store } = harness();
+		await engine.snapshot('acme', database(1));
+		const pack = (await store.list('packs/acme/')).objects.find(
+			(o) => !o.key.endsWith('.index')
+		);
+		const body = (await store.get(pack?.key ?? ''))?.bytes.slice() ?? new Uint8Array();
+		const at = body.length >> 1;
+		body[at] = (body[at] ?? 0) ^ 0x01;
+		await store.put(pack?.key ?? '', body);
+		await expect(engine.restore('acme', 1)).rejects.toMatchObject({ code: 'driver-refused' });
 	});
 
 	it('refuses a restore rather than completing it short', async () => {

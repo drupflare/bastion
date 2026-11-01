@@ -89,9 +89,9 @@ export function unseal(sealed: Uint8Array, passphrase: string): Uint8Array {
 export function buildPack(
 	id: string,
 	newFrames: Frame[],
-	options: { level?: number; passphrase?: string | null } = {}
+	options: { level?: number; passphrase: string | null }
 ): Pack {
-	if (options.passphrase === null) {
+	if (typeof options.passphrase !== 'string' || options.passphrase === '') {
 		throw new BastionError(
 			'capability-refused',
 			'backups are encrypted; set a key rather than writing every site database in the clear',
@@ -114,13 +114,12 @@ export function buildPack(
 		id,
 		entries,
 		uncompressedBytes: raw.length,
-		body: options.passphrase === undefined ? compressed : seal(compressed, options.passphrase)
+		body: seal(compressed, options.passphrase)
 	};
 }
 
-export function readPack(pack: Pack, passphrase?: string): Map<string, Uint8Array> {
-	const compressed = passphrase === undefined ? pack.body : unseal(pack.body, passphrase);
-	const raw = new Uint8Array(zstdDecompressSync(compressed));
+export function readPack(pack: Pack, passphrase: string): Map<string, Uint8Array> {
+	const raw = new Uint8Array(zstdDecompressSync(unseal(pack.body, passphrase)));
 	const out = new Map<string, Uint8Array>();
 	for (const entry of pack.entries) {
 		out.set(entry.digest, raw.subarray(entry.offset, entry.offset + entry.length));
@@ -134,15 +133,12 @@ export function readPack(pack: Pack, passphrase?: string): Map<string, Uint8Arra
  * A per-frame rewrite against an object store is one Class A request each, which on a pack holding
  * a few thousand frames costs more than the compression saves.
  */
-export function recompress(pack: Pack, passphrase?: string): Pack {
+export function recompress(pack: Pack, passphrase: string): Pack {
 	const framesByDigest = readPack(pack, passphrase);
 	const rebuilt: Frame[] = pack.entries.map((entry, index) => ({
 		index,
 		digest: entry.digest,
 		bytes: framesByDigest.get(entry.digest) ?? new Uint8Array()
 	}));
-	return buildPack(pack.id, rebuilt, {
-		level: COMPACTION_LEVEL,
-		...(passphrase === undefined ? {} : { passphrase })
-	});
+	return buildPack(pack.id, rebuilt, { level: COMPACTION_LEVEL, passphrase });
 }
