@@ -17,7 +17,7 @@ import {
 	type ReloadOutcome
 } from '@drupflare/bastion';
 import { kv, table } from '../format';
-import { emit, load, writePath, type Globals } from '../state';
+import { backupOptions, emit, load, writePath, type Globals } from '../state';
 
 // #region lifecycle
 
@@ -270,7 +270,11 @@ export async function runBackupRestore(
 	site: string
 ): Promise<number> {
 	const loaded = load(ctx, globals);
-	const engine = new BackupEngine(ctx, buildObjects(ctx, backupTarget(loaded.config)));
+	const engine = new BackupEngine(
+		ctx,
+		buildObjects(ctx, backupTarget(loaded.config)),
+		backupOptions(ctx)
+	);
 	const version = globals.at === undefined ? undefined : Number(globals.at);
 	if (version !== undefined && !Number.isInteger(version)) {
 		throw new BastionError('usage', `--at takes a version number, not ${globals.at}`);

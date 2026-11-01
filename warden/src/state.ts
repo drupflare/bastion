@@ -1,5 +1,5 @@
-import type { BastionConfig, Context } from '@drupflare/bastion';
-import { loadConfig } from '@drupflare/bastion';
+import type { BackupOptions, BastionConfig, Context } from '@drupflare/bastion';
+import { BastionError, loadConfig } from '@drupflare/bastion';
 
 export interface Globals {
 	config?: string;
@@ -20,6 +20,29 @@ export interface Loaded {
 export function load(ctx: Context, globals: Globals): Loaded {
 	const loaded = loadConfig(ctx, globals.config === undefined ? {} : { path: globals.config });
 	return { config: loaded.config, path: loaded.path, state: loaded.config.state };
+}
+
+/** the backup key from the environment; the engine refuses only the read or write that needs it */
+export function backupOptions(ctx: Context): BackupOptions {
+	const passphrase = ctx.env.BASTION_BACKUP_KEY;
+	return passphrase === undefined ? {} : { passphrase };
+}
+
+/**
+ * The backup key for a command that writes a pack, refused before it copies a database.
+ *
+ * Without this a `backup now` with no key captures the database into staging and only then has the
+ * engine refuse the write.
+ */
+export function requireBackupOptions(ctx: Context): BackupOptions {
+	const options = backupOptions(ctx);
+	if (options.passphrase === undefined || options.passphrase === '') {
+		throw new BastionError(
+			'capability-refused',
+			'backups are encrypted; set BASTION_BACKUP_KEY in the environment bastion runs in'
+		);
+	}
+	return options;
 }
 
 /**

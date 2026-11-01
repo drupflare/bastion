@@ -21,7 +21,7 @@ import {
 	writeConfig
 } from '@drupflare/bastion';
 import { kv, sizeOrRefuse, table } from '../format';
-import { emit, load, writePath, type Globals } from '../state';
+import { emit, load, requireBackupOptions, writePath, type Globals } from '../state';
 import { issueFor } from './domains';
 
 export function runTenantLimits(
@@ -149,11 +149,7 @@ export async function runBackupNow(
 ): Promise<number> {
 	const loaded = load(ctx, globals);
 	const store = buildObjects(ctx, backupTarget(loaded.config));
-	const engine = new BackupEngine(ctx, store, {
-		...(ctx.env.BASTION_BACKUP_KEY === undefined
-			? {}
-			: { passphrase: ctx.env.BASTION_BACKUP_KEY })
-	});
+	const engine = new BackupEngine(ctx, store, requireBackupOptions(ctx));
 	const sites = loaded.config.tenants.flatMap((tenant) =>
 		tenant.sites
 			.filter((site) => globals.site === undefined || site.host === globals.site)
@@ -396,11 +392,7 @@ export async function runBackupDrill(
 ): Promise<number> {
 	const loaded = load(ctx, globals);
 	const store = buildObjects(ctx, backupTarget(loaded.config));
-	const engine = new BackupEngine(ctx, store, {
-		...(ctx.env.BASTION_BACKUP_KEY === undefined
-			? {}
-			: { passphrase: ctx.env.BASTION_BACKUP_KEY })
-	});
+	const engine = new BackupEngine(ctx, store, requireBackupOptions(ctx));
 
 	const sites = loaded.config.tenants.flatMap((tenant) =>
 		tenant.sites

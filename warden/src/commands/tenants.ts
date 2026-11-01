@@ -28,7 +28,7 @@ import {
 } from '@drupflare/bastion';
 import { downloadOptions } from '../download';
 import { kv, sizeOrRefuse, table, yesNo } from '../format';
-import { emit, load, writePath, type Globals, type Loaded } from '../state';
+import { backupOptions, emit, load, writePath, type Globals, type Loaded } from '../state';
 
 function write(ctx: Context, globals: Globals, loaded: Loaded, config: BastionConfig): string {
 	return writeConfig(ctx, writePath(ctx, globals, loaded), config);
@@ -372,7 +372,7 @@ export async function runBackupVerify(
 ): Promise<number> {
 	const loaded = load(ctx, globals);
 	const store = buildObjects(ctx, backupTarget(loaded.config));
-	const engine = new BackupEngine(ctx, store);
+	const engine = new BackupEngine(ctx, store, backupOptions(ctx));
 	const result = await engine.verify(site);
 	emit(ctx, globals, { site, ...result }, () =>
 		result.ok

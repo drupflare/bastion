@@ -1,4 +1,12 @@
-import { EXIT, memoryFiles, memoryIo, scriptedRunner, type Context } from '@drupflare/bastion';
+import {
+	BackupEngine,
+	EXIT,
+	buildObjects,
+	memoryFiles,
+	memoryIo,
+	scriptedRunner,
+	type Context
+} from '@drupflare/bastion';
 import { describe, expect, it } from 'vitest';
 import { run } from '../src/run';
 
@@ -763,6 +771,108 @@ describe('backups', () => {
 		expect(await run(ctx, ['backup', 'restore', 'www.example.edu', '--at', 'newest'])).toBe(
 			EXIT.USAGE
 		);
+	});
+});
+
+/**
+ * The backup key reaches every command that writes or reads an encrypted pack.
+ *
+ * The keyed backup is written by the engine itself, so each restore, verify and drill reads back
+ * what `backup now` leaves in the object store. `list`, `show`, `estimate` and `prune` read only
+ * manifests and the index, so they take no key; the `backups` and `backups that predate` blocks
+ * above run them without one.
+ */
+describe('the backup key at each engine call site', () => {
+	const SITE = 'www.example.edu';
+	const KEY = 'test-backup-key';
+	const DB = 'database bytes '.repeat(64);
+	const SOURCE = '/var/lib/bastion/tenants/acme/storage/www.example.edu.sqlite';
+	const RESTORED = '/var/lib/bastion/restores/restore-www-example-edu/www.example.edu.sqlite';
+
+	const seedBackup = async (ctx: Context, key: string): Promise<void> => {
+		const store = buildObjects(ctx, { driver: 'fs' });
+		await new BackupEngine(ctx, store, { passphrase: key }).snapshot(
+			SITE,
+			new TextEncoder().encode(DB)
+		);
+	};
+
+	const refusalCode = (io: ReturnType<typeof memoryIo>): string | undefined => {
+		const last = io.outText().trim().split('\n').pop() ?? '{}';
+		return (JSON.parse(last) as { error?: { code: string } }).error?.code;
+	};
+
+	it('takes a backup with the key from the environment', async () => {
+		const { ctx, files } = harness({ [SOURCE]: DB });
+		ctx.env.BASTION_BACKUP_KEY = KEY;
+		expect(await run(ctx, ['backup', 'now'])).toBe(EXIT.OK);
+		expect(files.exists(`/var/lib/bastion/objects/packs/${SITE}`)).toBe(true);
+	});
+
+	it('refuses a backup with no key before anything is copied or written', async () => {
+		const { ctx, io, files } = harness({ [SOURCE]: DB });
+		expect(await run(ctx, ['--json', 'backup', 'now'])).toBe(EXIT.USAGE);
+		expect(refusalCode(io)).toBe('capability-refused');
+		expect(files.exists('/var/lib/bastion/staging')).toBe(false);
+		expect(files.exists('/var/lib/bastion/objects')).toBe(false);
+	});
+
+	it('refuses a backup with an empty key the same way', async () => {
+		const { ctx, io, files } = harness({ [SOURCE]: DB });
+		ctx.env.BASTION_BACKUP_KEY = '';
+		expect(await run(ctx, ['--json', 'backup', 'now'])).toBe(EXIT.USAGE);
+		expect(refusalCode(io)).toBe('capability-refused');
+		expect(files.exists('/var/lib/bastion/objects')).toBe(false);
+	});
+
+	it('restores a keyed backup with the key from the environment', async () => {
+		const { ctx, files } = harness();
+		ctx.env.BASTION_BACKUP_KEY = KEY;
+		await seedBackup(ctx, KEY);
+		expect(await run(ctx, ['backup', 'restore', SITE])).toBe(EXIT.OK);
+		expect(files.readText(RESTORED)).toBe(DB);
+	});
+
+	it('refuses a restore with no key with the typed refusal and writes nothing', async () => {
+		const { ctx, io, files } = harness();
+		await seedBackup(ctx, KEY);
+		expect(await run(ctx, ['--json', 'backup', 'restore', SITE])).toBe(EXIT.USAGE);
+		expect(refusalCode(io)).toBe('capability-refused');
+		expect(files.exists(RESTORED)).toBe(false);
+	});
+
+	it('verifies a keyed backup with the key from the environment', async () => {
+		const { ctx } = harness();
+		ctx.env.BASTION_BACKUP_KEY = KEY;
+		await seedBackup(ctx, KEY);
+		expect(await run(ctx, ['backup', 'verify', SITE])).toBe(EXIT.OK);
+	});
+
+	it('refuses a verify with no key with the typed refusal, not a zstd error', async () => {
+		const { ctx, io } = harness();
+		await seedBackup(ctx, KEY);
+		expect(await run(ctx, ['--json', 'backup', 'verify', SITE])).toBe(EXIT.USAGE);
+		expect(refusalCode(io)).toBe('capability-refused');
+	});
+
+	it('runs the drill restore with the key from the environment', async () => {
+		const { ctx, io } = harness();
+		ctx.env.BASTION_BACKUP_KEY = KEY;
+		await seedBackup(ctx, KEY);
+		// the probe has no listener in the gate lane, so the drill ends at boot; the restore step is
+		// the one this test is about
+		expect(await run(ctx, ['--json', 'backup', 'drill'])).toBe(EXIT.FINDING);
+		const last = io.outText().trim().split('\n').pop() ?? '{}';
+		const drill = JSON.parse(last) as {
+			results: { steps: { step: string; ok: boolean }[] }[];
+		};
+		expect(drill.results[0]?.steps[0]).toMatchObject({ step: 'restore', ok: true });
+	});
+
+	it('refuses a drill with no key before it reports the restore as failed', async () => {
+		const { ctx, io } = harness();
+		expect(await run(ctx, ['--json', 'backup', 'drill'])).toBe(EXIT.USAGE);
+		expect(refusalCode(io)).toBe('capability-refused');
 	});
 });
 
