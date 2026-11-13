@@ -1,9 +1,12 @@
 import type { Context } from '../context';
+import { assetResponse } from './assets';
 import type { Route } from './router';
 
 export interface UpstreamPaths {
 	/** the unix socket a tenant's workerd listens on */
 	socketFor(tenant: string): string;
+	/** the folder of static files a tenant's site was placed with, answered before the worker */
+	assetsFor?(tenant: string): string;
 }
 
 /**
@@ -21,6 +24,11 @@ export interface UpstreamPaths {
 export function unixUpstream(ctx: Context, paths: UpstreamPaths) {
 	return async (route: Route, request: Request, client: string): Promise<Response> => {
 		void client;
+		const folder = paths.assetsFor?.(route.tenant);
+		if (folder !== undefined) {
+			const asset = assetResponse(ctx, folder, request);
+			if (asset !== null) return asset;
+		}
 		const url = new URL(request.url);
 		const target = `http://localhost${url.pathname}${url.search}`;
 		return ctx.fetch(target, {
@@ -46,5 +54,8 @@ export const TENANT_SOCKET = 'http.sock';
  * Two names for one socket, neither of them wrong on its own.
  */
 export function socketPaths(state: string): UpstreamPaths {
-	return { socketFor: (tenant) => `${state}/tenants/${tenant}/${TENANT_SOCKET}` };
+	return {
+		socketFor: (tenant) => `${state}/tenants/${tenant}/${TENANT_SOCKET}`,
+		assetsFor: (tenant) => `${state}/tenants/${tenant}/assets`
+	};
 }
