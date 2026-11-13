@@ -28,6 +28,8 @@ const MODULE_KINDS: { suffix: string; kind: ModuleSpec['kind'] }[] = [
 	{ suffix: '.wasm', kind: 'wasm' },
 	{ suffix: '.json', kind: 'text' },
 	{ suffix: '.txt', kind: 'text' },
+	// wrangler writes a `composer.lock` text module under its content hash
+	{ suffix: '.lock', kind: 'text' },
 	{ suffix: '.bin', kind: 'data' }
 ];
 

@@ -167,6 +167,44 @@ describe('a tenant in isolated mode', () => {
 		);
 	});
 
+	it('stages the assets with their folders, and the modules without any', async () => {
+		const h = harness();
+		const state = '/var/lib/bastion/tenants/acme';
+		h.files.writeText(`${state}/assets/driver.json`, '{}');
+		h.files.writeText(`${state}/assets/core/css/a.css`, 'body{}');
+		h.files.writeText(`${state}/assets/drupal-pf/core.pf.bin`, 'pack');
+		h.files.writeText(`${BUNDLE}/assets/ignored.txt`, 'not a module');
+		await h.runtime.startTenant('acme');
+		expect(h.files.readText(`${state}/guest/assets/driver.json`)).toBe('{}');
+		expect(h.files.readText(`${state}/guest/assets/core/css/a.css`)).toBe('body{}');
+		expect(h.files.readText(`${state}/guest/assets/drupal-pf/core.pf.bin`)).toBe('pack');
+		expect(h.files.exists(`${state}/guest/bundle/index.js`)).toBe(true);
+		expect(h.files.exists(`${state}/guest/bundle/assets`)).toBe(false);
+	});
+
+	it('counts nested asset bytes into the config drive size', async () => {
+		const h = harness();
+		const state = '/var/lib/bastion/tenants/acme';
+		h.files.writeBytes(`${state}/assets/pack/big.bin`, new Uint8Array(100 * 1048576));
+		await h.runtime.startTenant('acme');
+		const truncate = h.runner.calls.find(
+			(call) => call.command === 'truncate' && call.args.includes(`${state}/config.img`)
+		);
+		const sizeMib = Number(truncate?.args[1]?.replace('M', ''));
+		expect(sizeMib).toBeGreaterThanOrEqual(132);
+		expect(sizeMib).toBeLessThan(140);
+	});
+
+	it('drops what an earlier start staged and this one no longer has', async () => {
+		const h = harness();
+		const state = '/var/lib/bastion/tenants/acme';
+		h.files.writeText(`${state}/guest/assets/stale/old.txt`, 'old');
+		h.files.writeText(`${state}/assets/new.txt`, 'new');
+		await h.runtime.startTenant('acme');
+		expect(h.files.exists(`${state}/guest/assets/stale/old.txt`)).toBe(false);
+		expect(h.files.readText(`${state}/guest/assets/new.txt`)).toBe('new');
+	});
+
 	it('hands the guest a read-only config drive and a writable state drive', async () => {
 		const h = harness();
 		await h.runtime.startTenant('acme');

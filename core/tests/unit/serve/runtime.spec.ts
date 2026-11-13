@@ -405,6 +405,84 @@ describe('Runtime.startTenant writes the config workerd is pointed at', () => {
 		h.files.remove(`${BUNDLE}/index.js`);
 		await expect(runtime.startTenant('acme')).rejects.toThrow(/no modules/);
 	});
+
+	describe('a bundle that is an archive', () => {
+		const ARCHIVE = '/srv/site.tar.gz';
+		const EXTRACTED = '/var/lib/bastion/tenants/acme/bundle';
+
+		function archived(tar: (write: (name: string) => void) => Promise<number>) {
+			const calls: string[][] = [];
+			const { h, runtime } = withSite({ host: 'api.example.edu', bundle: ARCHIVE });
+			h.files.writeText(ARCHIVE, 'archive');
+			h.ctx.runner = {
+				...h.runner,
+				run: async (command, args) => {
+					calls.push([command, ...args]);
+					if (args[0] === '-tzf') {
+						return { code: 0, stdout: 'assets/\nassets/a.css\nsite.js\n', stderr: '' };
+					}
+					return {
+						code: await tar((name) => h.files.writeText(`${EXTRACTED}/${name}`, 'x')),
+						stdout: '',
+						stderr: 'not in gzip format'
+					};
+				}
+			};
+			return { h, runtime, calls };
+		}
+
+		it('waits for the unpack before it reads the tree', async () => {
+			const { h, runtime } = archived(async (write) => {
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				write('site.js');
+				return 0;
+			});
+			await runtime.startTenant('acme');
+			expect(h.files.readText(CAPNP)).toContain('site.js');
+		});
+
+		it('extracts the root files and leaves the asset tree in the archive', async () => {
+			const { h, runtime, calls } = archived(async (write) => {
+				write('site.js');
+				return 0;
+			});
+			await runtime.startTenant('acme');
+			const extract = calls.find((call) => call[1] === '-xzf');
+			expect(extract?.slice(-2)).toEqual(['--', 'site.js']);
+			expect(extract).not.toContain('assets/a.css');
+			expect(h.files.exists(`${EXTRACTED}/assets`)).toBe(false);
+		});
+
+		it('clears a tree an earlier start extracted, assets included', async () => {
+			const { h, runtime } = archived(async (write) => {
+				write('site.js');
+				return 0;
+			});
+			h.files.writeText(`${EXTRACTED}/assets/old.css`, 'old');
+			h.files.writeText(`${EXTRACTED}/gone.wasm`, 'old');
+			await runtime.startTenant('acme');
+			expect(h.files.exists(`${EXTRACTED}/assets/old.css`)).toBe(false);
+			expect(h.files.exists(`${EXTRACTED}/gone.wasm`)).toBe(false);
+		});
+
+		it('refuses to start on a failed unpack rather than reading what it left', async () => {
+			const { h, runtime } = archived(async (write) => {
+				write('site.js');
+				return 2;
+			});
+			await expect(runtime.startTenant('acme')).rejects.toMatchObject({
+				code: 'bundle_invalid'
+			});
+			expect(h.files.exists(CAPNP)).toBe(false);
+		});
+	});
+
+	it('loads the text module wrangler writes for composer.lock', async () => {
+		const { h, runtime } = withSite({ host: 'api.example.edu', bundle: BUNDLE });
+		h.files.writeText(`${BUNDLE}/abc-composer.lock`, '{}');
+		await runtime.startTenant('acme');
+		expect(h.files.readText(CAPNP)).toContain('abc-composer.lock');
+	});
 });
 
 describe('Runtime.serve', () => {

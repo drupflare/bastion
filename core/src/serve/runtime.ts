@@ -20,6 +20,7 @@ import {
 import { loadConfig } from '../config/file';
 import type { BastionConfig, SiteConfig, TenantConfig } from '../config/types';
 import type { Context } from '../context';
+import { unpackModules } from '../deploy/bundle';
 import { checkDrift, rulesFor } from '../egress/policy';
 import { BastionError } from '../errors';
 import { buildFront, listenerSpec } from '../front/door';
@@ -256,10 +257,10 @@ export class Runtime {
 	 * An earlier version read `${state}/tenants/<name>/bundle` unconditionally, which nothing ever
 	 * writes, so every `up` spawned a child that died on `ENOENT` while the parent reported a pid.
 	 *
-	 * A directory is used where it stands. An archive is extracted once into the tenant's state,
-	 * because workerd reads modules off disk and cannot be handed a tarball.
+	 * A directory is used where it stands. An archive's top-level files are extracted into the
+	 * tenant's state, because workerd reads modules off disk and cannot be handed a tarball.
 	 */
-	private bundleFor(site: SiteConfig, paths: SandboxPaths): string {
+	private async bundleFor(site: SiteConfig, paths: SandboxPaths): Promise<string> {
 		const stated = site.bundle.startsWith('/')
 			? site.bundle
 			: `${this.ctx.cwd}/${site.bundle.replace(/^\.\//, '')}`;
@@ -272,8 +273,7 @@ export class Runtime {
 		}
 
 		const extracted = `${paths.state}/bundle`;
-		this.ctx.files.mkdirp(extracted);
-		void this.ctx.runner.run('tar', ['-xzf', stated, '-C', extracted]);
+		await unpackModules(this.ctx, stated, extracted);
 		return extracted;
 	}
 
@@ -284,13 +284,16 @@ export class Runtime {
 	 * so `up` spawned workerd against a path that did not exist. Generating it here is what makes
 	 * the declarative config the thing that actually runs, for any bundle rather than one shape.
 	 */
-	private writeCapnp(tenant: TenantConfig, paths: SandboxPaths): CapnpConfig | null {
+	private async writeCapnp(
+		tenant: TenantConfig,
+		paths: SandboxPaths
+	): Promise<CapnpConfig | null> {
 		const config = this.options.config;
 		const site = tenant.sites[0];
 		if (site === undefined) return null;
 
 		const worker = resolveSiteWorker(site.worker);
-		const bundle = this.bundleFor(site, paths);
+		const bundle = await this.bundleFor(site, paths);
 
 		// workerd refuses a `disk` service whose directory is absent, and its own storage is one:
 		// `Directory named "bastion_storage" not found`. It creates neither, so bastion does
@@ -457,6 +460,22 @@ export class Runtime {
 		return this.options.connector ?? nodeConnector();
 	}
 
+	/** links the files of `from` into `into` and returns their bytes; folders only when `nested` */
+	private stageFiles(from: string, into: string, nested: boolean): number {
+		let bytes = 0;
+		for (const entry of this.ctx.files.readDir(from)) {
+			const source = `${from}/${entry.name}`;
+			const target = `${into}/${entry.name}`;
+			if (entry.directory) {
+				if (nested) bytes += this.stageFiles(source, target, true);
+				continue;
+			}
+			this.ctx.files.link(source, target);
+			bytes += this.ctx.files.size(target);
+		}
+		return bytes;
+	}
+
 	/**
 	 * Stages everything the guest reads and hands it over as two drives.
 	 *
@@ -479,6 +498,9 @@ export class Runtime {
 		}
 
 		const staging = `${paths.state}/guest`;
+		// a file an earlier start staged and this one does not would otherwise ride into the image
+		this.ctx.files.removeTree(`${staging}/bundle`);
+		this.ctx.files.removeTree(`${staging}/assets`);
 		this.ctx.files.mkdirp(`${staging}/bundle`);
 		this.ctx.files.mkdirp(`${staging}/assets`);
 		this.ctx.files.writeText(`${staging}/config.capnp`, this.ctx.files.readText(paths.config));
@@ -486,16 +508,13 @@ export class Runtime {
 		let bytes = this.ctx.files.size(`${staging}/config.capnp`);
 		const site = tenant.sites[0];
 		if (site !== undefined) {
-			for (const [from, into] of [
-				[this.bundleFor(site, paths), `${staging}/bundle`],
-				[`${paths.state}/assets`, `${staging}/assets`]
+			// modules sit at the top of the bundle; the assets are a tree
+			for (const [from, into, nested] of [
+				[await this.bundleFor(site, paths), `${staging}/bundle`, false],
+				[`${paths.state}/assets`, `${staging}/assets`, true]
 			] as const) {
 				if (!this.ctx.files.exists(from)) continue;
-				for (const entry of this.ctx.files.readDir(from)) {
-					if (entry.directory) continue;
-					this.ctx.files.link(`${from}/${entry.name}`, `${into}/${entry.name}`);
-					bytes += this.ctx.files.size(`${into}/${entry.name}`);
-				}
+				bytes += this.stageFiles(from, into, nested);
 			}
 		}
 
@@ -557,7 +576,7 @@ export class Runtime {
 
 		const paths = this.pathsFor(tenant);
 		this.ctx.files.mkdirp(paths.state);
-		const plan = this.writeCapnp(declared, paths);
+		const plan = await this.writeCapnp(declared, paths);
 		// the sockets are bound BEFORE workerd starts; a tenant that beats its own adapters up
 		// answers the first request out of an error path rather than out of its cache
 		if (plan !== null) await this.bindAdapters(declared, paths, plan);

@@ -375,6 +375,24 @@ export type {
 export { parseSize, validate, type Problem, type ValidationResult } from './config/validate';
 export { defaultContext, type Context } from './context';
 export {
+	ASSETS_MANIFEST,
+	BUNDLE_INVALID,
+	RESERVED_VARS,
+	VARS_FILE,
+	importsOf,
+	installAssets,
+	prepareBundle,
+	readBoxVars,
+	tenantAssets,
+	unpackBundle,
+	unpackModules,
+	verifyAssets,
+	verifyBundleTree,
+	type AssetEntry,
+	type AssetInstall,
+	type PreparedBundle
+} from './deploy/bundle';
+export {
 	MAX_BUNDLE_BYTES,
 	MAX_HOPS,
 	addressBytes,

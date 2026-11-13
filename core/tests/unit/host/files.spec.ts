@@ -1,5 +1,8 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { memoryFiles } from '../../../src/host/files';
+import { memoryFiles, nodeFiles } from '../../../src/host/files';
 
 describe('memoryFiles', () => {
 	it('holds bytes, so size and readBytes agree for a binary member', () => {
@@ -47,5 +50,61 @@ describe('directory bookkeeping', () => {
 
 	it('treats removing something absent as done rather than as an error', () => {
 		expect(() => memoryFiles().remove('/nope')).not.toThrow();
+	});
+});
+
+describe('trees', () => {
+	const seed = { '/t/a/x.txt': 'x', '/t/a/b/y.txt': 'y', '/t/z.txt': 'z', '/ta/keep.txt': 'k' };
+
+	it('removes a folder with everything under it and nothing that shares its prefix', () => {
+		const files = memoryFiles(seed);
+		files.removeTree('/t/a');
+		expect(files.exists('/t/a')).toBe(false);
+		expect(files.exists('/t/a/b')).toBe(false);
+		expect(files.exists('/t/a/b/y.txt')).toBe(false);
+		expect(files.exists('/t/z.txt')).toBe(true);
+		expect(files.exists('/ta/keep.txt')).toBe(true);
+	});
+
+	it('removes a single file and treats an absent path as done', () => {
+		const files = memoryFiles(seed);
+		files.removeTree('/t/z.txt');
+		expect(files.exists('/t/z.txt')).toBe(false);
+		expect(() => files.removeTree('/nope')).not.toThrow();
+	});
+
+	it('moves a folder with its files, folders and modes', () => {
+		const files = memoryFiles(seed);
+		files.chmod('/t/a/x.txt', 0o600);
+		files.rename('/t/a', '/u/moved');
+		expect(files.exists('/t/a')).toBe(false);
+		expect(files.readText('/u/moved/b/y.txt')).toBe('y');
+		expect(files.isDirectory('/u/moved/b')).toBe(true);
+		expect(files.mode('/u/moved/x.txt')).toBe(0o600);
+		expect(files.exists('/t/z.txt')).toBe(true);
+	});
+
+	it('refuses to move what is not there and to move onto what is', () => {
+		const files = memoryFiles(seed);
+		expect(() => files.rename('/nope', '/u')).toThrow(/ENOENT/);
+		expect(() => files.rename('/t/a', '/t/z.txt')).toThrow(/EEXIST/);
+	});
+});
+
+describe('trees on a real disk', () => {
+	it('removes and moves folders the way the memory host does', () => {
+		const dir = mkdtempSync(join(tmpdir(), 'files-'));
+		try {
+			const files = nodeFiles();
+			files.writeText(`${dir}/t/a/b/y.txt`, 'y');
+			files.rename(`${dir}/t/a`, `${dir}/u/moved`);
+			expect(files.readText(`${dir}/u/moved/b/y.txt`)).toBe('y');
+			expect(files.exists(`${dir}/t/a`)).toBe(false);
+			files.removeTree(`${dir}/u`);
+			expect(files.exists(`${dir}/u`)).toBe(false);
+			expect(() => files.removeTree(`${dir}/u`)).not.toThrow();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

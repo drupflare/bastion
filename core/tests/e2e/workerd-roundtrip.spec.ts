@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { memoryCacheStore } from '../../src/adapters/cache';
 import { renderConfig } from '../../src/capnp/generate';
 import { modulesFrom, planSite } from '../../src/capnp/plan';
 import { defaultContext } from '../../src/context';
+import { installAssets, prepareBundle, readBoxVars, unpackModules } from '../../src/deploy/bundle';
 import { memoryKv } from '../../src/drivers/memory-kv';
 import { nodeFiles } from '../../src/host/files';
 import { bindAdapters } from './support/adapters';
@@ -181,3 +182,132 @@ describe.skipIf(reason !== null)(`workerd round trip (${reason ?? 'enabled'})`, 
 		expect((await settled('/drupal/site.sqlite')).status).toBe(404);
 	});
 });
+
+/**
+ * A box bundle as `site add` leaves it: unpacked, its assets placed in the tenant, then booted.
+ *
+ * Runs the same steps the paired `site.add` and the next start run (`prepareBundle`,
+ * `readBoxVars`, `installAssets`, `unpackModules`), against the archive `BOX_BUNDLE_ARCHIVE` names.
+ * The vars come from the bundle's own `box.vars`. The unix sockets want a short root, so the
+ * folder is made under the system temp directory.
+ */
+const archive = process.env.BOX_BUNDLE_ARCHIVE ?? '';
+const boxReason = gate('REQUIRE_BOX_BUNDLE', [
+	{ what: 'BOX_BUNDLE_ARCHIVE is not set', present: archive !== '' },
+	{ what: `${archive} is absent`, present: archive !== '' && existsSync(archive) }
+]);
+
+describe.skipIf(boxReason !== null)(
+	`a box bundle served by workerd (${boxReason ?? 'enabled'})`,
+	() => {
+		// made in the first test: vitest evaluates this body for a suite it skips, and a skipped run
+		// would leave an empty folder behind
+		let root = '';
+		const listen = () => join(root, 'http.sock');
+		const own: { kill(signal?: NodeJS.Signals): void }[] = [];
+		let adapters: { stop(): void; readonly failures: string[] } | null = null;
+
+		afterAll(() => {
+			for (const child of own) child.kill('SIGTERM');
+			adapters?.stop();
+			if (root !== '') rmSync(root, { recursive: true, force: true });
+		});
+
+		async function settled(path: string): Promise<SocketResponse> {
+			const deadline = Date.now() + 300_000;
+			let last = await overSocket(listen(), path);
+			while (Date.now() < deadline && last.status === 503) {
+				await new Promise((r) => setTimeout(r, 500));
+				last = await overSocket(listen(), path);
+			}
+			return last;
+		}
+
+		it('boots on the placed assets and answers instead of staying at 503', async () => {
+			root = mkdtempSync(join(tmpdir(), 'bx-'));
+			const assetsDir = join(root, 'tenants/acme/assets');
+			const ctx = { ...defaultContext(), files: nodeFiles() };
+			const prepared = await prepareBundle(ctx, archive, join(root, 'check'));
+			expect(prepared.assets).not.toBeNull();
+			expect(prepared.varsFile).not.toBeNull();
+			const vars = readBoxVars(ctx, prepared.varsFile!)!;
+			installAssets(ctx, prepared.assets!.dir, assetsDir, prepared.assets!.files).commit();
+			prepared.discard();
+			await unpackModules(ctx, archive, join(root, 'bundle'));
+			expect(existsSync(join(root, 'bundle/assets'))).toBe(false);
+			mkdirSync(join(root, 'storage'), { recursive: true });
+
+			adapters = await bindAdapters(
+				{
+					cache: memoryCacheStore(),
+					kv: memoryKv(),
+					r2: memoryKv(),
+					queues: memoryKv(),
+					assets: assetResolver(nodeFiles(), assetsDir, ASSET_PROFILES.drupflare),
+					tenant: 'acme'
+				},
+				root
+			);
+			const path = join(root, 'config.capnp');
+			writeFileSync(
+				path,
+				renderConfig(
+					planSite({
+						tenant: { name: 'acme', sites: [] },
+						site: { host: '127.0.0.1', bundle: archive, probe: 'drupflare' },
+						paths: {
+							bundle: join(root, 'bundle'),
+							storage: join(root, 'storage'),
+							assets: assetsDir,
+							adapterDir: root,
+							listenSocket: listen()
+						},
+						modules: modulesFrom(ctx, join(root, 'bundle'), undefined, root),
+						compatibilityDate: '2026-08-01',
+						compatibilityFlags: ['nodejs_compat'],
+						uniqueKey: 'acme:127.0.0.1',
+						durableObjectClass: 'SitePhpDurableObject',
+						residency: 'evict',
+						bindings: {
+							durableObject: 'SITE',
+							assets: 'ASSETS',
+							kv: ['CONFIG_KV', 'PAGE_KV']
+						},
+						vars
+					})
+				)
+			);
+
+			const child = spawn(workerd, ['serve', path], { stdio: ['ignore', 'pipe', 'pipe'] });
+			own.push(child);
+			let stderr = '';
+			child.stderr.on('data', (chunk: Buffer) => {
+				stderr += chunk.toString();
+			});
+			const deadline = Date.now() + 60_000;
+			let answered = false;
+			while (Date.now() < deadline && !answered) {
+				try {
+					answered = (await overSocket(listen(), '/')).status > 0;
+				} catch {
+					await new Promise((r) => setTimeout(r, 500));
+				}
+			}
+			expect(answered, `workerd never answered. stderr:\n${stderr}`).toBe(true);
+
+			const response = await settled('/');
+			expect(
+				response.status,
+				`still migrating: ${String(response.headers['x-cfw-migrate'])}`
+			).toBe(200);
+			expect(response.body).toContain('Drupal');
+			expect(adapters.failures).toEqual([]);
+		}, 600_000);
+
+		it('renders a path outside prefill.json, which is what proves a real boot', async () => {
+			const response = await settled('/node/1');
+			expect(response.headers['x-cfw-php-booted']).toBe('1');
+			expect(response.status).not.toBe(503);
+		});
+	}
+);

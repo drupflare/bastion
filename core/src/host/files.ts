@@ -31,6 +31,10 @@ export interface FileHost {
 	mkdirp(path: string): void;
 	/** removes one file; a missing path is not an error, so a delete is idempotent */
 	remove(path: string): void;
+	/** removes a file or a whole folder; a missing path is not an error */
+	removeTree(path: string): void;
+	/** moves a file or folder; the destination must not exist */
+	rename(from: string, to: string): void;
 	size(path: string): number;
 	/** POSIX mode bits, or null where the path is absent */
 	mode(path: string): number | null;
@@ -87,6 +91,13 @@ export function nodeFiles(): FileHost {
 		},
 		remove: (p) => {
 			fs.rmSync(p, { force: true, recursive: false });
+		},
+		removeTree: (p) => {
+			fs.rmSync(p, { force: true, recursive: true });
+		},
+		rename: (from, to) => {
+			fs.mkdirSync(dirname(to), { recursive: true });
+			fs.renameSync(from, to);
 		},
 		size: (p) => fs.statSync(p).size,
 		mode: (p) => (fs.existsSync(p) ? fs.statSync(p).mode & 0o7777 : null),
@@ -206,6 +217,38 @@ export function memoryFiles(
 		remove: (p) => {
 			store.delete(norm(p));
 			modes.delete(norm(p));
+		},
+		removeTree: (p) => {
+			const base = norm(p);
+			for (const key of [...store.keys()]) {
+				if (key === base || key.startsWith(`${base}/`)) {
+					store.delete(key);
+					modes.delete(key);
+				}
+			}
+			for (const key of [...dirs]) {
+				if (key === base || key.startsWith(`${base}/`)) dirs.delete(key);
+			}
+		},
+		rename: (from, to) => {
+			const source = norm(from);
+			const dest = norm(to);
+			if (!host.exists(source)) throw new Error(`ENOENT: ${from}`);
+			if (host.exists(dest)) throw new Error(`EEXIST: ${to}`);
+			const moved = (key: string) => `${dest}${key.slice(source.length)}`;
+			const inside = (key: string) => key === source || key.startsWith(`${source}/`);
+			for (const key of [...store.keys()].filter(inside)) {
+				store.set(moved(key), store.get(key) as Uint8Array);
+				store.delete(key);
+				const mode = modes.get(key);
+				if (mode !== undefined) modes.set(moved(key), mode);
+				modes.delete(key);
+			}
+			for (const key of [...dirs].filter(inside)) {
+				dirs.delete(key);
+				dirs.add(moved(key));
+			}
+			addParents(dest);
 		},
 		size: (p) => {
 			const bytes = store.get(norm(p));
