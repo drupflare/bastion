@@ -228,7 +228,7 @@ jobs:
         if: steps.suffix.outputs.skip == 'false'
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           registry-url: https://registry.npmjs.org
       - name: Install Dependencies
         if: steps.suffix.outputs.skip == 'false'
@@ -255,7 +255,7 @@ jobs:
         if: ${{ steps.suffix.outputs.skip == 'false' && github.event.inputs.skip_github_npm != 'true' }}
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           registry-url: https://npm.pkg.github.com
           scope: '@drupflare'
       - name: Point Both Manifests at GitHub Packages
@@ -387,7 +387,7 @@ jobs:
       - name: Set Up Node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           registry-url: https://npm.pkg.github.com
       - name: Log In to ghcr.io
         uses: docker/login-action@v3
