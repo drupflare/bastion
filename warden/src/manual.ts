@@ -1284,6 +1284,12 @@ classes always wait, and a command that names a looser class than the box holds 
 treated as the stricter one. \`bastion pair status\` lists what is waiting; \`pair approve\` and
 \`pair reject\` record the decision and \`serve\` applies it and reports the result.
 
+The control plane also sends the id it holds for each of your sites, in a signed frame right after
+the link is ready and again whenever the set changes. Each frame replaces the whole map. The box
+keys its hourly usage report on it and sends no usage report until the first frame arrives.
+\`bastion pair status\` lists each id with its host. A control plane that predates the frame never
+sends it, and a box that predates it ignores it.
+
 \`bastion unpair\` deletes the pairing record and the node key, drops every queued command, writes an
 audit line and closes the link. Tenants, sites and configuration are untouched, and the box carries
 on standalone. If the control plane revokes this node, the link stops and stays stopped until

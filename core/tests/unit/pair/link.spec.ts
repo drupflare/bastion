@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AuditLog } from '../../../src/audit/log';
+import { AnalyticsWindow } from '../../../src/observe/analytics';
 import { ParamError, type Executors } from '../../../src/pair/commands';
 import type { Socket } from '../../../src/pair/link';
 import {
@@ -63,7 +64,11 @@ function executorsFor(calls: string[]): Executors {
 	};
 }
 
-async function started(paired?: Paired, over: Parameters<typeof pairedBox>[0] = {}) {
+async function started(
+	paired?: Paired,
+	over: Parameters<typeof pairedBox>[0] = {},
+	analytics?: AnalyticsWindow
+) {
 	const world = paired ?? (await pairedBox(over));
 	const clock = timers();
 	const calls: string[] = [];
@@ -75,6 +80,7 @@ async function started(paired?: Paired, over: Parameters<typeof pairedBox>[0] = 
 			state: world.box.state,
 			secrets: world.box.secrets,
 			executors: executorsFor(calls),
+			...(analytics === undefined ? {} : { analytics }),
 			connect: () => {
 				const socket = world.plane.connect();
 				const send = socket.send.bind(socket);
@@ -735,5 +741,177 @@ describe('what the link records', () => {
 		expect(nodeKey.publicKey).toHaveLength(43);
 		expect(NODE_ID).toMatch(/^nod_/);
 		expect(new PairStore(box.ctx, box.state).record()).not.toBeNull();
+	});
+});
+
+describe('the site map', () => {
+	const WWW = { siteId: 'site_testsite0001', host: 'www.example.edu' };
+	const DOCS = { siteId: 'site_testsite0002', host: 'docs.example.edu' };
+	const HOUR = 3_600_000;
+	const refusals = (box: Paired['box']) =>
+		new AuditLog(box.ctx, `${box.state}/audit.ndjson`, box.config.audit)
+			.read()
+			.filter((entry) => entry.event === 'pair.sites.refused')
+			.map((entry) => (entry.detail as { code: string }).code);
+
+	function sampled(box: Paired['box']) {
+		const analytics = new AnalyticsWindow(10_000);
+		analytics.record({
+			at: box.clock.now + 600_000,
+			tenant: 'acme',
+			site: 'www.example.edu',
+			status: 200,
+			durationMs: 5,
+			bytes: 10,
+			cached: false,
+			refusal: null
+		});
+		return analytics;
+	}
+
+	it('announces a version that includes the frame, so the control plane sends it', async () => {
+		const { sentFrames } = await started();
+		const answer = JSON.parse(sentFrames[0]!) as { range: { max: { minor: number } } };
+		expect(answer.range.max.minor).toBeGreaterThanOrEqual(1);
+	});
+
+	it('stores the map the control plane sends right after ready and keeps it on disk', async () => {
+		const world = await pairedBox();
+		world.plane.sites = [DOCS, WWW];
+		const { store, plane } = await started(world);
+		expect(store.record()!.siteIds).toEqual({
+			'docs.example.edu': DOCS.siteId,
+			'www.example.edu': WWW.siteId
+		});
+		expect(plane.refusals).toEqual([]);
+		expect(store.link().ack).toBe(1);
+	});
+
+	it('builds no usage report before the map arrives and one keyed on it afterwards', async () => {
+		const world = await pairedBox();
+		const analytics = sampled(world.box);
+		const { link, plane, store, box } = await started(world, {}, analytics);
+		await link.sync();
+		await settle();
+		expect(store.record()!.siteIds).toEqual({});
+		expect(plane.of('usage.report')).toHaveLength(0);
+		plane.live!.push(plane.sitesFrame([WWW]));
+		await settle();
+		expect(store.record()!.siteIds).toEqual({ [WWW.host]: WWW.siteId });
+		box.clock.now += 2 * HOUR + 60_000;
+		await link.sync();
+		await settle();
+		const reports = plane.of('usage.report');
+		expect(reports).toHaveLength(1);
+		const intervals = (reports[0]!.body as { intervals: { siteId: string; views: number }[] })
+			.intervals;
+		expect(intervals.map((interval) => [interval.siteId, interval.views])).toEqual([
+			[WWW.siteId, 1]
+		]);
+		expect(plane.refusals).toEqual([]);
+	});
+
+	it('replaces the whole map on each frame, so a site the plane dropped stops reporting', async () => {
+		const { plane, store, link } = await started();
+		plane.live!.push(plane.sitesFrame([WWW, DOCS]));
+		await settle();
+		expect(Object.keys(store.record()!.siteIds).sort()).toEqual([DOCS.host, WWW.host]);
+		plane.live!.push(plane.sitesFrame([DOCS]));
+		await settle();
+		expect(store.record()!.siteIds).toEqual({ [DOCS.host]: DOCS.siteId });
+		plane.live!.push(plane.sitesFrame([]));
+		await settle();
+		expect(store.record()!.siteIds).toEqual({});
+		expect(link.current).toBe('ready');
+	});
+
+	it('keeps the rest of the pairing record and the link as they were', async () => {
+		const { plane, store, record } = await started();
+		plane.live!.push(plane.sitesFrame([WWW]));
+		await settle();
+		expect({ ...store.record()!, siteIds: {} }).toEqual(record);
+		expect(store.link().connected).toBe(true);
+	});
+
+	it('ignores a frame of a type it does not know, with no refusal and no change', async () => {
+		const world = await pairedBox();
+		world.plane.sites = [WWW];
+		const { plane, store, link, box } = await started(world);
+		plane.live!.push(plane.futureFrame());
+		await settle();
+		expect(link.current).toBe('ready');
+		expect(store.record()!.siteIds).toEqual({ [WWW.host]: WWW.siteId });
+		expect(store.link().lastRefusal).toBeNull();
+		expect(refusals(box)).toEqual([]);
+		plane.live!.push(plane.sitesFrame([DOCS]));
+		await settle();
+		expect(store.record()!.siteIds).toEqual({ [DOCS.host]: DOCS.siteId });
+	});
+
+	it('refuses every kind of bad frame and keeps the map it already had', async () => {
+		const world = await pairedBox();
+		world.plane.sites = [WWW];
+		const { plane, store, box } = await started(world);
+		const kept = { [WWW.host]: WWW.siteId };
+		const now = box.clock.now;
+		const stranger = signingKeyFromSeed(newSeed());
+		const good = plane.sitesFrame([DOCS]);
+		const unsigned = { ...plane.sitesFrame([DOCS]) } as Record<string, unknown>;
+		delete unsigned.sig;
+		const tampered = plane.sitesFrame([DOCS]);
+		tampered.body = { ...tampered.body, sites: [{ ...DOCS, host: 'evil.example.edu' }] };
+		const bad: [string, unknown][] = [
+			['bad_signature', plane.sitesFrame([DOCS], { key: stranger })],
+			['bad_signature', tampered],
+			['wrong_node', plane.sitesFrame([DOCS], { nodeId: 'nod_someoneelse01' })],
+			['expired', plane.sitesFrame([DOCS], { ts: now - 6 * 60_000 })],
+			['future', plane.sitesFrame([DOCS], { ts: now + 6 * 60_000 })],
+			['replayed', plane.sitesFrame([DOCS], { seq: 1 })],
+			['malformed', unsigned],
+			['malformed', plane.sitesFrame([WWW, { ...DOCS, host: WWW.host }])],
+			['malformed', plane.sitesFrame([{ siteId: 'nope', host: 'x.example.edu' }])]
+		];
+		for (const [, frame] of bad) {
+			plane.live!.push(frame as never);
+			await settle();
+			expect(store.record()!.siteIds).toEqual(kept);
+		}
+		expect(refusals(box)).toEqual(bad.map(([code]) => code));
+		plane.live!.push(good);
+		await settle();
+		expect(store.record()!.siteIds).toEqual({ [DOCS.host]: DOCS.siteId });
+	});
+
+	it('refuses a map for another node with the same key, and a map older than one already taken', async () => {
+		const { plane, store, box } = await started();
+		plane.live!.push(plane.sitesFrame([WWW, DOCS], { seq: 10 }));
+		await settle();
+		plane.live!.push(plane.sitesFrame([WWW], { seq: 9 }));
+		await settle();
+		expect(Object.keys(store.record()!.siteIds)).toHaveLength(2);
+		expect(refusals(box)).toEqual(['replayed']);
+		expect(store.link().ack).toBe(10);
+	});
+
+	it('ignores a map that arrives after the pairing was removed, and does not bring it back', async () => {
+		const { plane, store, link } = await started();
+		store.clear();
+		plane.live!.push(plane.sitesFrame([WWW]));
+		await settle();
+		expect(store.record()).toBeNull();
+		await link.sync();
+		await settle();
+		expect(link.current).toBe('idle');
+	});
+
+	it('leaves the host names out of the audit trail and counts them instead', async () => {
+		const { plane, box } = await started();
+		plane.live!.push(plane.sitesFrame([WWW, DOCS]));
+		await settle();
+		const entries = new AuditLog(box.ctx, `${box.state}/audit.ndjson`, box.config.audit).read();
+		const taken = entries.find((entry) => entry.event === 'pair.sites')!;
+		expect(taken.detail).toEqual({ sites: 2 });
+		expect(JSON.stringify(entries)).not.toContain('example.edu/');
+		expect(JSON.stringify(entries)).not.toContain(WWW.siteId);
 	});
 });

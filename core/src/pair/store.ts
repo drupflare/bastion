@@ -28,8 +28,9 @@ export interface PairingRecord {
 	/**
 	 * Control plane site ids by host, which a usage report is keyed on.
 	 *
-	 * Nothing writes this at claim: a box learns a site's id only if the control plane tells it, so
-	 * until then no usage interval is built.
+	 * Empty at claim. The control plane sends the map in a `sites` frame after `ready`, and each
+	 * frame replaces the whole map, so a site it dropped stops reporting. Until a frame arrives no
+	 * usage interval is built.
 	 */
 	siteIds: Record<string, string>;
 }
@@ -148,6 +149,22 @@ export class PairStore {
 	save(record: PairingRecord): void {
 		this.ctx.files.mkdirp(this.dir);
 		this.writeJson('pairing.json', record);
+	}
+
+	/**
+	 * Replaces the whole id map in one write, for the pairing that is still on disk.
+	 *
+	 * A frame that was refused never reaches here, so a refusal leaves the old map untouched. A
+	 * record for another node, or none, is left alone, so a frame that outlived an `unpair` cannot
+	 * bring a pairing back.
+	 */
+	replaceSiteIds(nodeId: string, siteIds: Record<string, string>): PairingRecord | null {
+		const held = this.record();
+		if (held === null || held.nodeId !== nodeId) return null;
+		const next = { ...held, siteIds };
+		if (JSON.stringify(held.siteIds) !== JSON.stringify(siteIds))
+			this.writeJson('pairing.json', next);
+		return next;
 	}
 
 	/** removes the record, the link state, every command and every pending decision */

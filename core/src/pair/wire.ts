@@ -16,7 +16,8 @@ import {
  * both directions, which is what keeps it from drifting.
  */
 
-export const FLEET_LINK_VERSION = { major: 1, minor: 0 } as const;
+export const FLEET_LINK_VERSION = { major: 1, minor: 1 } as const;
+export const MAX_SITE_MAP = 1000;
 export const FLEET_TS_WINDOW_MS = 5 * 60_000;
 
 export const ENVELOPE_CONTEXT = 'drupflare.fleet-link.envelope.v1';
@@ -37,6 +38,8 @@ export const NODE_MESSAGE_TYPES = [
 	'command.result'
 ] as const;
 export type NodeMessageType = (typeof NODE_MESSAGE_TYPES)[number];
+
+export const SERVER_MESSAGE_TYPES = ['command', 'sites'] as const;
 
 /** private-use close codes the control plane sends; a node reads the code and the reason text */
 export const CLOSE = {
@@ -411,6 +414,33 @@ function commandBodyOk(body: unknown): body is CommandBody {
 	);
 }
 
+export interface SitesBody {
+	nodeId: string;
+	sites: { siteId: string; host: string }[];
+}
+
+// strict like the contract: no field beyond nodeId and sites, none beyond siteId and host
+function sitesBodyOk(body: unknown): body is SitesBody {
+	if (!isObject(body) || !matches(body.nodeId, NODE_ID) || !Array.isArray(body.sites))
+		return false;
+	if (Object.keys(body).length !== 2 || body.sites.length > MAX_SITE_MAP) return false;
+	const ids = new Set<string>();
+	const hosts = new Set<string>();
+	for (const entry of body.sites) {
+		if (
+			!isObject(entry) ||
+			Object.keys(entry).length !== 2 ||
+			!matches(entry.siteId, SITE_ID) ||
+			!isText(entry.host, 1, 253)
+		) {
+			return false;
+		}
+		ids.add(entry.siteId);
+		hosts.add(entry.host);
+	}
+	return ids.size === body.sites.length && hosts.size === body.sites.length;
+}
+
 // #endregion
 
 // #region envelope
@@ -427,6 +457,7 @@ export interface Envelope<B = unknown> {
 }
 
 export type CommandEnvelope = Envelope<CommandBody> & { type: 'command' };
+export type SitesEnvelope = Envelope<SitesBody> & { type: 'sites' };
 
 export const ENVELOPE_REFUSALS = [
 	'malformed',
@@ -467,7 +498,12 @@ function shapeOk(raw: Json, direction: 'node' | 'server'): boolean {
 	) {
 		return false;
 	}
-	if (direction === 'server') return raw.type === 'command' && commandBodyOk(raw.body);
+	if (direction === 'server') {
+		return (
+			(raw.type === 'command' && commandBodyOk(raw.body)) ||
+			(raw.type === 'sites' && sitesBodyOk(raw.body))
+		);
+	}
 	return (
 		(NODE_MESSAGE_TYPES as readonly string[]).includes(raw.type as string) &&
 		nodeBodyOk(raw.type as NodeMessageType, raw.body)
@@ -485,7 +521,7 @@ export function verifyEnvelope(
 	}
 	if (raw.v !== FLEET_LINK_VERSION.major || !shapeOk(raw, opts.direction)) {
 		const other: readonly string[] =
-			opts.direction === 'node' ? ['command'] : NODE_MESSAGE_TYPES;
+			opts.direction === 'node' ? SERVER_MESSAGE_TYPES : NODE_MESSAGE_TYPES;
 		const wrong = typeof raw.type === 'string' && other.includes(raw.type);
 		return { ok: false, code: wrong ? 'wrong_direction' : 'malformed' };
 	}
@@ -493,7 +529,10 @@ export function verifyEnvelope(
 	if (!verifyCanonical(ENVELOPE_CONTEXT, withoutSig(raw), message.sig, opts.publicKey)) {
 		return { ok: false, code: 'bad_signature' };
 	}
-	if (message.type === 'command' && (message.body as CommandBody).nodeId !== opts.nodeId) {
+	if (
+		(message.type === 'command' || message.type === 'sites') &&
+		(message.body as CommandBody | SitesBody).nodeId !== opts.nodeId
+	) {
 		return { ok: false, code: 'wrong_node' };
 	}
 	const windowMs = opts.windowMs ?? FLEET_TS_WINDOW_MS;

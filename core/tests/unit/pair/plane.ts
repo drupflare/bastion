@@ -19,7 +19,8 @@ import {
 	type Challenge,
 	type CommandBody,
 	type Envelope,
-	type SigningKey
+	type SigningKey,
+	type SitesBody
 } from '../../../src/pair/wire';
 import { fileSecrets, type SecretStore } from '../../../src/secrets/store';
 
@@ -146,6 +147,8 @@ export class ControlPlane {
 	handshakes = 0;
 	/** how a spec makes the plane skip a step */
 	hold: { ready?: boolean } = {};
+	/** when set, every connection is sent this map right after `ready`, as the engine does */
+	sites: SitesBody['sites'] | null = null;
 
 	constructor(private readonly options: PlaneOptions) {
 		this.key = signingKeyFromSeed(newSeed());
@@ -241,6 +244,7 @@ export class ControlPlane {
 				version: { major: FLEET_LINK_VERSION.major, minor: FLEET_LINK_VERSION.minor },
 				lastSeq: this.lastSeq
 			});
+			if (this.sites !== null) socket.push(this.sitesFrame(this.sites));
 			return;
 		}
 		if (this.revoked) {
@@ -304,6 +308,41 @@ export class ControlPlane {
 
 	deliver(command: Envelope<CommandBody>): void {
 		this.live?.push(command);
+	}
+
+	/** a signed site map the way `buildSites` and `signSites` make one */
+	sitesFrame(
+		sites: SitesBody['sites'],
+		options: { ts?: number; key?: SigningKey; id?: string; seq?: number; nodeId?: string } = {}
+	): Envelope<SitesBody> {
+		return signEnvelope<SitesBody>(
+			{
+				v: FLEET_LINK_VERSION.major,
+				id: options.id ?? `msg_${randomUUID().replaceAll('-', '')}`,
+				type: 'sites',
+				ts: options.ts ?? this.options.now(),
+				seq: options.seq ?? ++this.outSeq,
+				ack: Math.max(0, this.lastSeq),
+				body: { nodeId: options.nodeId ?? this.nodeId, sites }
+			},
+			options.key ?? this.key
+		);
+	}
+
+	/** a correctly signed frame of a type this box does not know, as a newer minor might send */
+	futureFrame(type = 'sites.v2'): Envelope {
+		return signEnvelope(
+			{
+				v: FLEET_LINK_VERSION.major,
+				id: `msg_${randomUUID().replaceAll('-', '')}`,
+				type,
+				ts: this.options.now(),
+				seq: ++this.outSeq,
+				ack: Math.max(0, this.lastSeq),
+				body: { anything: [1, 2, 3] }
+			},
+			this.key
+		);
 	}
 }
 

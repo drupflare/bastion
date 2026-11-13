@@ -267,7 +267,8 @@ state directory rather than overwriting it.
 `bastion pair <url>#<claim token>` connects a box to a drupflare dashboard. The box holds one
 outbound WebSocket and sends signed status, findings, metrics, audit and usage reports. It never
 listens for the dashboard. Commands the dashboard sends wait for local approval unless the operator
-set that class to `auto`, and stateful commands always wait. `bastion pair --show-fields` lists
+set that class to `auto`, and stateful commands always wait. The dashboard also sends the site id
+it holds for each host, which the usage report is keyed on, and `bastion pair status` lists them. `bastion pair --show-fields` lists
 everything that leaves the box, and `bastion unpair` stops it and leaves the box standalone.
 
 ## Drivers

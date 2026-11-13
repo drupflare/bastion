@@ -329,6 +329,31 @@ describe('what leaves the box', () => {
 		expect(usageBody({ nodeId: NODE_ID, now, siteIds: {} }, analytics, start)).toBeNull();
 	});
 
+	it('finds a site by its lowercase host when the config spelled it with capitals', () => {
+		const hour = 3_600_000;
+		const now = 1_790_000_000_000;
+		const start = Math.floor(now / hour) * hour - hour;
+		const analytics = new AnalyticsWindow(100);
+		analytics.record({
+			at: start + 1000,
+			tenant: 'acme',
+			site: 'WWW.Example.edu',
+			status: 200,
+			durationMs: 1,
+			bytes: 1,
+			cached: false,
+			refusal: null
+		});
+		const body = usageBody(
+			{ nodeId: NODE_ID, now, siteIds: { 'www.example.edu': 'site_testsite0001' } },
+			analytics,
+			start
+		);
+		expect((body!.intervals as { siteId: string }[]).map((entry) => entry.siteId)).toEqual([
+			'site_testsite0001'
+		]);
+	});
+
 	it('calls an hour estimated when the request window may have dropped samples from it', () => {
 		const hour = 3_600_000;
 		const now = 1_790_000_000_000;

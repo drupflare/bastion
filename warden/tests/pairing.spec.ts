@@ -192,6 +192,40 @@ describe('bastion pair status', () => {
 	});
 });
 
+describe('bastion pair status site ids', () => {
+	const ids = { 'www.example.edu': 'site_testsite0001', 'docs.example.edu': 'site_testsite0002' };
+
+	it('says no ids have arrived yet, in text and as an empty list', async () => {
+		const { ctx, io } = rig(claimed);
+		await run(ctx, ['pair', address, '--json']);
+		io.stdout.length = 0;
+		await run(ctx, ['pair', 'status']);
+		expect(io.outText()).toContain('no site ids yet');
+		io.stdout.length = 0;
+		await run(ctx, ['pair', 'status', '--json']);
+		expect((JSON.parse(io.outText()) as { sites: unknown[] }).sites).toEqual([]);
+	});
+
+	it('shows each site id with its host, and nothing else about the sites', async () => {
+		const { ctx, io } = rig(claimed);
+		await run(ctx, ['pair', address, '--json']);
+		new PairStore(ctx, '/var/lib/bastion').replaceSiteIds(NODE_ID, ids);
+		io.stdout.length = 0;
+		await run(ctx, ['pair', 'status', '--json']);
+		expect((JSON.parse(io.outText()) as { sites: unknown[] }).sites).toEqual([
+			{ siteId: 'site_testsite0002', host: 'docs.example.edu' },
+			{ siteId: 'site_testsite0001', host: 'www.example.edu' }
+		]);
+		io.stdout.length = 0;
+		await run(ctx, ['pair', 'status']);
+		const text = io.outText();
+		expect(text).toContain('site id');
+		expect(text).toContain('site_testsite0001');
+		expect(text).toContain('docs.example.edu');
+		expect(text).not.toContain('no site ids yet');
+	});
+});
+
 describe('bastion pair approve and reject', () => {
 	it('records the decision for serve to apply and runs nothing itself', async () => {
 		const { ctx, io } = rig(claimed);

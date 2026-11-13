@@ -182,7 +182,8 @@ const HOUR_MS = 3_600_000;
  * Counts come from the in-memory request window, which is bounded and does not survive a restart,
  * so an hour the window may have dropped samples from is `estimated` with the count as its lower
  * bound, never `exact`. A site with no control plane id is left out: a host name is not an id the
- * contract accepts, and inventing one would bill someone else's number.
+ * contract accepts, and inventing one would bill someone else's number. The map arrives in a
+ * `sites` frame from the control plane, so no interval is built before the first one.
  */
 export function usageBody(
 	input: { nodeId: string; now: number; siteIds: Record<string, string> },
@@ -201,7 +202,7 @@ export function usageBody(
 			bySite.set(sample.site, (bySite.get(sample.site) ?? 0) + 1);
 		}
 		for (const [host, views] of bySite) {
-			const siteId = input.siteIds[host];
+			const siteId = input.siteIds[host] ?? input.siteIds[host.toLowerCase()];
 			if (siteId === undefined) continue;
 			intervals.push({
 				siteId,

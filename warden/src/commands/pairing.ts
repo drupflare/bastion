@@ -139,6 +139,9 @@ export function pairingStatus(ctx: Context, globals: Globals) {
 			stopped: link.stopped === null ? null : { ...link.stopped, at: iso(link.stopped.at) }
 		},
 		approvals: (loaded.config.pairing ?? DEFAULT_PAIRING).commands,
+		sites: Object.entries(record.siteIds)
+			.map(([host, siteId]) => ({ siteId, host }))
+			.sort((a, b) => (a.host < b.host ? -1 : 1)),
 		commands,
 		fields
 	};
@@ -163,6 +166,13 @@ export function runPairStatus(ctx: Context, globals: Globals): void {
 				['stopped', status.link.stopped?.reason ?? 'no'],
 				['waiting', String(waiting.length)]
 			]),
+			'',
+			status.sites.length === 0
+				? 'no site ids yet; the dashboard sends them once the link is ready'
+				: table(
+						['site id', 'host'],
+						status.sites.map((site) => [site.siteId, site.host])
+					),
 			...(status.commands.length === 0
 				? []
 				: [

@@ -80,10 +80,11 @@ describe('the contract vectors', () => {
 		const envelopes = vectors.positive.filter(
 			(c) => c.kind === 'envelope' && c.name !== 'reordered-fields-verify'
 		);
-		expect(envelopes.length).toBeGreaterThanOrEqual(7);
+		expect(envelopes.length).toBeGreaterThanOrEqual(8);
 		for (const c of envelopes) {
 			const { sig, ...unsigned } = c.input;
-			const key = c.input.type === 'command' ? dashboardKey : nodeKey;
+			const fromDashboard = c.input.type === 'command' || c.input.type === 'sites';
+			const key = fromDashboard ? dashboardKey : nodeKey;
 			const again = signEnvelope(unsigned as unknown as Omit<Envelope, 'sig'>, key);
 			expect(again.sig, c.name).toBe(sig);
 		}

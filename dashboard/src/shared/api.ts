@@ -124,6 +124,7 @@ export interface PairingStatus {
 	pairedAt?: string | null;
 	link?: PairingLink;
 	approvals?: Record<string, string>;
+	sites?: { siteId: string; host: string }[];
 	commands?: PairingCommand[];
 	fields: PairingFields;
 }

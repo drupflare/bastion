@@ -26,7 +26,8 @@ import {
 	type CommandEnvelope,
 	type Envelope,
 	type NodeMessageType,
-	type SigningKey
+	type SigningKey,
+	type SitesEnvelope
 } from './wire';
 
 /** the part of a WebSocket the link uses, so a spec can drive it without a network */
@@ -321,6 +322,9 @@ export class FleetLink {
 				return;
 			case 'command':
 				return this.command(raw);
+			case 'sites':
+				return this.sites(raw);
+			// a frame type a newer control plane added is ignored, which is what keeps minors additive
 			default:
 				return;
 		}
@@ -392,6 +396,47 @@ export class FleetLink {
 		if (envelope.seq > link.ack) this.store.patchLink({ ack: envelope.seq });
 		await this.book.receive(envelope);
 		await this.carry();
+	}
+
+	/**
+	 * Replaces the site id map with the one the control plane just sent.
+	 *
+	 * Checked like a command, and its `seq` has to rise above the highest one seen, so an older map
+	 * captured earlier cannot replace a newer one. Anything refused leaves the map as it was.
+	 */
+	private async sites(raw: Record<string, unknown>): Promise<void> {
+		const record = this.record;
+		if (this.phase !== 'ready' || record === null) return;
+		const verdict = verifyEnvelope(raw, {
+			publicKey: record.dashboardPublicKey,
+			direction: 'server',
+			now: this.deps.ctx.now(),
+			nodeId: record.nodeId
+		});
+		const refuse = (code: string): void =>
+			auditPair(this.deps.ctx, this.deps.state, this.deps.config.audit, {
+				event: 'pair.sites.refused',
+				principal: 'control-plane',
+				level: 'warn',
+				detail: { code }
+			});
+		if (!verdict.ok) return refuse(verdict.code);
+		const envelope = verdict.value as SitesEnvelope;
+		const link = this.store.link();
+		if (envelope.seq <= link.ack) return refuse('replayed');
+		const siteIds: Record<string, string> = {};
+		for (const entry of [...envelope.body.sites].sort((a, b) => (a.host < b.host ? -1 : 1))) {
+			siteIds[entry.host.toLowerCase()] = entry.siteId;
+		}
+		const updated = this.store.replaceSiteIds(record.nodeId, siteIds);
+		if (updated === null) return;
+		this.record = updated;
+		this.store.patchLink({ ack: envelope.seq });
+		auditPair(this.deps.ctx, this.deps.state, this.deps.config.audit, {
+			event: 'pair.sites',
+			principal: 'control-plane',
+			detail: { sites: envelope.body.sites.length }
+		});
 	}
 
 	// #endregion
