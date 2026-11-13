@@ -28,7 +28,7 @@
 		"@vueuse/core": "^14.4.0",
 		"@vueuse/nuxt": "^14.4.0",
 		"happy-dom": "^16.0.0",
-		"nuxt": "~4.5.2",
+		"nuxt": "~4.6.0",
 		"nuxt-viewport": "^2.6.0",
 		"tailwindcss": "^4.1.0",
 		"vitest": "^4.1.0",
