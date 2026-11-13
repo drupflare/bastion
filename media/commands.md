@@ -345,14 +345,15 @@ add a site to a tenant
 | -------- | -------- | ------------ |
 | `host`   | yes      | the hostname |
 
-| flag                  | meaning                                             |
-| --------------------- | --------------------------------------------------- |
-| `--tenant <name>`     | the tenant to add it to                             |
-| `--bundle <path       | url>`                                               | the site payload                                               |
-| `--template <path     | url>`                                               | pull a worker template and read its bindings from its manifest |
-| `--probe <profile>`   | the profile that proves a boot                      |
-| `--checksum <sha256>` | the digest a download must hash to                  |
-| `--insecure-source`   | accept a plaintext download, or one on this network |
+| flag                  | meaning                                                          |
+| --------------------- | ---------------------------------------------------------------- |
+| `--tenant <name>`     | the tenant to add it to                                          |
+| `--bundle <path       | url>`                                                            | the site payload                                               |
+| `--template <path     | url>`                                                            | pull a worker template and read its bindings from its manifest |
+| `--probe <profile>`   | the profile that proves a boot                                   |
+| `--vars-file <path>`  | a json object of text, number and boolean values to bind as vars |
+| `--checksum <sha256>` | the digest a download must hash to                               |
+| `--insecure-source`   | accept a plaintext download, or one on this network              |
 
 Documented in `bastion manual sites`.
 

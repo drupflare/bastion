@@ -259,7 +259,9 @@ state directory rather than overwriting it.</p>
 <p><code>bastion pair &lt;url&gt;#&lt;claim token&gt;</code> connects a box to a drupflare dashboard. The box holds one
 outbound WebSocket and sends signed status, findings, metrics, audit and usage reports. It never
 listens for the dashboard. Commands the dashboard sends wait for local approval unless the operator
-set that class to <code>auto</code>, and stateful commands always wait. <code>bastion pair --show-fields</code> lists
+set that class to <code>auto</code>, and stateful commands always wait. The six actions are <code>health.observe</code>,
+<code>tenant.reload</code>, <code>site.deploy</code>, <code>site.add</code>, <code>site.rollback</code> and <code>backup.now</code>. The dashboard also sends the site id
+it holds for each host, which the usage report is keyed on, and <code>bastion pair status</code> lists them. <code>bastion pair --show-fields</code> lists
 everything that leaves the box, and <code>bastion unpair</code> stops it and leaves the box standalone.</p>
 <h2 id="drivers" class="tsd-anchor-link">Drivers<a href="#drivers" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>Every driver sits behind one contract with a capability object that is probed once and cached.

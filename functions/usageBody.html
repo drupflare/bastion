@@ -19,7 +19,8 @@
 <p>Counts come from the in-memory request window, which is bounded and does not survive a restart,
 so an hour the window may have dropped samples from is <code>estimated</code> with the count as its lower
 bound, never <code>exact</code>. A site with no control plane id is left out: a host name is not an id the
-contract accepts, and inventing one would bill someone else's number.</p>
+contract accepts, and inventing one would bill someone else's number. The map arrives in a
+<code>sites</code> frame from the control plane, so no interval is built before the first one.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
@@ -29,7 +30,7 @@ contract accepts, and inventing one would bill someone else's number.</p>
 <li><span><span class="tsd-kind-parameter">since</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span><br/>        <span class="tsd-kind-property">intervals</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">unknown</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-kind-property">reportId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-kind-property">sentAt</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>        <span class="tsd-kind-property">source</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-signature-symbol">}</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/d1e913b5dbb42ab20df322653e09ac8e7d73e394/core/src/pair/fields.ts#L187">core/src/pair/fields.ts:187</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/1c73610de254241bf6c3c66644924c311e21d9a5/core/src/pair/fields.ts#L188">core/src/pair/fields.ts:188</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
