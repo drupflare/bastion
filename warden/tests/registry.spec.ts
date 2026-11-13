@@ -86,10 +86,17 @@ describe('the program', () => {
 		const registered: string[] = [];
 		const walk = (command: { commands: unknown[]; name(): string }, prefix: string): void => {
 			for (const raw of command.commands) {
-				const child = raw as { commands: unknown[]; name(): string };
+				const child = raw as {
+					commands: unknown[];
+					registeredArguments: unknown[];
+					name(): string;
+				};
 				const name = `${prefix}${child.name()}`;
-				if (child.commands.length === 0) registered.push(name);
-				else walk(child, `${name} `);
+				// \`pair [url]\` is a command and a group at once; it is the one with an argument
+				if (child.commands.length === 0 || child.registeredArguments.length > 0) {
+					registered.push(name);
+				}
+				if (child.commands.length > 0) walk(child, `${name} `);
 			}
 		};
 		walk(program as unknown as { commands: unknown[]; name(): string }, '');

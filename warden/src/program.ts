@@ -110,11 +110,9 @@ import {
 	runCertUntrust,
 	runDashboardOpen,
 	runDashboardToken,
-	runPair,
 	runRecycle,
 	runReload,
 	runTail,
-	runUnpair,
 	runUpdateRollback
 } from './commands/operate';
 import {
@@ -127,6 +125,13 @@ import {
 	runSecretsList,
 	runUpdateCheck
 } from './commands/ops';
+import {
+	runPair,
+	runPairApprove,
+	runPairReject,
+	runPairStatus,
+	runUnpair
+} from './commands/pairing';
 import { STORES, runStore, type Store } from './commands/stores';
 import {
 	runBackupList,
@@ -317,7 +322,10 @@ export const HANDLERS: Record<string, Handler> = {
 	'api token list': (ctx, globals) => runTokenList(ctx, globals),
 	'api token revoke': (ctx, globals, args) => runTokenRevoke(ctx, globals, args[0] as string),
 
-	pair: (ctx, globals) => runPair(ctx, globals),
+	pair: (ctx, globals, args) => runPair(ctx, globals, args[0]),
+	'pair status': (ctx, globals) => runPairStatus(ctx, globals),
+	'pair approve': (ctx, globals, args) => runPairApprove(ctx, globals, args[0] as string),
+	'pair reject': (ctx, globals, args) => runPairReject(ctx, globals, args[0] as string),
 	unpair: (ctx, globals) => runUnpair(ctx, globals),
 	'dashboard open': (ctx, globals) => runDashboardOpen(ctx, globals),
 	'dashboard token': (ctx, globals) => runDashboardToken(ctx, globals),
@@ -408,6 +416,8 @@ export function buildProgram(ctx: Context, outcome: Outcome = { code: 0 }): Comm
 		const command = parent
 			.command(`${leaf}${args === '' ? '' : ` ${args}`}`)
 			.description(spec.description);
+		// a command that is also a group (`pair` and `pair status`) is found by name, not made twice
+		groups.set(spec.name, command);
 
 		const declared = new Set<string>();
 		for (const option of spec.options ?? []) {

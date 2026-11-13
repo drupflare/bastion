@@ -29,7 +29,9 @@ export type Action =
 	| 'secrets.write'
 	| 'cluster.read'
 	| 'cluster.write'
-	| 'audit.read';
+	| 'audit.read'
+	| 'pairing.read'
+	| 'pairing.write';
 
 /**
  * What each role may do.
@@ -57,7 +59,9 @@ export const GRANTS: Record<Role, Action[]> = {
 		'secrets.write',
 		'cluster.read',
 		'cluster.write',
-		'audit.read'
+		'audit.read',
+		'pairing.read',
+		'pairing.write'
 	],
 	'tenant-admin': [
 		'tenant.read',

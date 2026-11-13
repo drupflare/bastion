@@ -888,18 +888,6 @@ describe('the dashboard and pairing', () => {
 		expect(await run(ctx, ['dashboard', 'token'])).toBe(EXIT.OK);
 		expect(io.outText()).toContain('spent');
 	});
-
-	// the refusal is the feature: the control plane pairing dials does not exist in 1.0.0
-	it('pair refuses and names the missing half', async () => {
-		const { ctx, io } = harness();
-		expect(await run(ctx, ['pair'])).toBe(EXIT.USAGE);
-		expect(io.outText()).toContain('control plane');
-	});
-
-	it('unpair refuses for the same reason', async () => {
-		const { ctx } = harness();
-		expect(await run(ctx, ['unpair'])).toBe(EXIT.USAGE);
-	});
 });
 
 /**

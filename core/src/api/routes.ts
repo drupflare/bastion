@@ -218,6 +218,30 @@ export const ROUTES: RouteDefinition[] = [
 		action: 'host.read',
 		token: true,
 		command: 'bastion capacity'
+	},
+	// approving a command the control plane sent runs it on the box, so both approval routes are
+	// session only: a token minted for unattended signup must never be able to approve the very
+	// commands the operator holds back for a human
+	{
+		method: 'GET',
+		path: '/api/pairing',
+		action: 'pairing.read',
+		token: false,
+		command: 'bastion pair status'
+	},
+	{
+		method: 'POST',
+		path: '/api/pairing/commands/:id/approve',
+		action: 'pairing.write',
+		token: false,
+		command: 'bastion pair approve'
+	},
+	{
+		method: 'POST',
+		path: '/api/pairing/commands/:id/reject',
+		action: 'pairing.write',
+		token: false,
+		command: 'bastion pair reject'
 	}
 ];
 

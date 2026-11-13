@@ -456,32 +456,4 @@ export function runDashboardToken(ctx: Context, globals: Globals): void {
 	ctx.io.out('that token claims the dashboard once and is then spent');
 }
 
-/**
- * Refuses, and names the missing half.
- *
- * Pairing dials the drupflare control plane, which does not exist yet. Declaring the command and
- * refusing by name is what keeps the shape of the v1.1 protocol visible without implying a
- * capability bastion does not have.
- */
-export function runPair(ctx: Context, globals: Globals): number {
-	emit(ctx, globals, { paired: false, reason: 'no control plane' }, () =>
-		[
-			'pairing is refused in 1.0.0: the drupflare control plane it dials is not built yet.',
-			'bastion runs standalone and needs nothing to pair with; `docs/` carries the protocol',
-			'shape so v1.1 implements rather than designs it.'
-		].join('\n')
-	);
-	return 2;
-}
-
-export function runUnpair(ctx: Context, globals: Globals): number {
-	emit(
-		ctx,
-		globals,
-		{ paired: false, reason: 'never paired' },
-		() => 'this node is not paired, because pairing is refused in 1.0.0'
-	);
-	return 2;
-}
-
 // #endregion

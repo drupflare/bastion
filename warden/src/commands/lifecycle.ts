@@ -22,6 +22,7 @@ import { apiHandlers } from '../api/handlers';
 import { liveHandlers } from '../api/live';
 import { dashboardAssets } from '../dashboard';
 import { MANUAL, manualTopics, renderTopic } from '../manual';
+import { startFleetLink } from '../pair';
 import { COMMANDS, GLOBAL_OPTIONS, type CommandSpec } from '../registry';
 import { emit, load, type Globals } from '../state';
 
@@ -218,7 +219,12 @@ export async function runServe(ctx: Context, globals: Globals & { mode?: string 
 	// rather than on every request: the conditions are a disk filling, a certificate approaching
 	// and a tenant crash-looping, none of which move per request
 	runtime.health();
+	// the link dials only once `pair` has written a record, so a box that never paired is untouched
+	const link = startFleetLink(ctx, globals, runtime);
 	const sweeping = setInterval(() => {
+		link.sync().catch((error: unknown) => {
+			ctx.io.err(`pairing: ${error instanceof Error ? error.message : String(error)}`);
+		});
 		try {
 			runtime.health();
 			// the same timer picks up a reload the CLI asked for: a poll cannot miss the way an
@@ -255,6 +261,7 @@ export async function runServe(ctx: Context, globals: Globals & { mode?: string 
 	await new Promise<void>((resolve) => {
 		const stop = (): void => {
 			clearInterval(sweeping);
+			link.stop();
 			void runtime.down().then(resolve);
 		};
 		process.once('SIGTERM', stop);

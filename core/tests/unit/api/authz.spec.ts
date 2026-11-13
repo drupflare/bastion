@@ -12,7 +12,9 @@ describe('GRANTS', () => {
 			'host.write',
 			'config.write',
 			'cluster.write',
-			'secrets.read'
+			'secrets.read',
+			'pairing.read',
+			'pairing.write'
 		] as const) {
 			expect(GRANTS.operator).toContain(action);
 			expect(GRANTS['tenant-admin']).not.toContain(action);
@@ -97,7 +99,8 @@ describe('the route table', () => {
 				'secrets.read',
 				'secrets.write',
 				'host.write',
-				'cluster.write'
+				'cluster.write',
+				'pairing.write'
 			]).not.toContain(route.action);
 		}
 	});

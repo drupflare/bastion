@@ -146,7 +146,16 @@ const SAMPLE: Record<string, { path: string; body?: unknown }> = {
 	'GET /api/audit': { path: '/api/audit' },
 	'GET /api/cluster': { path: '/api/cluster' },
 	'POST /api/cluster/nodes': { path: '/api/cluster/nodes', body: { control: '10.0.0.1:8788' } },
-	'GET /api/capacity': { path: '/api/capacity' }
+	'GET /api/capacity': { path: '/api/capacity' },
+	'GET /api/pairing': { path: '/api/pairing' },
+	'POST /api/pairing/commands/:id/approve': {
+		path: '/api/pairing/commands/a1b2c3d4e5/approve',
+		body: {}
+	},
+	'POST /api/pairing/commands/:id/reject': {
+		path: '/api/pairing/commands/a1b2c3d4e5/reject',
+		body: {}
+	}
 };
 
 describe('every management route', () => {

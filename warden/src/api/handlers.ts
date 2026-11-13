@@ -229,6 +229,13 @@ export function implementations(globals: Globals): Record<string, RouteImpl> {
 			}
 		},
 		'GET /api/backups': { argv: () => ['backup', 'list'] },
+		'GET /api/pairing': { argv: () => ['pair', 'status'] },
+		'POST /api/pairing/commands/:id/approve': {
+			argv: ({ params }) => ['pair', 'approve', params.id as string]
+		},
+		'POST /api/pairing/commands/:id/reject': {
+			argv: ({ params }) => ['pair', 'reject', params.id as string]
+		},
 		'POST /api/backups': {
 			argv: async ({ request }) => {
 				const body = await readBody(request);

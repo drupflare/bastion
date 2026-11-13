@@ -1293,18 +1293,56 @@ export const COMMANDS: CommandSpec[] = [
 		name: 'pair',
 		description: 'pair with the drupflare control plane',
 		manual: 'pairing',
+		args: [
+			{
+				name: 'url',
+				required: false,
+				description: 'the address the dashboard shows, as <url>#<claim token>'
+			}
+		],
+		options: [
+			{
+				flags: '--show-fields',
+				description: 'print every field that leaves the box and pair with nothing'
+			}
+		],
 		exits: [JSON_EXIT],
 		surface: null,
-		exempt: 'pairing refuses in this version'
+		exempt: 'the claim token is typed at the box and never passes through a browser session'
+	},
+	{
+		group: 'pairing',
+		name: 'pair status',
+		description: 'the link, the commands waiting for approval and the fields sent',
+		manual: 'pairing',
+		surface: '/pairing'
+	},
+	{
+		group: 'pairing',
+		name: 'pair approve',
+		description: 'run a command the control plane sent',
+		manual: 'pairing',
+		args: [{ name: 'id', required: true, description: 'the id `pair status` shows' }],
+		exits: [JSON_EXIT],
+		surface: '/pairing'
+	},
+	{
+		group: 'pairing',
+		name: 'pair reject',
+		description: 'refuse a command the control plane sent',
+		manual: 'pairing',
+		args: [{ name: 'id', required: true, description: 'the id `pair status` shows' }],
+		exits: [JSON_EXIT],
+		surface: '/pairing'
 	},
 	{
 		group: 'pairing',
 		name: 'unpair',
-		description: 'stop pairing',
+		description: 'stop pairing and leave this box working on its own',
 		manual: 'pairing',
 		exits: [JSON_EXIT],
 		surface: null,
-		exempt: 'pairing refuses in this version'
+		exempt: 'unpairing is a decision made at the box, so the console shows the state and no button'
 	},
 	{
 		group: 'misc',
