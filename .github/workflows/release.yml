@@ -302,7 +302,7 @@ jobs:
           VERSION=$(node -p "require('./core/package.json').version")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
       - name: Set Up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: Set Up Buildx
         uses: docker/setup-buildx-action@v3
       - name: Log In to ghcr.io
