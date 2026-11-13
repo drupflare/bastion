@@ -1,13 +1,19 @@
-import type { Context, Executors, Runtime } from '@drupflare/bastion';
+import type { AssetInstall, Context, Executors, PreparedBundle, Runtime } from '@drupflare/bastion';
 import {
 	BastionError,
 	EXIT,
 	FleetLink,
 	ParamError,
 	buildSecrets,
-	memoryIo
+	installAssets,
+	memoryIo,
+	prepareBundle,
+	pullBundle,
+	sha256Of,
+	tenantAssets
 } from '@drupflare/bastion';
 import { hostname } from 'node:os';
+import { downloadOptions } from './download';
 import { run } from './run';
 import { load, type Globals } from './state';
 
@@ -16,6 +22,7 @@ const VERSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const CHECKSUM = /^sha256:[0-9a-f]{64}$/;
 const BUNDLE_URL = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?\/[A-Za-z0-9._~%/+=-]*$/;
 const BUNDLE_PATH = /^\/[A-Za-z0-9._/-]{1,512}$/;
+const TENANT = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 /** the parameters an action takes and no others, so an extra key is a refusal and not a guess */
 function only(raw: Record<string, unknown>, allowed: string[]): void {
@@ -82,11 +89,19 @@ function deployed(outcome: Outcome): { version: string; deployedAt: string } | n
 /**
  * What the control plane may ask this box to do, and the class each action belongs to.
  *
- * Five actions, each an existing command. There is nothing in the destructive class: removing a
+ * Six actions, each an existing command. There is nothing in the destructive class: removing a
  * site or a tenant stays a decision made at the box, and a command that asks for it is answered
  * with a typed refusal rather than silence.
  */
 export function fleetExecutors(ctx: Context, globals: Globals): Executors {
+	// a site already on this host counts as the same one when it points at the same path, or at a
+	// file whose digest is the one the command carries
+	function sameBundle(held: string, params: Record<string, string>): boolean {
+		if (held === params.bundle) return true;
+		if (params.checksum === undefined || !ctx.files.exists(held)) return false;
+		return `sha256:${sha256Of(ctx.files.readBytes(held))}` === params.checksum;
+	}
+
 	return {
 		'health.observe': {
 			class: 'safe',
@@ -140,6 +155,95 @@ export function fleetExecutors(ctx: Context, globals: Globals): Executors {
 					code: outcome.code,
 					deploy: outcome.ok ? deployed(outcome) : null
 				};
+			}
+		},
+		'site.add': {
+			class: 'stateful',
+			params: (raw) => {
+				only(raw, ['host', 'bundle', 'checksum', 'tenant']);
+				const bundle = raw.bundle;
+				if (
+					typeof bundle !== 'string' ||
+					!(BUNDLE_URL.test(bundle) || BUNDLE_PATH.test(bundle))
+				) {
+					throw new ParamError('bundle is not acceptable');
+				}
+				const checksum = text(raw, 'checksum', CHECKSUM, true);
+				const tenant = text(raw, 'tenant', TENANT, true);
+				return {
+					host: text(raw, 'host', HOST),
+					bundle,
+					...(checksum === '' ? {} : { checksum }),
+					...(tenant === '' ? {} : { tenant })
+				};
+			},
+			run: async (params) => {
+				const loaded = load(ctx, globals);
+				const host = params.host as string;
+				const held = loaded.config.tenants
+					.flatMap((tenant) => tenant.sites)
+					.find((site) => site.host === host);
+				if (held !== undefined) {
+					return sameBundle(held.bundle, params)
+						? { ok: true, code: null }
+						: { ok: false, code: 'site_exists' };
+				}
+				// a box with no tenant is refused: a tenant carries limits and egress the operator sets
+				const tenant = params.tenant ?? loaded.config.tenants[0]?.name;
+				if (tenant === undefined) return { ok: false, code: 'no_tenant' };
+				if (!loaded.config.tenants.some((entry) => entry.name === tenant)) {
+					return { ok: false, code: 'unknown_tenant' };
+				}
+				// fetched and unpacked here, before the command writes anything: a bundle that
+				// would only fail at the next reload is refused now, with no config written. The
+				// command then takes the local file, so nothing downloads twice
+				const dest = `${loaded.config.state}/bundles/${host}`;
+				let bundle: string;
+				let prepared: PreparedBundle;
+				try {
+					const pulled = await pullBundle(ctx, params.bundle as string, {
+						dest,
+						...downloadOptions({ checksum: params.checksum })
+					});
+					prepared = await prepareBundle(ctx, pulled.path, `${dest}/.check`);
+					bundle = pulled.path;
+				} catch (error) {
+					if (error instanceof BastionError) return { ok: false, code: error.code };
+					throw error;
+				}
+				// the runtime serves one site per tenant out of one assets folder, so a tenant that
+				// already holds a site keeps its own files
+				const holds = loaded.config.tenants.find((entry) => entry.name === tenant)!.sites;
+				let install: AssetInstall | null = null;
+				try {
+					if (prepared.assets !== null && holds.length === 0) {
+						install = installAssets(
+							ctx,
+							prepared.assets.dir,
+							tenantAssets(loaded.config.state, tenant),
+							prepared.assets.files
+						);
+					}
+					const outcome = await cli(ctx, globals, [
+						'site',
+						'add',
+						host,
+						'--tenant',
+						tenant,
+						'--bundle',
+						bundle,
+						...(prepared.varsFile === null ? [] : ['--vars-file', prepared.varsFile])
+					]);
+					if (outcome.ok) install?.commit();
+					else install?.rollback();
+					return { ok: outcome.ok, code: outcome.code };
+				} catch (error) {
+					install?.rollback();
+					if (error instanceof BastionError) return { ok: false, code: error.code };
+					throw error;
+				} finally {
+					prepared.discard();
+				}
 			}
 		},
 		'site.rollback': {

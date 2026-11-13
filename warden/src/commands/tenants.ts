@@ -20,6 +20,7 @@ import {
 	defaultCostModel,
 	pullBundle,
 	pullTemplate,
+	readBoxVars,
 	readGuests,
 	readHost,
 	refusals,
@@ -176,6 +177,7 @@ export async function runSiteAdd(
 		probe?: string;
 		checksum?: string;
 		insecureSource?: boolean;
+		varsFile?: string;
 	},
 	host: string
 ): Promise<void> {
@@ -189,6 +191,12 @@ export async function runSiteAdd(
 	}
 	if (loaded.config.tenants.some((t) => t.sites.some((s) => s.host === host))) {
 		throw new BastionError('usage', `${host} is already configured`);
+	}
+
+	// read before anything is fetched or written, so a malformed file leaves the config as it was
+	const vars = globals.varsFile === undefined ? null : readBoxVars(ctx, globals.varsFile);
+	if (globals.varsFile !== undefined && vars === null) {
+		throw new BastionError('usage', `there is no vars file at ${globals.varsFile}`);
 	}
 
 	const answer = capacity(readHost(ctx, loaded.state), defaultCostModel(loaded.config.mode), {
@@ -223,7 +231,8 @@ export async function runSiteAdd(
 		host,
 		bundle: pulled?.path ?? sibling?.bundle ?? './payload.tar.gz',
 		...(probe === undefined ? {} : { probe }),
-		...(plan === null ? {} : { worker: plan.worker })
+		...(plan === null ? {} : { worker: plan.worker }),
+		...(vars === null || Object.keys(vars).length === 0 ? {} : { bindings: vars })
 	};
 	const config = {
 		...loaded.config,

@@ -391,6 +391,10 @@ export const COMMANDS: CommandSpec[] = [
 			},
 			{ flags: '--probe <profile>', description: 'the profile that proves a boot' },
 			{
+				flags: '--vars-file <path>',
+				description: 'a json object of text, number and boolean values to bind as vars'
+			},
+			{
 				flags: '--checksum <sha256>',
 				description: 'the digest a download must hash to'
 			},

@@ -208,6 +208,126 @@
 			"signingInput": "drupflare.fleet-link.envelope.v1\n{\"ack\":0,\"body\":{\"code\":null,\"deploy\":{\"deployedAt\":\"2026-11-05T12:00:00Z\",\"version\":\"1.0.4\"},\"idempotencyKey\":\"idem-0001\",\"opId\":\"op_testop000001\",\"outcome\":\"succeeded\",\"stepId\":\"step-1\"},\"id\":\"msg_result_0001\",\"seq\":6,\"ts\":1790000000000,\"type\":\"command.result\",\"v\":1}"
 		},
 		{
+			"name": "node-siteAddQueued",
+			"kind": "envelope",
+			"description": "A signed command.result message from the node.",
+			"input": {
+				"v": 1,
+				"ack": 0,
+				"ts": 1790000000000,
+				"id": "msg_addqueued_0001",
+				"type": "command.result",
+				"seq": 7,
+				"body": {
+					"opId": "op_testop000001",
+					"stepId": "add",
+					"idempotencyKey": "op_testop000001:add",
+					"outcome": "queued",
+					"code": null,
+					"deploy": null
+				},
+				"sig": "WUy_Dn3FyFPQSzOLFGU2Hek12hVLup3rAA40XhitNK5XSgpmVF787MX_BuQJJj84sxhDQgfdFtBqT39967y8Aw"
+			},
+			"context": {
+				"publicKey": "hztXXEZAVRH7LmkuWsGCsg4VxQfoHbqO1YfDLZLs0w0",
+				"direction": "node",
+				"now": 1790000000000,
+				"seen": []
+			},
+			"expect": "ok",
+			"signingInput": "drupflare.fleet-link.envelope.v1\n{\"ack\":0,\"body\":{\"code\":null,\"deploy\":null,\"idempotencyKey\":\"op_testop000001:add\",\"opId\":\"op_testop000001\",\"outcome\":\"queued\",\"stepId\":\"add\"},\"id\":\"msg_addqueued_0001\",\"seq\":7,\"ts\":1790000000000,\"type\":\"command.result\",\"v\":1}"
+		},
+		{
+			"name": "node-siteAddDone",
+			"kind": "envelope",
+			"description": "A signed command.result message from the node.",
+			"input": {
+				"v": 1,
+				"ack": 0,
+				"ts": 1790000000000,
+				"id": "msg_adddone_0001",
+				"type": "command.result",
+				"seq": 8,
+				"body": {
+					"opId": "op_testop000001",
+					"stepId": "add",
+					"idempotencyKey": "op_testop000001:add",
+					"outcome": "succeeded",
+					"code": null,
+					"deploy": null
+				},
+				"sig": "6F5k_617oG7jD0RVr1BmH2Ps3Ht8Z4hqGLOb3zdeN7a4LT6a1flhxioHDxF8GFvUxiMhBo3cctmTjv8N1iieCA"
+			},
+			"context": {
+				"publicKey": "hztXXEZAVRH7LmkuWsGCsg4VxQfoHbqO1YfDLZLs0w0",
+				"direction": "node",
+				"now": 1790000000000,
+				"seen": []
+			},
+			"expect": "ok",
+			"signingInput": "drupflare.fleet-link.envelope.v1\n{\"ack\":0,\"body\":{\"code\":null,\"deploy\":null,\"idempotencyKey\":\"op_testop000001:add\",\"opId\":\"op_testop000001\",\"outcome\":\"succeeded\",\"stepId\":\"add\"},\"id\":\"msg_adddone_0001\",\"seq\":8,\"ts\":1790000000000,\"type\":\"command.result\",\"v\":1}"
+		},
+		{
+			"name": "node-siteAddExists",
+			"kind": "envelope",
+			"description": "A signed command.result message from the node.",
+			"input": {
+				"v": 1,
+				"ack": 0,
+				"ts": 1790000000000,
+				"id": "msg_addexists_0001",
+				"type": "command.result",
+				"seq": 9,
+				"body": {
+					"opId": "op_testop000001",
+					"stepId": "add",
+					"idempotencyKey": "op_testop000001:add",
+					"outcome": "failed",
+					"code": "site_exists",
+					"deploy": null
+				},
+				"sig": "uhCn9iIm9DG_G2OdcgublCziaRHHjkfexYDLvyTo2ISzStR5qcd59LSFSIzRmD0bbjKLdQroiXPB_nk9fKbzBg"
+			},
+			"context": {
+				"publicKey": "hztXXEZAVRH7LmkuWsGCsg4VxQfoHbqO1YfDLZLs0w0",
+				"direction": "node",
+				"now": 1790000000000,
+				"seen": []
+			},
+			"expect": "ok",
+			"signingInput": "drupflare.fleet-link.envelope.v1\n{\"ack\":0,\"body\":{\"code\":\"site_exists\",\"deploy\":null,\"idempotencyKey\":\"op_testop000001:add\",\"opId\":\"op_testop000001\",\"outcome\":\"failed\",\"stepId\":\"add\"},\"id\":\"msg_addexists_0001\",\"seq\":9,\"ts\":1790000000000,\"type\":\"command.result\",\"v\":1}"
+		},
+		{
+			"name": "node-siteAddUnsupported",
+			"kind": "envelope",
+			"description": "A signed command.result message from the node.",
+			"input": {
+				"v": 1,
+				"ack": 0,
+				"ts": 1790000000000,
+				"id": "msg_addold_0001",
+				"type": "command.result",
+				"seq": 10,
+				"body": {
+					"opId": "op_testop000001",
+					"stepId": "add",
+					"idempotencyKey": "op_testop000001:add",
+					"outcome": "rejected",
+					"code": "unsupported_action",
+					"deploy": null
+				},
+				"sig": "IMgqg4JwpKhegFBDOl2OLO7BZf9cD1DZ8rsrNJI2LuACDH5GqU8dRE6lK1hL4vCf-EYAMRU-eGE2i16RRbyTCA"
+			},
+			"context": {
+				"publicKey": "hztXXEZAVRH7LmkuWsGCsg4VxQfoHbqO1YfDLZLs0w0",
+				"direction": "node",
+				"now": 1790000000000,
+				"seen": []
+			},
+			"expect": "ok",
+			"signingInput": "drupflare.fleet-link.envelope.v1\n{\"ack\":0,\"body\":{\"code\":\"unsupported_action\",\"deploy\":null,\"idempotencyKey\":\"op_testop000001:add\",\"opId\":\"op_testop000001\",\"outcome\":\"rejected\",\"stepId\":\"add\"},\"id\":\"msg_addold_0001\",\"seq\":10,\"ts\":1790000000000,\"type\":\"command.result\",\"v\":1}"
+		},
+		{
 			"name": "server-command",
 			"kind": "envelope",
 			"description": "A signed command from the dashboard.",
@@ -240,6 +360,44 @@
 			},
 			"expect": "ok",
 			"signingInput": "drupflare.fleet-link.envelope.v1\n{\"ack\":0,\"body\":{\"action\":\"health.observe\",\"approval\":\"local\",\"class\":\"safe\",\"expiresAt\":1790000060000,\"idempotencyKey\":\"idem-0001\",\"nodeId\":\"nod_testnode0001\",\"opId\":\"op_testop000001\",\"params\":{},\"stepId\":\"step-1\"},\"id\":\"msg_command_0001\",\"seq\":1,\"ts\":1790000000000,\"type\":\"command\",\"v\":1}"
+		},
+		{
+			"name": "server-command-site-add",
+			"kind": "envelope",
+			"description": "A signed site.add command: a host, a bundle url and a checksum, nothing else.",
+			"input": {
+				"v": 1,
+				"ack": 0,
+				"ts": 1790000000000,
+				"id": "msg_command_0002",
+				"type": "command",
+				"seq": 3,
+				"body": {
+					"nodeId": "nod_testnode0001",
+					"opId": "op_testop000001",
+					"stepId": "add",
+					"idempotencyKey": "op_testop000001:add",
+					"expiresAt": 1790000900000,
+					"class": "stateful",
+					"approval": "local",
+					"action": "site.add",
+					"params": {
+						"host": "www.example.org",
+						"bundle": "https://releases.example.org/payload-1.0.5.tar.gz",
+						"checksum": "sha256:abababababababababababababababababababababababababababababababab"
+					}
+				},
+				"sig": "Gt9EjgCcBSpMWnX_Qi_kbGhCfvMfzfs7vzY5jZ0X-XyuyC9cW6S06pLKhoWjl1V_WMXCrdi9C41XbCeTs70RBQ"
+			},
+			"context": {
+				"publicKey": "r2EXtK8adXShcS1LcXu6-pg-dlzFrrSaWFSUBElQY2s",
+				"direction": "server",
+				"now": 1790000000000,
+				"seen": [],
+				"nodeId": "nod_testnode0001"
+			},
+			"expect": "ok",
+			"signingInput": "drupflare.fleet-link.envelope.v1\n{\"ack\":0,\"body\":{\"action\":\"site.add\",\"approval\":\"local\",\"class\":\"stateful\",\"expiresAt\":1790000900000,\"idempotencyKey\":\"op_testop000001:add\",\"nodeId\":\"nod_testnode0001\",\"opId\":\"op_testop000001\",\"params\":{\"bundle\":\"https://releases.example.org/payload-1.0.5.tar.gz\",\"checksum\":\"sha256:abababababababababababababababababababababababababababababababab\",\"host\":\"www.example.org\"},\"stepId\":\"add\"},\"id\":\"msg_command_0002\",\"seq\":3,\"ts\":1790000000000,\"type\":\"command\",\"v\":1}"
 		},
 		{
 			"name": "server-sites",

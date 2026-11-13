@@ -1,16 +1,24 @@
 import {
+	buildSecrets,
+	CommandBook,
+	commandKey,
+	defaultContext,
 	EXIT,
 	LEAVES_THE_BOX,
-	NODE_KEY_SECRET,
-	PairStore,
-	buildSecrets,
-	commandKey,
+	loadConfig,
 	memoryFiles,
 	memoryIo,
+	NODE_KEY_SECRET,
+	PairStore,
 	scriptedRunner,
 	type CommandRecord,
 	type Context
 } from '@drupflare/bastion';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { fleetExecutors } from '../src/pair';
 import { run } from '../src/run';
@@ -286,10 +294,11 @@ describe('bastion unpair', () => {
 describe('the actions a control plane may ask for', () => {
 	const executors = fleetExecutors(rig().ctx, {});
 
-	it('holds exactly five actions and none in the destructive class', () => {
+	it('holds exactly six actions and none in the destructive class', () => {
 		expect(Object.keys(executors).sort()).toEqual([
 			'backup.now',
 			'health.observe',
+			'site.add',
 			'site.deploy',
 			'site.rollback',
 			'tenant.reload'
@@ -301,6 +310,7 @@ describe('the actions a control plane may ask for', () => {
 
 	it('puts the actions that change a site or the data in the stateful class', () => {
 		expect(executors['site.rollback']?.class).toBe('stateful');
+		expect(executors['site.add']?.class).toBe('stateful');
 		expect(executors['backup.now']?.class).toBe('stateful');
 		expect(executors['site.deploy']?.class).toBe('rebuild');
 		expect(executors['health.observe']?.class).toBe('safe');
@@ -347,4 +357,596 @@ describe('the actions a control plane may ask for', () => {
 		).toEqual({ host: 'www.example.edu', version: 'v12' });
 		expect(executors['backup.now']?.params({})).toEqual({});
 	});
+});
+
+describe('site.add', () => {
+	const HOST = 'new.example.edu';
+	const PATH = '/srv/payload-1.tar.gz';
+	const DIGEST = `sha256:${'a'.repeat(64)}`;
+	const GOOD = { 'site.js': 'import a from"./a.wasm";export default{a}', 'a.wasm': 'wasm' };
+
+	// a box whose tar writes `tree` where it is told to, or fails; PATH holds the archive
+	function boxRig(tree: Record<string, string> | 'fail' = GOOD): Rig {
+		const base = rig();
+		base.files.writeText(PATH, 'archive');
+		const runner = scriptedRunner({
+			tar: (args) => {
+				if (tree === 'fail') {
+					return { code: 2, stdout: '', stderr: 'gzip: stdin: not in gzip format' };
+				}
+				const dest = args[args.indexOf('-C') + 1]!;
+				for (const [name, body] of Object.entries(tree)) {
+					base.files.writeText(`${dest}/${name}`, body);
+				}
+				return { code: 0, stdout: '', stderr: '' };
+			}
+		});
+		return { ...base, ctx: { ...base.ctx, runner } };
+	}
+
+	function sites(files: ReturnType<typeof memoryFiles>): string[] {
+		return [...files.readText('/srv/bastion.yml').matchAll(/host: (\S+)/g)].map((m) => m[1]!);
+	}
+
+	it('refuses every bad parameter without echoing the value', () => {
+		const { params } = fleetExecutors(boxRig().ctx, {})['site.add']!;
+		const good = { host: HOST, bundle: PATH };
+		const bad: Record<string, unknown>[] = [
+			{ ...good, host: '--yes' },
+			{ ...good, host: 'a b' },
+			{ ...good, host: 7 },
+			{ host: HOST },
+			{ ...good, bundle: 'http://x.example/p.tgz' },
+			{ ...good, bundle: '--checksum' },
+			{ ...good, bundle: './p.tgz' },
+			{ ...good, checksum: 'md5:abc' },
+			{ ...good, tenant: '--tenant' },
+			{ ...good, tenant: 'Acme' },
+			{ ...good, tenant: 3 },
+			{ ...good, force: true }
+		];
+		for (const raw of bad) {
+			let message = '';
+			try {
+				params(raw);
+			} catch (error) {
+				message = (error as Error).message;
+			}
+			expect(message, JSON.stringify(raw)).not.toBe('');
+			for (const value of Object.values(raw)) {
+				if (typeof value === 'string') expect(message).not.toContain(value);
+			}
+		}
+		expect(params({ ...good, checksum: DIGEST, tenant: 'acme' })).toEqual({
+			...good,
+			checksum: DIGEST,
+			tenant: 'acme'
+		});
+	});
+
+	it('accepts the parameters of the signed site.add vector and nothing it carries is extra', () => {
+		const vectors = JSON.parse(
+			readFileSync(
+				new URL('../../core/tests/fixtures/pair/fleet-link.json', import.meta.url),
+				'utf8'
+			)
+		) as { positive: { name: string; input: { body: { action: string; params: object } } }[] };
+		const vector = vectors.positive.find((entry) => entry.name === 'server-command-site-add')!;
+		expect(vector.input.body.action).toBe('site.add');
+		const params = fleetExecutors(boxRig().ctx, {})['site.add']!.params(
+			vector.input.body.params as Record<string, unknown>
+		);
+		expect(Object.keys(params).sort()).toEqual(Object.keys(vector.input.body.params).sort());
+	});
+
+	it('adds the site to the named tenant', async () => {
+		const { ctx, files } = boxRig();
+		const outcome = await fleetExecutors(ctx, {})['site.add']!.run({
+			host: HOST,
+			bundle: PATH,
+			tenant: 'acme'
+		});
+		expect(outcome).toEqual({ ok: true, code: null });
+		expect(sites(files)).toEqual(['www.example.edu', HOST]);
+		expect(files.readText('/srv/bastion.yml')).toContain(PATH);
+	});
+
+	it('unpacks the bundle before writing and leaves no unpacked files behind', async () => {
+		const { ctx, files } = boxRig();
+		const outcome = await fleetExecutors(ctx, {})['site.add']!.run({
+			host: HOST,
+			bundle: PATH
+		});
+		expect(outcome).toEqual({ ok: true, code: null });
+		const runner = ctx.runner as ReturnType<typeof scriptedRunner>;
+		expect(runner.calls.find((call) => call.command === 'tar')?.args.slice(0, 2)).toEqual([
+			'-xzf',
+			PATH
+		]);
+		expect(files.exists(`/var/lib/bastion/bundles/${HOST}/.check/site.js`)).toBe(false);
+		expect(files.exists(`/var/lib/bastion/bundles/${HOST}/.check/a.wasm`)).toBe(false);
+	});
+
+	describe('with a vars file in the bundle', () => {
+		const VARS =
+			'{"CMS":"drupal","LAZY_FS_BUDGET_BYTES":4194304,"ASSET_AGGREGATES":1,"ON":true}';
+		const ZONE = '    bindings:\n';
+
+		const bindingsOf = (files: ReturnType<typeof memoryFiles>) => {
+			const text = files.readText('/srv/bastion.yml');
+			const at = text.indexOf(ZONE);
+			return at === -1
+				? null
+				: text
+						.slice(at)
+						.split('\n')
+						.slice(1, 5)
+						.map((l) => l.trim());
+		};
+
+		it('writes the values as the site bindings, numbers and booleans as text', async () => {
+			const { ctx, files } = boxRig({ ...GOOD, 'box.vars': VARS });
+			const outcome = await fleetExecutors(ctx, {})['site.add']!.run({
+				host: HOST,
+				bundle: PATH
+			});
+			expect(outcome).toEqual({ ok: true, code: null });
+			expect(bindingsOf(files)).toEqual([
+				'CMS: drupal',
+				'LAZY_FS_BUDGET_BYTES: "4194304"',
+				'ASSET_AGGREGATES: "1"',
+				'ON: "true"'
+			]);
+			expect(files.exists(`/var/lib/bastion/bundles/${HOST}/.check/box.vars`)).toBe(false);
+		});
+
+		it('answers success again on a resend, and leaves the bindings as they were', async () => {
+			const { ctx, files } = boxRig({ ...GOOD, 'box.vars': VARS });
+			const add = fleetExecutors(ctx, {})['site.add']!;
+			await add.run({ host: HOST, bundle: PATH });
+			const once = files.readText('/srv/bastion.yml');
+			expect(await add.run({ host: HOST, bundle: PATH })).toEqual({ ok: true, code: null });
+			expect(files.readText('/srv/bastion.yml')).toBe(once);
+			expect(once.match(/CMS: drupal/g)).toHaveLength(1);
+		});
+
+		it('adds a bundle with no vars file and writes no bindings', async () => {
+			const { ctx, files } = boxRig();
+			const outcome = await fleetExecutors(ctx, {})['site.add']!.run({
+				host: HOST,
+				bundle: PATH
+			});
+			expect(outcome).toEqual({ ok: true, code: null });
+			expect(files.readText('/srv/bastion.yml')).not.toContain('bindings');
+		});
+
+		it('writes no bindings for an empty vars object', async () => {
+			const { ctx, files } = boxRig({ ...GOOD, 'box.vars': '{}' });
+			await fleetExecutors(ctx, {})['site.add']!.run({ host: HOST, bundle: PATH });
+			expect(sites(files)).toEqual(['www.example.edu', HOST]);
+			expect(files.readText('/srv/bastion.yml')).not.toContain('bindings');
+		});
+
+		it.each([
+			['is not json', 'CMS=drupal'],
+			['is not an object', '["CMS"]'],
+			['holds a nested value', '{"A":{"b":1}}'],
+			['names a reserved binding', '{"SITE":"x"}'],
+			['holds a name a binding cannot have', '{"A B":"x"}'],
+			['is over the size cap', `{"A":"${'x'.repeat(20000)}"}`]
+		])(
+			'answers bundle_invalid for a vars file that %s, and writes nothing',
+			async (_, body) => {
+				const { ctx, files } = boxRig({ ...GOOD, 'box.vars': body });
+				const before = files.readText('/srv/bastion.yml');
+				expect(
+					await fleetExecutors(ctx, {})['site.add']!.run({ host: HOST, bundle: PATH })
+				).toEqual({ ok: false, code: 'bundle_invalid' });
+				expect(files.readText('/srv/bastion.yml')).toBe(before);
+				expect(files.exists(`/var/lib/bastion/bundles/${HOST}/.check`)).toBe(false);
+			}
+		);
+
+		it('leaves the placed assets alone when the vars file is refused', async () => {
+			const { ctx, files } = boxRig({ ...GOOD, 'box.vars': '[1]' });
+			await fleetExecutors(ctx, {})['site.add']!.run({ host: HOST, bundle: PATH });
+			expect(files.exists('/var/lib/bastion/tenants/acme/assets')).toBe(false);
+		});
+	});
+
+	it.each([
+		['holds no main module', { 'a.wasm': 'wasm' }],
+		['names a module it does not hold', { 'site.js': 'import a from"./gone.wasm"' }],
+		['reaches into a folder', { 'site.js': 'import a from"./sub/a.wasm"', 'a.wasm': 'w' }]
+	])('answers bundle_invalid for a bundle that %s, and writes no config', async (_, tree) => {
+		const { ctx, files } = boxRig(tree);
+		const before = files.readText('/srv/bastion.yml');
+		expect(
+			await fleetExecutors(ctx, {})['site.add']!.run({ host: HOST, bundle: PATH })
+		).toEqual({ ok: false, code: 'bundle_invalid' });
+		expect(files.readText('/srv/bastion.yml')).toBe(before);
+	});
+
+	it('answers bundle_invalid when the archive does not unpack, and when there is none', async () => {
+		const failed = boxRig('fail');
+		const before = failed.files.readText('/srv/bastion.yml');
+		expect(
+			await fleetExecutors(failed.ctx, {})['site.add']!.run({ host: HOST, bundle: PATH })
+		).toEqual({ ok: false, code: 'bundle_invalid' });
+		expect(failed.files.readText('/srv/bastion.yml')).toBe(before);
+
+		const { ctx } = boxRig();
+		expect(
+			await fleetExecutors(ctx, {})['site.add']!.run({
+				host: HOST,
+				bundle: '/srv/absent.tar.gz'
+			})
+		).toEqual({ ok: false, code: 'bundle_invalid' });
+	});
+
+	it('uses the first tenant when none is named', async () => {
+		const { ctx, files } = boxRig();
+		await fleetExecutors(ctx, {})['site.add']!.run({ host: HOST, bundle: PATH });
+		expect(sites(files)).toContain(HOST);
+	});
+
+	it('answers a repeat for the same path with success and writes nothing twice', async () => {
+		const { ctx, files } = boxRig();
+		const add = fleetExecutors(ctx, {})['site.add']!;
+		await add.run({ host: HOST, bundle: PATH });
+		const once = files.readText('/srv/bastion.yml');
+		expect(await add.run({ host: HOST, bundle: PATH })).toEqual({ ok: true, code: null });
+		expect(files.readText('/srv/bastion.yml')).toBe(once);
+	});
+
+	it('answers a repeat for a file with the same digest with success', async () => {
+		const { ctx, files } = boxRig();
+		const bytes = new TextEncoder().encode('payload');
+		files.writeBytes('/srv/held.tar.gz', bytes);
+		files.writeText(
+			'/srv/bastion.yml',
+			CONFIG.replace('www.example.edu', HOST).replace('./payload.tar.gz', '/srv/held.tar.gz')
+		);
+		const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+		const add = fleetExecutors(ctx, {})['site.add']!;
+		expect(await add.run({ host: HOST, bundle: PATH, checksum: digest })).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(await add.run({ host: HOST, bundle: PATH, checksum: DIGEST })).toEqual({
+			ok: false,
+			code: 'site_exists'
+		});
+		expect(await add.run({ host: HOST, bundle: PATH })).toEqual({
+			ok: false,
+			code: 'site_exists'
+		});
+	});
+
+	it('refuses a host held with a different bundle and leaves the config alone', async () => {
+		const { ctx, files } = boxRig();
+		const before = files.readText('/srv/bastion.yml');
+		const outcome = await fleetExecutors(ctx, {})['site.add']!.run({
+			host: 'www.example.edu',
+			bundle: PATH
+		});
+		expect(outcome).toEqual({ ok: false, code: 'site_exists' });
+		expect(files.readText('/srv/bastion.yml')).toBe(before);
+	});
+
+	it('refuses a box with no tenant, and a tenant it does not hold', async () => {
+		const empty = boxRig();
+		empty.files.writeText(
+			'/srv/bastion.yml',
+			'version: 1\nmode: solo\nstate: /var/lib/bastion\ntenants: []\n'
+		);
+		const add = fleetExecutors(empty.ctx, {})['site.add']!;
+		expect(await add.run({ host: HOST, bundle: PATH })).toEqual({
+			ok: false,
+			code: 'no_tenant'
+		});
+		const { ctx } = boxRig();
+		expect(
+			await fleetExecutors(ctx, {})['site.add']!.run({
+				host: HOST,
+				bundle: PATH,
+				tenant: 'nope'
+			})
+		).toEqual({ ok: false, code: 'unknown_tenant' });
+	});
+
+	it('passes a refusal from the command itself back as its code', async () => {
+		const { ctx, files } = boxRig();
+		files.writeText(
+			'/srv/bastion.yml',
+			CONFIG.replace('    sites:', '    limits:\n      maxSites: 1\n    sites:')
+		);
+		const outcome = await fleetExecutors(ctx, {})['site.add']!.run({
+			host: HOST,
+			bundle: PATH
+		});
+		expect(outcome).toEqual({ ok: false, code: 'capacity-exceeded' });
+	});
+
+	it('is held for local approval and runs once however often the command arrives', async () => {
+		const { ctx, files } = boxRig();
+		const config = loadConfig(ctx, {}).config;
+		const book = new CommandBook({
+			ctx,
+			config,
+			state: '/var/lib/bastion',
+			executors: fleetExecutors(ctx, {})
+		});
+		const envelope = (id: string) =>
+			({
+				v: 1,
+				id,
+				type: 'command',
+				ts: 1_790_000_000_000,
+				seq: 1,
+				ack: 0,
+				sig: 'x'.repeat(86),
+				body: {
+					nodeId: NODE_ID,
+					opId: 'op_testop000001',
+					stepId: 'add',
+					idempotencyKey: 'idem-add',
+					expiresAt: 1_790_000_900_000,
+					class: 'stateful',
+					approval: 'automatic',
+					action: 'site.add',
+					params: { host: HOST, bundle: PATH }
+				}
+			}) as never;
+		const first = await book.receive(envelope('msg_command_0001'));
+		expect(first.result?.outcome).toBe('queued');
+		expect(sites(files)).toEqual(['www.example.edu']);
+
+		const again = await book.receive(envelope('msg_command_0002'));
+		expect(again.id).toBe(first.id);
+		expect(again.result?.outcome).toBe('queued');
+
+		const done = await book.apply(first.id, 'approve');
+		expect(done?.result?.outcome).toBe('succeeded');
+		const repeated = await book.receive(envelope('msg_command_0003'));
+		expect(repeated.result?.outcome).toBe('succeeded');
+		expect(sites(files)).toEqual(['www.example.edu', HOST]);
+	});
+});
+
+describe('site.add with a static asset tree', () => {
+	const HOST = 'new.example.edu';
+	const PATH = '/srv/payload-1.tar.gz';
+	const ASSETS: Record<string, string> = {
+		'driver.json': '{"driver":1}',
+		'core/css/a.css': 'body{}',
+		'drupal-pf/core.pf.bin': 'pack bytes'
+	};
+	const FRESH = '/var/lib/bastion/tenants/fresh/assets';
+	const TWO_TENANTS = `${CONFIG}  - name: fresh\n    sites: []\n`;
+	const sha = (body: string) => createHash('sha256').update(body).digest('hex');
+
+	function manifestOf(
+		assets: Record<string, string>,
+		extra: Record<string, unknown>[] = []
+	): string {
+		return JSON.stringify({
+			name: 'drupflare-box-bundle',
+			version: 1,
+			release: '1.1.0',
+			files: [
+				...Object.entries(assets).map(([path, body]) => ({
+					path: `assets/${path}`,
+					bytes: body.length,
+					sha256: sha(body)
+				})),
+				...extra
+			]
+		});
+	}
+
+	function bundle(
+		assets: Record<string, string> = ASSETS,
+		manifest: string | null = manifestOf(assets)
+	): Record<string, string> {
+		const tree: Record<string, string> = {
+			'site.js': 'import a from"./a.wasm";export default{a}',
+			'a.wasm': 'wasm'
+		};
+		for (const [path, body] of Object.entries(assets)) tree[`assets/${path}`] = body;
+		if (manifest !== null) tree['assets.manifest'] = manifest;
+		return tree;
+	}
+
+	function boxRig(tree: Record<string, string>, config = TWO_TENANTS) {
+		const base = rig();
+		base.files.writeText('/srv/bastion.yml', config);
+		base.files.writeText(PATH, 'archive');
+		const runner = scriptedRunner({
+			tar: (args) => {
+				const dest = args[args.indexOf('-C') + 1]!;
+				for (const [name, body] of Object.entries(tree)) {
+					base.files.writeText(`${dest}/${name}`, body);
+				}
+				return { code: 0, stdout: '', stderr: '' };
+			}
+		});
+		return { ...base, ctx: { ...base.ctx, runner } };
+	}
+
+	const add = (ctx: Context, params: Record<string, string> = {}) =>
+		fleetExecutors(ctx, {})['site.add']!.run({
+			host: HOST,
+			bundle: PATH,
+			tenant: 'fresh',
+			...params
+		});
+
+	const leftovers = (files: ReturnType<typeof memoryFiles>) =>
+		['.incoming', '.previous'].filter((suffix) => files.exists(`${FRESH}${suffix}`));
+
+	it('places the unpacked assets in the tenant with the bundle hashes, before it reports success', async () => {
+		const { ctx, files } = boxRig(bundle());
+		expect(await add(ctx)).toEqual({ ok: true, code: null });
+		for (const [path, body] of Object.entries(ASSETS)) {
+			expect(sha(files.readText(`${FRESH}/${path}`))).toBe(sha(body));
+		}
+		expect(files.readText('/srv/bastion.yml')).toContain(HOST);
+		expect(leftovers(files)).toEqual([]);
+	});
+
+	it('leaves no unpacked file behind, so the next add starts clean', async () => {
+		const { ctx, files } = boxRig(bundle());
+		await add(ctx);
+		expect(files.exists(`/var/lib/bastion/bundles/${HOST}/.check`)).toBe(false);
+		expect(files.exists(`/var/lib/bastion/bundles/${HOST}/.check/assets/driver.json`)).toBe(
+			false
+		);
+	});
+
+	it('places nothing for a bundle that has no assets', async () => {
+		const { ctx, files } = boxRig(bundle({}, null));
+		expect(await add(ctx)).toEqual({ ok: true, code: null });
+		expect(files.exists(FRESH)).toBe(false);
+	});
+
+	it.each([
+		[
+			'an asset that differs from its manifest entry',
+			() => ({ ...bundle(), 'assets/core/css/a.css': 'body{color:red}' })
+		],
+		[
+			'an asset the manifest does not list',
+			() => ({ ...bundle(), 'assets/extra.txt': 'extra' })
+		],
+		[
+			'a listed asset the archive lacks',
+			() =>
+				bundle(
+					ASSETS,
+					manifestOf(ASSETS, [{ path: 'assets/gone', bytes: 1, sha256: sha('x') }])
+				)
+		],
+		[
+			'an entry that climbs out of the assets folder',
+			() =>
+				bundle(
+					ASSETS,
+					manifestOf(ASSETS, [{ path: 'assets/../site.js', bytes: 1, sha256: sha('x') }])
+				)
+		],
+		['a manifest that is not json', () => bundle(ASSETS, '{')]
+	])('answers bundle_invalid for %s, and changes nothing', async (_, make) => {
+		const { ctx, files } = boxRig(make());
+		files.writeText(`${FRESH}/old.txt`, 'old');
+		const config = files.readText('/srv/bastion.yml');
+		expect(await add(ctx)).toEqual({ ok: false, code: 'bundle_invalid' });
+		expect(files.readText(`${FRESH}/old.txt`)).toBe('old');
+		expect(files.exists(`${FRESH}/driver.json`)).toBe(false);
+		expect(files.readText('/srv/bastion.yml')).toBe(config);
+		expect(leftovers(files)).toEqual([]);
+	});
+
+	it('leaves the tenant and the config as they were when a file cannot be copied', async () => {
+		const { ctx, files } = boxRig(bundle());
+		files.writeText(`${FRESH}/old.txt`, 'old');
+		const config = files.readText('/srv/bastion.yml');
+		const failing: Context = {
+			...ctx,
+			files: {
+				...files,
+				link: (from, to) => {
+					if (from.endsWith('a.css')) throw new Error('ENOSPC');
+					files.link(from, to);
+				}
+			}
+		};
+		expect(await add(failing)).toEqual({ ok: false, code: 'assets_failed' });
+		expect(files.readText(`${FRESH}/old.txt`)).toBe('old');
+		expect(files.exists(`${FRESH}/driver.json`)).toBe(false);
+		expect(files.readText('/srv/bastion.yml')).toBe(config);
+		expect(leftovers(files)).toEqual([]);
+	});
+
+	it('puts the old assets back when the command that writes the site is refused', async () => {
+		const config = TWO_TENANTS.replace(
+			'  - name: fresh\n    sites: []',
+			'  - name: fresh\n    limits:\n      maxSites: 0\n    sites: []'
+		);
+		const { ctx, files } = boxRig(bundle(), config);
+		files.writeText(`${FRESH}/old.txt`, 'old');
+		expect(await add(ctx)).toEqual({ ok: false, code: 'capacity-exceeded' });
+		expect(files.readText(`${FRESH}/old.txt`)).toBe('old');
+		expect(files.exists(`${FRESH}/driver.json`)).toBe(false);
+		expect(leftovers(files)).toEqual([]);
+	});
+
+	it('answers the same bundle again with success and leaves the placed assets alone', async () => {
+		const { ctx, files } = boxRig(bundle());
+		await add(ctx);
+		files.writeText(`${FRESH}/marker.txt`, 'kept');
+		expect(await add(ctx)).toEqual({ ok: true, code: null });
+		expect(files.readText(`${FRESH}/marker.txt`)).toBe('kept');
+		expect(sha(files.readText(`${FRESH}/driver.json`))).toBe(sha(ASSETS['driver.json']!));
+	});
+
+	it('leaves the assets of a tenant that already serves a site', async () => {
+		const { ctx, files } = boxRig(bundle());
+		const own = '/var/lib/bastion/tenants/acme/assets';
+		files.writeText(`${own}/own.txt`, 'mine');
+		expect(await add(ctx, { tenant: 'acme' })).toEqual({ ok: true, code: null });
+		expect(files.readText(`${own}/own.txt`)).toBe('mine');
+		expect(files.exists(`${own}/driver.json`)).toBe(false);
+	});
+});
+
+/**
+ * Runs `site.add` against the box bundle the worker release builds, when `BOX_BUNDLE_ARCHIVE`
+ * names one (`scripts/build-box-bundle.ts` in the worker repo); without it there is nothing to
+ * read and the spec skips.
+ */
+describe.skipIf(!process.env['BOX_BUNDLE_ARCHIVE'])('site.add with the real box bundle', () => {
+	it('places the whole asset tree under the tenant with the hashes the bundle lists', async () => {
+		const archive = process.env['BOX_BUNDLE_ARCHIVE']!;
+		const root = mkdtempSync(join(tmpdir(), 'bx-add-'));
+		try {
+			const state = join(root, 'state');
+			const config = join(root, 'bastion.yml');
+			writeFileSync(
+				config,
+				`version: 1\nmode: solo\nstate: ${state}\ntenants:\n  - name: acme\n    sites: []\n`
+			);
+			const ctx: Context = { ...defaultContext(), io: memoryIo(), cwd: root };
+			const outcome = await fleetExecutors(ctx, { config })['site.add']!.run({
+				host: 'www.example.edu',
+				bundle: archive,
+				tenant: 'acme'
+			});
+			expect(outcome).toEqual({ ok: true, code: null });
+
+			const listed = JSON.parse(
+				execFileSync('tar', ['-xOzf', archive, 'assets.manifest'], {
+					encoding: 'utf8',
+					maxBuffer: 1 << 26
+				})
+			) as { files: { path: string; bytes: number; sha256: string }[] };
+			const assets = join(state, 'tenants/acme/assets');
+			expect(listed.files.length).toBeGreaterThan(1000);
+			for (const file of listed.files) {
+				const bytes = readFileSync(join(assets, file.path.slice('assets/'.length)));
+				expect(bytes.length).toBe(file.bytes);
+				expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256);
+			}
+			const placed = readdirSync(assets, { recursive: true, withFileTypes: true }).filter(
+				(entry) => entry.isFile()
+			);
+			expect(placed.length).toBe(listed.files.length);
+			expect(readFileSync(config, 'utf8')).toContain('www.example.edu');
+			expect(existsSync(`${assets}.incoming`)).toBe(false);
+			expect(existsSync(`${assets}.previous`)).toBe(false);
+			expect(existsSync(join(state, 'bundles/www.example.edu/.check'))).toBe(false);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	}, 120_000);
 });

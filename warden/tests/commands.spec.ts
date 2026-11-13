@@ -1545,6 +1545,48 @@ describe('a command that writes honours --config', () => {
 		expect(store.readText('/etc/bastion/prod.yml')).toContain('www.example.edu');
 	});
 
+	describe('site add --vars-file', () => {
+		const add = (ctx: Context, file: string) =>
+			run(ctx, ['site', 'add', 'new.example.edu', '--tenant', 'acme', '--vars-file', file]);
+
+		it('writes the values as the site bindings, numbers and booleans as text', async () => {
+			const { ctx, files } = harness({ '/v.json': '{"CMS":"drupal","N":4,"ON":true}' });
+			expect(await add(ctx, '/v.json')).toBe(EXIT.OK);
+			const written = files.readText('/srv/bastion.yml');
+			expect(written).toContain('CMS: drupal');
+			expect(written).toContain('N: "4"');
+			expect(written).toContain('ON: "true"');
+		});
+
+		it('adds the site without bindings when no file is named', async () => {
+			const { ctx, files } = harness();
+			expect(await run(ctx, ['site', 'add', 'new.example.edu', '--tenant', 'acme'])).toBe(
+				EXIT.OK
+			);
+			expect(files.readText('/srv/bastion.yml')).not.toContain('bindings');
+		});
+
+		it.each([
+			['is not json', 'CMS=drupal'],
+			['names a reserved binding', '{"ASSETS":"x"}'],
+			['holds a nested value', '{"A":[1]}']
+		])('refuses a file that %s and writes nothing', async (_, body) => {
+			const { ctx, io, files } = harness({ '/v.json': body });
+			const before = files.readText('/srv/bastion.yml');
+			expect(await add(ctx, '/v.json')).not.toBe(EXIT.OK);
+			expect(io.errText()).toContain('box.vars');
+			expect(files.readText('/srv/bastion.yml')).toBe(before);
+		});
+
+		it('refuses a file that is not there, as a usage error', async () => {
+			const { ctx, io, files } = harness();
+			const before = files.readText('/srv/bastion.yml');
+			expect(await add(ctx, '/missing.json')).toBe(EXIT.USAGE);
+			expect(io.errText()).toContain('there is no vars file');
+			expect(files.readText('/srv/bastion.yml')).toBe(before);
+		});
+	});
+
 	it('holds for config set', async () => {
 		const { ctx, files } = empty();
 		await run(ctx, ['config', 'set', 'mode', 'hardened', '--config', '/etc/bastion/prod.yml']);
