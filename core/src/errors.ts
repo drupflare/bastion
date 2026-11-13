@@ -112,6 +112,11 @@ export const CODES: Record<string, { exit: number; retryable: boolean; next: str
 	'driver-unreachable': { exit: EXIT.FAILED, retryable: true, next: 'bastion doctor' },
 	'driver-refused': { exit: EXIT.FAILED, retryable: false, next: null },
 
+	// pairing
+	'pairing-refused': { exit: EXIT.USAGE, retryable: false, next: null },
+	'pairing-unreachable': { exit: EXIT.FAILED, retryable: true, next: null },
+	'not-paired': { exit: EXIT.USAGE, retryable: false, next: null },
+
 	// health
 	'health-finding': { exit: EXIT.FINDING, retryable: false, next: 'bastion diagnose' },
 	quarantined: { exit: EXIT.FINDING, retryable: false, next: 'bastion quarantine clear' }

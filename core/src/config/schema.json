@@ -258,6 +258,36 @@
 				"required": ["control"]
 			}
 		},
+		"pairing": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"sendHostname": {
+					"type": "boolean"
+				},
+				"hashNames": {
+					"type": "boolean"
+				},
+				"commands": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"safe": {
+							"enum": ["queue", "auto"]
+						},
+						"rebuild": {
+							"enum": ["queue", "auto"]
+						},
+						"stateful": {
+							"const": "queue"
+						},
+						"destructive": {
+							"const": "queue"
+						}
+					}
+				}
+			}
+		},
 		"audit": {
 			"type": "object",
 			"additionalProperties": false,

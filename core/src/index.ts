@@ -304,6 +304,7 @@ export {
 	DEFAULT_CAPABILITIES,
 	DEFAULT_COMPATIBILITY_DATE,
 	DEFAULT_COMPATIBILITY_FLAGS,
+	DEFAULT_PAIRING,
 	DEFAULT_SITE_WORKER,
 	FLOOR_REASONS,
 	LIMIT_FLOORS,
@@ -351,6 +352,9 @@ export {
 	type ListenerConfig,
 	type LogsConfig,
 	type MODES,
+	type PairingApproval,
+	type PairingClass,
+	type PairingConfig,
 	type RESIDENCIES,
 	type RetentionConfig,
 	type RuntimeConfig,
@@ -697,6 +701,75 @@ export {
 } from './observe/analytics';
 export { LogWriter, formatLine, parseAge, type LogLine } from './observe/logs';
 export { DEFAULT_BUCKETS, Registry, type MetricLabels } from './observe/metrics';
+export {
+	CLAIM_PATH,
+	CONTRACT_HEADER,
+	CONTRACT_RANGE,
+	assertLink,
+	assertReachable,
+	claim,
+	isLoopbackHost,
+	parseClaimUrl,
+	type ClaimDeps,
+	type ParsedClaim
+} from './pair/claim';
+export {
+	CommandBook,
+	ParamError,
+	type BookDeps,
+	type ExecResult,
+	type Executor,
+	type Executors
+} from './pair/commands';
+export {
+	auditHeadBody,
+	capacityNumbers,
+	commandResultBody,
+	fieldGroups,
+	findingsBody,
+	hostFacts,
+	keepListed,
+	metricsBody,
+	nameOf,
+	statusBody,
+	usageBody,
+	type FieldGroup,
+	type FieldInput
+} from './pair/fields';
+export {
+	BACKOFF_CAP_MS,
+	FleetLink,
+	backoffMs,
+	closeAction,
+	defaultConnect,
+	type CloseAction,
+	type Connect,
+	type LinkDeps,
+	type Phase,
+	type Socket
+} from './pair/link';
+export { approvalFor, decide, stricter, type Verdict } from './pair/policy';
+export {
+	NODE_KEY_SECRET,
+	NodeKey,
+	PairStore,
+	auditPair,
+	commandId,
+	commandKey,
+	type CommandRecord,
+	type CommandState,
+	type Decision,
+	type LinkState,
+	type PairingRecord
+} from './pair/store';
+export {
+	CLOSE,
+	COMMAND_CLASSES,
+	LEAVES_THE_BOX,
+	NEVER_LEAVES_THE_BOX,
+	type CommandClass,
+	type CommandOutcome
+} from './pair/wire';
 export {
 	buildSecrets,
 	envSecrets,

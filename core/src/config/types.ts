@@ -245,6 +245,23 @@ export interface ClusterConfig {
 	node: { id: string; advertise?: string; labels?: Record<string, string> };
 }
 
+/** what a command from the control plane does on arrival: wait for the operator, or run now */
+export const PAIRING_APPROVALS = ['queue', 'auto'] as const;
+export type PairingApproval = (typeof PAIRING_APPROVALS)[number];
+
+/** the four command classes the control plane sorts its commands into */
+export const PAIRING_CLASSES = ['safe', 'rebuild', 'stateful', 'destructive'] as const;
+export type PairingClass = (typeof PAIRING_CLASSES)[number];
+
+export interface PairingConfig {
+	/** whether the host name is part of what leaves the box */
+	sendHostname: boolean;
+	/** whether tenant and site names leave as hashes rather than as typed */
+	hashNames: boolean;
+	/** per command class; only safe and rebuild may be `auto`, since nothing stateful runs unattended */
+	commands: Record<PairingClass, PairingApproval>;
+}
+
 export interface RetentionConfig {
 	maxBytes?: number;
 	maxAge?: string;
@@ -281,6 +298,8 @@ export interface BastionConfig {
 	domains?: DomainsConfig;
 	audit: AuditConfig;
 	logs: LogsConfig;
+	/** how this box behaves once paired with a control plane; absent reads as the defaults */
+	pairing?: PairingConfig;
 	backup?: Record<string, unknown>;
 	/** named settings a tenant or a site starts from, so a cluster states a tier once */
 	groups?: Record<string, GroupConfig>;

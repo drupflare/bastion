@@ -1,4 +1,4 @@
-import type { BastionConfig, SiteWorkerConfig, TenantCapabilities } from './types';
+import type { BastionConfig, PairingConfig, SiteWorkerConfig, TenantCapabilities } from './types';
 
 /**
  * Cloudflare's own limits, which are DEFAULTS and FLOORS here.
@@ -111,6 +111,16 @@ export function resolveSiteWorker(worker?: SiteWorkerConfig): SiteWorkerConfig {
 	return resolved;
 }
 
+/**
+ * What a paired box does until the operator says otherwise: send no host name, send names as typed,
+ * and hold every command for `bastion pair approve`.
+ */
+export const DEFAULT_PAIRING: PairingConfig = {
+	sendHostname: false,
+	hashNames: false,
+	commands: { safe: 'queue', rebuild: 'queue', stateful: 'queue', destructive: 'queue' }
+};
+
 export function defaultConfig(): BastionConfig {
 	return {
 		version: 1,
@@ -158,6 +168,7 @@ export function defaultConfig(): BastionConfig {
 			retention: { maxBytes: 4 * 1024 * 1024 * 1024, maxAge: '14d', rotate: 'daily' },
 			debugRetention: { maxBytes: 1024 * 1024 * 1024, maxAge: '2d' }
 		},
+		pairing: { ...DEFAULT_PAIRING, commands: { ...DEFAULT_PAIRING.commands } },
 		domains: {
 			reserved: [],
 			addresses: [],

@@ -10,6 +10,8 @@ import { resolve, SLOT_CAPABILITY } from './groups';
 import {
 	LOG_LEVELS,
 	MODES,
+	PAIRING_APPROVALS,
+	PAIRING_CLASSES,
 	RESIDENCIES,
 	type GroupConfig,
 	type SiteConfig,
@@ -103,6 +105,7 @@ export function validate(raw: unknown, options: { testLane?: boolean } = {}): Va
 	const groups = validateGroups(doc.groups, problems);
 	const tenants = validateTenants(doc.tenants, problems, doc.drivers, groups);
 	validateCluster(doc.cluster, problems);
+	validatePairing(doc.pairing, problems);
 	validateHeaders(doc.front, problems);
 
 	// residency: pin is refused HERE rather than detected at runtime, because the alternative is an
@@ -201,6 +204,50 @@ function validateLogging(value: unknown, path: string, problems: Problem[]): voi
 	}
 	const level = (value as Record<string, unknown>).level;
 	if (level !== undefined) requireOneOf(level, LOG_LEVELS, `${path}.level`, problems);
+}
+
+/** classes whose commands may run without the operator, which stops short of anything stateful */
+const AUTOMATIC_CLASSES: readonly string[] = ['safe', 'rebuild'];
+
+function validatePairing(value: unknown, problems: Problem[]): void {
+	if (value === undefined) return;
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		problems.push({ path: 'pairing', message: 'must be a mapping' });
+		return;
+	}
+	const pairing = value as Record<string, unknown>;
+	for (const key of ['sendHostname', 'hashNames']) {
+		if (pairing[key] !== undefined && typeof pairing[key] !== 'boolean') {
+			problems.push({ path: `pairing.${key}`, message: 'must be true or false' });
+		}
+	}
+	const commands = pairing.commands;
+	if (commands === undefined) return;
+	if (commands === null || typeof commands !== 'object' || Array.isArray(commands)) {
+		problems.push({
+			path: 'pairing.commands',
+			message: 'must be a mapping of class to approval'
+		});
+		return;
+	}
+	for (const [name, approval] of Object.entries(commands)) {
+		const path = `pairing.commands.${name}`;
+		if (!(PAIRING_CLASSES as readonly string[]).includes(name)) {
+			problems.push({
+				path,
+				message: `is not a command class; use ${PAIRING_CLASSES.join(', ')}`
+			});
+			continue;
+		}
+		if (requireOneOf(approval, PAIRING_APPROVALS, path, problems) === 'auto') {
+			if (!AUTOMATIC_CLASSES.includes(name)) {
+				problems.push({
+					path,
+					message: `a ${name} command always waits for \`bastion pair approve\`; nothing stateful runs unattended`
+				});
+			}
+		}
+	}
 }
 
 function validateCluster(value: unknown, problems: Problem[]): void {

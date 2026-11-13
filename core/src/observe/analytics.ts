@@ -65,6 +65,11 @@ export class AnalyticsWindow {
 		return this.samples.length;
 	}
 
+	/** how many samples the ring holds before it starts dropping the oldest */
+	get limit(): number {
+		return this.capacity;
+	}
+
 	/** every sample in the window, optionally narrowed to one tenant */
 	within(window: Window, tenant?: string): RequestSample[] {
 		return this.samples.filter(
