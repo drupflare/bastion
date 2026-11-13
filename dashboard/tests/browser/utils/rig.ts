@@ -7,6 +7,7 @@ export const OPERATOR_PAGES = [
 	'/health',
 	'/analytics',
 	'/cluster',
+	'/pairing',
 	'/config',
 	'/logs',
 	'/manual',

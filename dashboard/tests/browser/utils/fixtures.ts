@@ -2,7 +2,12 @@ import type { SiteRow } from '../../../src/components/analytics/Summary.vue';
 import type { CapabilityRow } from '../../../src/components/CapabilityTable.vue';
 import type { NodeRow } from '../../../src/components/cluster/Nodes.vue';
 import type { LimitRow } from '../../../src/components/LimitsTable.vue';
-import type { CapacityAnswer, HealthNode, TenantSummary } from '../../../src/shared/api';
+import type {
+	CapacityAnswer,
+	HealthNode,
+	PairingStatus,
+	TenantSummary
+} from '../../../src/shared/api';
 
 /**
  * What the handlers behind the route table answer.
@@ -26,6 +31,7 @@ interface Fixtures {
 	'GET /api/capabilities': { capabilities: CapabilityRow[] };
 	'GET /api/tenants': TenantSummary[];
 	'GET /api/cluster': { nodes: NodeRow[] };
+	'GET /api/pairing': PairingStatus;
 	'GET /api/config': Record<string, unknown>;
 	'GET /api/logs': { lines: { at: number; level: string; message: string; tenant?: string }[] };
 	'GET /api/backups': {
@@ -168,6 +174,19 @@ export const FIXTURES: Fixtures = {
 				lastSeenAt: -900_000
 			}
 		]
+	},
+
+	'GET /api/pairing': {
+		paired: false,
+		fields: {
+			leaves: [
+				{
+					type: 'status',
+					fields: [{ field: 'version', description: 'the bastion version' }]
+				}
+			],
+			never: ['secrets']
+		}
 	},
 
 	'GET /api/config': {

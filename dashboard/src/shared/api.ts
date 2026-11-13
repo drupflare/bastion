@@ -89,3 +89,41 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
 	error: 'Error',
 	critical: 'Critical'
 };
+
+export interface PairingCommand {
+	id: string;
+	action: string;
+	/** the class this box holds the action in, which is never looser than the one the plane named */
+	class: string;
+	named: string;
+	state: 'queued' | 'running' | 'finished';
+	outcome: string | null;
+	code: string | null;
+	receivedAt: string | null;
+	expiresAt: string | null;
+}
+
+export interface PairingFields {
+	leaves: { type: string; fields: { field: string; description: string }[] }[];
+	never: string[];
+}
+
+export interface PairingLink {
+	connected: boolean;
+	connectedAt: string | null;
+	lastMessageAt: string | null;
+	lastClose: { code: number; reason: string; at: string | null } | null;
+	lastRefusal: { code: string; at: string | null } | null;
+	stopped: { reason: string; at: string | null } | null;
+}
+
+export interface PairingStatus {
+	paired: boolean;
+	nodeId?: string;
+	linkUrl?: string;
+	pairedAt?: string | null;
+	link?: PairingLink;
+	approvals?: Record<string, string>;
+	commands?: PairingCommand[];
+	fields: PairingFields;
+}

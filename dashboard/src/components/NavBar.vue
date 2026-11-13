@@ -13,6 +13,7 @@ const OPERATOR_TABS = [
 	{ to: '/health', label: 'Health', icon: 'i-lucide-activity' },
 	{ to: '/analytics', label: 'Analytics', icon: 'i-lucide-chart-line' },
 	{ to: '/cluster', label: 'Cluster', icon: 'i-lucide-server' },
+	{ to: '/pairing', label: 'Pairing', icon: 'i-lucide-link' },
 	{ to: '/config', label: 'Configuration', icon: 'i-lucide-settings' },
 	{ to: '/logs', label: 'Logs', icon: 'i-lucide-scroll-text' },
 	{ to: '/operations', label: 'Operations', icon: 'i-lucide-wrench' },
