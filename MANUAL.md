@@ -1306,12 +1306,37 @@ in a hosted CMS cannot reach the dashboard's cookie.
 
 <a id="pairing"></a>
 
-`bastion pair` refuses in this version and names the reason: the drupflare control
-plane it would dial is not built yet.
+    bastion pair <url>#<claim token>
+    bastion pair --show-fields
+    bastion pair status
+    bastion pair approve <id>
+    bastion pair reject <id>
+    bastion unpair
 
-The posture is recorded now so the later implementation has nothing to design. Pairing is outbound
-only: bastion dials the control plane and the control plane never dials in, which is the same rule
-the cluster already follows between a child and its control node.
+Pairing connects this box to a drupflare dashboard. The dashboard shows a one-time claim address;
+`bastion pair` posts the claim token and this box's public key to it and keeps the dashboard's
+public key it gets back. Nothing else changes until `bastion serve` is running, which opens the
+link within a second.
+
+Pairing is outbound only: bastion dials the control plane and the control plane never dials in,
+which is the same rule the cluster follows between a child and its control node. The link needs
+wss, except to a loopback address, and the egress rules apply to it like any other dial.
+
+What leaves the box is a fixed list. `bastion pair --show-fields` prints every field and what never
+leaves: request bodies, secrets, credentials and file contents. Tenant and site names can be sent
+as hashes (`pairing.hashNames`), and the host name is sent only when `pairing.sendHostname` is on.
+
+The control plane can send commands. Each one is signed, checked against the key pinned at claim,
+and refused if it is expired, addressed to another node, or a repeat. A command waits for local
+approval unless that class is set to `auto` under `pairing.commands`. Stateful and destructive
+classes always wait, and a command that names a looser class than the box holds the action in is
+treated as the stricter one. `bastion pair status` lists what is waiting; `pair approve` and
+`pair reject` record the decision and `serve` applies it and reports the result.
+
+`bastion unpair` deletes the pairing record and the node key, drops every queued command, writes an
+audit line and closes the link. Tenants, sites and configuration are untouched, and the box carries
+on standalone. If the control plane revokes this node, the link stops and stays stopped until
+`unpair`.
 
 ## Manual
 

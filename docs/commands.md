@@ -1252,15 +1252,49 @@ Documented in `bastion manual access`.
 
 ## Pairing
 
-### `bastion pair`
+### `bastion pair [url]`
 
 pair with the drupflare control plane
+
+| argument | required | meaning                                                 |
+| -------- | -------- | ------------------------------------------------------- |
+| `url`    | no       | the address the dashboard shows, as <url>#<claim token> |
+
+| flag            | meaning                                                     |
+| --------------- | ----------------------------------------------------------- |
+| `--show-fields` | print every field that leaves the box and pair with nothing |
+
+Documented in `bastion manual pairing`.
+
+### `bastion pair status`
+
+the link, the commands waiting for approval and the fields sent
+
+Documented in `bastion manual pairing`.
+
+### `bastion pair approve <id>`
+
+run a command the control plane sent
+
+| argument | required | meaning                    |
+| -------- | -------- | -------------------------- |
+| `id`     | yes      | the id `pair status` shows |
+
+Documented in `bastion manual pairing`.
+
+### `bastion pair reject <id>`
+
+refuse a command the control plane sent
+
+| argument | required | meaning                    |
+| -------- | -------- | -------------------------- |
+| `id`     | yes      | the id `pair status` shows |
 
 Documented in `bastion manual pairing`.
 
 ### `bastion unpair`
 
-stop pairing
+stop pairing and leave this box working on its own
 
 Documented in `bastion manual pairing`.
 

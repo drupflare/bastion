@@ -262,6 +262,14 @@ Children dial out to the control node and it never dials in.
 default, refuses above a /24 without an explicit flag, and skips a host that already has a bastion
 state directory rather than overwriting it.
 
+## Pairing
+
+`bastion pair <url>#<claim token>` connects a box to a drupflare dashboard. The box holds one
+outbound WebSocket and sends signed status, findings, metrics, audit and usage reports. It never
+listens for the dashboard. Commands the dashboard sends wait for local approval unless the operator
+set that class to `auto`, and stateful commands always wait. `bastion pair --show-fields` lists
+everything that leaves the box, and `bastion unpair` stops it and leaves the box standalone.
+
 ## Drivers
 
 Every driver sits behind one contract with a capability object that is probed once and cached.
@@ -285,8 +293,6 @@ or nginx for h3.
 
 Content permissions. The CMS has roles; bastion has three infrastructure roles and a per-site owner
 token.
-
-Pairing with a hosted control plane. `bastion pair` refuses and names the reason.
 
 ## Documentation
 
