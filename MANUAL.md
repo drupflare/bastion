@@ -543,8 +543,9 @@ everything with `/*` and brings its shipping set back with `!` lines, so `!/drup
 `/*` serves that directory.
 
 A bundle carries no `wrangler.jsonc`, so `site add --bundle` binds none of the Worker's `vars`,
-and drupflare answers 503 with `pack not reachable` until they are set. `site add --template ./worker`
-reads them from the Worker's own manifest. By hand they go in the site's `bindings` map:
+and drupflare answers 503 with `pack not reachable` until they are set. `--vars-file <path>` binds
+the values in a json object, which is the `box.vars` file in a release's box bundle. By hand they
+go in the site's `bindings` map:
 `CMS: drupal`, `LAZY_MOUNT: "1"`, `LAZY_FS_BUDGET_BYTES: "4194304"`, `GEN_BUCKET_MS: "5000"` and
 `ASSET_AGGREGATES: "1"`. The site's assets are read from `<state>/tenants/<tenant>/assets`.
 
@@ -1332,6 +1333,44 @@ approval unless that class is set to `auto` under `pairing.commands`. Stateful a
 classes always wait, and a command that names a looser class than the box holds the action in is
 treated as the stricter one. `bastion pair status` lists what is waiting; `pair approve` and
 `pair reject` record the decision and `serve` applies it and reports the result.
+
+A box answers to six actions and no others: `health.observe` (safe), `tenant.reload` and
+`site.deploy` (rebuild), and `site.add`, `site.rollback` and `backup.now` (stateful). Anything else,
+including removing a site or a tenant, is refused with `unsupported_action`. `site.add` runs
+`bastion site add` for a host and a bundle the command names, in the tenant it names or the first
+one. It answers success for a host that already holds the same bundle, refuses `site_exists` for a
+different one, and refuses `no_tenant` on a box with no tenant, because creating one is the
+operator's decision. It downloads the bundle, unpacks it and checks the tree before it writes any
+configuration: an entry module must exist, and every module the entry imports by relative name must
+be in the archive. A bundle that fails the check or does not unpack is refused with
+`bundle_invalid` and nothing is written. The site serves after the next `bastion reload`.
+
+A bundle can also carry a static file tree under `assets/`, with `assets.manifest` at the archive
+root listing each file's path, size and sha256. `site.add` refuses the bundle with `bundle_invalid`
+when a file differs from its entry, when a file is not listed, when a listed file is missing, or
+when an entry names a path outside `assets/`. A bundle with a tree and no manifest is taken as it
+is. Once the check passes, the tree replaces `<state>/tenants/<tenant>/assets`, which is the
+folder the site reads its static files from. The front door answers a GET or HEAD for a file in
+that folder itself, before the request reaches the worker, the way Workers Assets does, with an
+`etag` so a browser can revalidate. Other methods, folders and paths that do not name a file go to
+the worker. In `isolated` mode the folder is not reachable from the front door and the worker
+answers for it. If anything after that step fails, the old folder is
+put back, so a refused add leaves the tenant as it was. The step is skipped for a tenant that
+already holds a site, since a tenant serves one site out of one folder. A file that cannot be
+placed answers `assets_failed`. The manifest has no module ending, so it is never loaded as a
+module.
+
+A bundle can carry `box.vars` at the archive root: a flat json object of strings, numbers and
+booleans, the Worker's `vars`. `site.add` writes them as the site's `bindings`, with numbers and
+booleans stored as text, so the site renders pages that need PHP. The file is limited to 16 KiB, 64
+names and 4096 characters a value. A name has to be a letter or underscore followed by letters,
+digits and underscores, and it cannot be `SITE`, `ASSETS`, `CONFIG_KV`, `PAGE_KV` or
+`UNSAFE_EVAL`, which the box binds itself. A file that breaks any of this is refused with
+`bundle_invalid` and nothing is written. A bundle with no `box.vars` is added with no bindings,
+as before. `bastion site add --vars-file <path>` takes the same file, which is how `site.add`
+hands it over. Plain `bastion site add --bundle` does not read the archive and takes the bundle
+as it stands. A start extracts only the files at the archive root, so the asset tree is not
+unpacked a second time.
 
 The control plane also sends the id it holds for each of your sites, in a signed frame right after
 the link is ready and again whenever the set changes. Each frame replaces the whole map. The box
