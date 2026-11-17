@@ -117,6 +117,9 @@ export const CODES: Record<string, { exit: number; retryable: boolean; next: str
 	'pairing-unreachable': { exit: EXIT.FAILED, retryable: true, next: null },
 	'not-paired': { exit: EXIT.USAGE, retryable: false, next: null },
 
+	// migration
+	'not-wired': { exit: EXIT.FAILED, retryable: false, next: null },
+
 	// health
 	'health-finding': { exit: EXIT.FINDING, retryable: false, next: 'bastion diagnose' },
 	quarantined: { exit: EXIT.FINDING, retryable: false, next: 'bastion quarantine clear' }

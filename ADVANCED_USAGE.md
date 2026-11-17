@@ -192,10 +192,14 @@ replication lag. It refuses without `--yes`.
 ```sh
 bastion migrate survey ssh://root@old.example.edu
 bastion migrate plan ssh://root@old.example.edu
-bastion migrate run ssh://root@old.example.edu --yes
 ```
 
-`survey` finds every site on the host. You do not list them.
+`bastion migrate run` and `bastion migrate resume` are refused until the apply step is wired. They
+exit 1 and change nothing, and `--yes` does not bypass that.
+
+`survey` reads the survey file for the host, and `plan` reads the same file. Nothing writes that
+file yet, so both say that no sites were detected instead of listing any. You do not list sites by
+hand.
 
 `plan` is a dry run and prints three things: each site with its size and whether it fits this
 host's capacity, what will not carry, and the destination's binding term. Read the second list
@@ -203,8 +207,8 @@ before you commit. PHP extensions compiled into the origin, server-level rewrite
 entries outside the CMS, TLS certificates and server mail configuration do not carry, and each one
 says why.
 
-`run` checkpoints at the site boundary, so a failure on the tenth site does not re-move the first
-nine. Re-run it, or `bastion migrate resume`, and it picks up where it stopped.
+Once `run` is wired it will checkpoint at the site boundary, so a failure on the tenth site does
+not re-move the first nine, and `bastion migrate resume` will pick up where it stopped.
 
 Nothing is deleted at the source.
 

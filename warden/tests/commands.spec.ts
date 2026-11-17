@@ -8,6 +8,7 @@ import {
 	type Context
 } from '@drupflare/bastion';
 import { describe, expect, it } from 'vitest';
+import { runMigrateRun } from '../src/commands/cluster';
 import { run } from '../src/run';
 
 /**
@@ -531,10 +532,27 @@ describe('cluster lifecycle', () => {
 });
 
 describe('migration', () => {
-	it('exits 3 with nothing surveyed, and names who does the survey', async () => {
+	const SURVEYED = JSON.stringify({
+		discovered: [
+			{ host: 'a.example.edu', source: 'vps', sizeBytes: 1000, cms: 'drupal', warnings: [] },
+			{ host: 'b.example.edu', source: 'vps', sizeBytes: 2000, cms: 'drupal', warnings: [] }
+		]
+	});
+	const CHECKPOINT = '/var/lib/bastion/migrations/vps.json';
+	const RUN_FILE = '/var/lib/bastion/migrations/run.json';
+	const SOURCE = 'ops@vps.example.edu';
+
+	it('exits 3 with nothing surveyed, and does not claim drangler writes the checkpoint', async () => {
 		const { ctx, io } = harness();
-		expect(await run(ctx, ['migrate', 'survey', 'ops@vps.example.edu'])).toBe(EXIT.FINDING);
-		expect(io.outText()).toContain('drangler');
+		expect(await run(ctx, ['migrate', 'survey', SOURCE])).toBe(EXIT.FINDING);
+		expect(io.outText()).toContain('drangler migrate survey');
+		expect(io.outText()).toContain('does not read');
+	});
+
+	it('lists what a survey checkpoint holds', async () => {
+		const { ctx, io } = harness({ [CHECKPOINT]: SURVEYED });
+		expect(await run(ctx, ['migrate', 'survey', SOURCE])).toBe(EXIT.OK);
+		expect(io.outText()).toContain('b.example.edu');
 	});
 
 	it('reports no migration before one is started', async () => {
@@ -543,14 +561,63 @@ describe('migration', () => {
 		expect(io.outText()).toContain('no migration');
 	});
 
-	it('exits 2 resuming a migration that was never started', async () => {
-		const { ctx } = harness();
-		expect(await run(ctx, ['migrate', 'resume'])).toBe(EXIT.USAGE);
+	it('refuses to run, with or without --yes, and writes no checkpoint', async () => {
+		for (const argv of [
+			['migrate', 'run', SOURCE],
+			['--yes', 'migrate', 'run', SOURCE]
+		]) {
+			const { ctx, io, files } = harness({ [CHECKPOINT]: SURVEYED });
+			expect(await run(ctx, argv)).toBe(EXIT.FAILED);
+			expect(io.errText()).toContain('not wired');
+			expect(io.errText()).toContain('bastion migrate plan');
+			expect(io.errText()).toContain('drangler migrate preview');
+			expect(io.outText()).toBe('');
+			expect(files.exists(RUN_FILE)).toBe(false);
+		}
 	});
 
-	it('exits 2 running a migration with nothing surveyed', async () => {
-		const { ctx } = harness();
-		expect(await run(ctx, ['migrate', 'run', 'ops@vps.example.edu'])).toBe(EXIT.USAGE);
+	it('names the refusal in --json and still exits non-zero', async () => {
+		const { ctx, io } = harness({ [CHECKPOINT]: SURVEYED });
+		expect(await run(ctx, ['--json', '--yes', 'migrate', 'run', SOURCE])).toBe(EXIT.FAILED);
+		const text = io.outText() + io.errText();
+		expect(text).toContain('not-wired');
+		expect(text).not.toContain('"done"');
+	});
+
+	it('refuses to resume a checkpoint rather than finishing it with no-op hooks', async () => {
+		const checkpoint = JSON.stringify({
+			startedAt: 1,
+			source: 'vps',
+			sites: [{ host: 'a.example.edu', stage: 'pending', chunk: 0, chunks: 0, error: null }]
+		});
+		const { ctx, io, files } = harness({ [CHECKPOINT]: SURVEYED, [RUN_FILE]: checkpoint });
+		expect(await run(ctx, ['migrate', 'resume'])).toBe(EXIT.FAILED);
+		expect(io.errText()).toContain('not wired');
+		expect(files.readText(RUN_FILE)).toBe(checkpoint);
+	});
+
+	it('runs the hooks it is given, so wiring them removes only the refusal', async () => {
+		const { ctx, files } = harness({ [CHECKPOINT]: SURVEYED });
+		const calls: string[] = [];
+		const hooks = {
+			exportSite: async (site: { site: { host: string } }) => {
+				calls.push(`export ${site.site.host}`);
+				return { chunks: 0, done: true };
+			},
+			provisionSite: async (site: { site: { host: string } }) => {
+				calls.push(`provision ${site.site.host}`);
+			},
+			replayChunk: async () => {}
+		};
+		const globals = { config: '/srv/bastion.yml', yes: true };
+		expect(await runMigrateRun(ctx, globals, SOURCE, hooks)).toBe(EXIT.OK);
+		expect(calls).toEqual([
+			'export a.example.edu',
+			'provision a.example.edu',
+			'export b.example.edu',
+			'provision b.example.edu'
+		]);
+		expect(files.exists(RUN_FILE)).toBe(true);
 	});
 });
 
@@ -1296,10 +1363,45 @@ describe('the cluster commands that predate the wiring pass', () => {
 		expect(await run(ctx, ['cluster', 'provision', '10.0.0.0/16'])).toBe(EXIT.USAGE);
 	});
 
-	it('plans a migration and lists what will not carry', async () => {
+	it('plans with no survey, says detection did not run, and exits 3', async () => {
 		const { ctx, io } = harness();
-		expect(await run(ctx, ['migrate', 'plan', 'ops@vps.example.edu'])).toBe(EXIT.OK);
+		expect(await run(ctx, ['migrate', 'plan', 'ops@vps.example.edu'])).toBe(EXIT.FINDING);
 		expect(io.outText()).toContain('will not carry');
+		expect(io.outText()).toContain('no sites were detected');
+		expect(io.outText()).not.toContain('found no sites');
+	});
+
+	it('says a survey found no sites only when one ran and held none', async () => {
+		const { ctx, io } = harness({
+			'/var/lib/bastion/migrations/vps.json': JSON.stringify({ discovered: [] })
+		});
+		expect(await run(ctx, ['migrate', 'plan', 'ops@vps.example.edu'])).toBe(EXIT.FINDING);
+		expect(io.outText()).toContain('found no sites');
+	});
+
+	it('plans every surveyed site and exits 0', async () => {
+		const { ctx, io } = harness({
+			'/var/lib/bastion/migrations/vps.json': JSON.stringify({
+				discovered: [
+					{
+						host: 'a.example.edu',
+						source: 'vps',
+						sizeBytes: 1000,
+						cms: 'drupal',
+						warnings: []
+					}
+				]
+			})
+		});
+		expect(await run(ctx, ['migrate', 'plan', 'ops@vps.example.edu'])).toBe(EXIT.OK);
+		expect(io.outText()).toContain('a.example.edu');
+		expect(io.outText()).toContain('will not carry');
+	});
+
+	it('carries the survey state in --json', async () => {
+		const { ctx, io } = harness();
+		await run(ctx, ['--json', 'migrate', 'plan', 'ops@vps.example.edu']);
+		expect(JSON.parse(io.outText()).survey.state).toBe('not-run');
 	});
 });
 

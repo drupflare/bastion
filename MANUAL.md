@@ -1255,7 +1255,6 @@ introspects the runtime is designing against something that does not exist.
 
     bastion migrate survey ssh://host.example.edu
     bastion migrate plan ssh://host.example.edu
-    bastion migrate run ssh://host.example.edu --yes
 
 Three sources: a VPS over SSH, a managed or self-managed drupflare site through its export
 endpoint, and a Cloudflare account through its API.
@@ -1263,13 +1262,19 @@ endpoint, and a Cloudflare account through its API.
 Multi-site is the assumption. A VPS is surveyed for every site on it; asking a customer to
 enumerate their own sites is where a migration stalls.
 
-One planner produces a typed plan and both the CLI and the dashboard render it, so the two cannot
-diverge. The plan lists each site, its size, whether it fits the destination's capacity, and what
+One planner produces a typed plan, and the CLI prints it. The plan lists each site, its size, whether it fits the destination's capacity, and what
 will not carry. PHP extensions compiled into the origin, server-level rewrites, system cron
 entries, TLS certificates and server mail configuration do not carry, and each says why.
 
-A run checkpoints at the site boundary, so a failed tenth site does not re-move the first nine.
-Dry run is the default.
+`bastion migrate run` and `bastion migrate resume` are refused until the apply step is wired. They
+exit 1 with the code `not-wired`, change nothing, and `--yes` does not bypass the refusal. Nothing
+yet exports a site from the source or replays it onto this box. Bastion also does not detect the
+sites on a source: `migrate plan` and `migrate survey` read a survey file that nothing writes
+yet, and say so when there is none. Meanwhile `drangler migrate survey` and `drangler migrate preview`
+read a VPS and make a working duplicate of a site on drupflare.
+
+Once wired, a run will checkpoint at the site boundary, so a failed tenth site does not re-move the
+first nine.
 
 Nothing is deleted at the source. bastion imports; decommissioning the origin is a separate and
 deliberate act.

@@ -29,6 +29,7 @@ import {
 	writeConfig,
 	type ClusterNode,
 	type DiscoveredSite,
+	type MigrationHooks,
 	type ReplicaResult,
 	type SiteProgress
 } from '@drupflare/bastion';
@@ -285,24 +286,24 @@ export async function runClusterProvision(
 	return 0;
 }
 
-export function runMigratePlan(ctx: Context, globals: Globals, source: string): void {
+export function runMigratePlan(ctx: Context, globals: Globals, source: string): number {
 	const loaded = load(ctx, globals);
 	const host = readHost(ctx, loaded.state);
 	const answer = capacity(host, defaultCostModel(loaded.config.mode), {
 		residency: loaded.config.runtime.residency,
 		tenants: Math.max(1, loaded.config.tenants.length)
 	});
-	// the survey itself is drangler's; this is the destination half plus the carry table
-	const discovered: DiscoveredSite[] = [];
+	const survey = readSurvey(ctx, loaded.state, source);
 	const plan = buildPlan({
-		source: source.startsWith('http') ? 'drupflare' : 'vps',
-		discovered,
+		source: survey.kind,
+		discovered: survey.discovered ?? [],
 		tenant: loaded.config.tenants[0]?.name ?? 'default',
 		node: loaded.config.cluster?.node.id ?? 'local',
 		capacity: answer,
 		currentSites: loaded.config.tenants.reduce((n, t) => n + t.sites.length, 0)
 	});
-	emit(ctx, globals, plan, () =>
+	const state = surveyState(survey);
+	emit(ctx, globals, { ...plan, survey: { state, checkpoint: survey.checkpoint } }, () =>
 		[
 			`source: ${plan.source}`,
 			`destination: ${plan.destination.node}, bound by ${plan.destination.bindingTerm}`,
@@ -310,18 +311,21 @@ export function runMigratePlan(ctx: Context, globals: Globals, source: string): 
 			'will not carry:',
 			...plan.notCarried.map((entry) => `  ${entry}`),
 			'',
-			discovered.length === 0
-				? 'no sites were surveyed; run `bastion migrate survey <source>` first'
-				: table(
-						['site', 'size', 'fits'],
-						plan.sites.map((site) => [
-							site.site.host,
-							String(site.site.sizeBytes),
-							site.fits ? 'yes' : (site.blockedBy ?? 'no')
-						])
-					)
+			state === 'not-run'
+				? `no sites were detected: there is no survey at ${survey.checkpoint}, and bastion does not detect sites itself`
+				: state === 'found-none'
+					? `the survey at ${survey.checkpoint} found no sites`
+					: table(
+							['site', 'size', 'fits'],
+							plan.sites.map((site) => [
+								site.site.host,
+								String(site.site.sizeBytes),
+								site.fits ? 'yes' : (site.blockedBy ?? 'no')
+							])
+						)
 		].join('\n')
 	);
+	return state === 'found' ? 0 : 3;
 }
 
 /**
@@ -569,16 +573,8 @@ export function runClusterStatus(ctx: Context, globals: Globals): number {
  */
 export function runMigrateSurvey(ctx: Context, globals: Globals, source: string): number {
 	const loaded = load(ctx, globals);
-	const kind = source.startsWith('http')
-		? 'drupflare'
-		: source.includes('@')
-			? 'vps'
-			: 'cloudflare';
-	const checkpoint = `${loaded.state}/migrations/${kind}.json`;
-	const discovered: DiscoveredSite[] = ctx.files.exists(checkpoint)
-		? ((JSON.parse(ctx.files.readText(checkpoint)) as { discovered?: DiscoveredSite[] })
-				.discovered ?? [])
-		: [];
+	const { kind, checkpoint, discovered: found } = readSurvey(ctx, loaded.state, source);
+	const discovered = found ?? [];
 
 	emit(ctx, globals, { source, kind, discovered, checkpoint }, () =>
 		[
@@ -597,11 +593,48 @@ export function runMigrateSurvey(ctx: Context, globals: Globals, source: string)
 							site.cms ?? '?'
 						])
 					)
-				: 'nothing surveyed yet. bastion owns the destination half; the survey is ' +
-					`\`drangler migrate survey ${source}\`, whose output lands at ${checkpoint}`
+				: `nothing surveyed yet. bastion does not read a source itself and does not read what ` +
+					`\`drangler migrate survey --host <target> --root <path>\` writes; it reads only ` +
+					`${checkpoint}, which nothing writes yet`
 		].join('\n')
 	);
 	return discovered.length === 0 ? 3 : 0;
+}
+
+/** what a source holds on disk, or `discovered: null` when no survey was ever written for it */
+function readSurvey(ctx: Context, state: string, source: string) {
+	const kind: 'drupflare' | 'vps' | 'cloudflare' = source.startsWith('http')
+		? 'drupflare'
+		: source.includes('@')
+			? 'vps'
+			: 'cloudflare';
+	const checkpoint = `${state}/migrations/${kind}.json`;
+	const discovered: DiscoveredSite[] | null = ctx.files.exists(checkpoint)
+		? ((JSON.parse(ctx.files.readText(checkpoint)) as { discovered?: DiscoveredSite[] })
+				.discovered ?? [])
+		: null;
+	return { kind, checkpoint, discovered };
+}
+
+function surveyState(survey: { discovered: DiscoveredSite[] | null }) {
+	if (survey.discovered === null) return 'not-run';
+	return survey.discovered.length === 0 ? 'found-none' : 'found';
+}
+
+/** the steps that move one site; undefined until they are written, and `run` and `resume` refuse */
+export const APPLY_HOOKS: MigrationHooks | undefined = undefined as MigrationHooks | undefined;
+
+function applyHooks(hooks: MigrationHooks | undefined): MigrationHooks {
+	if (hooks !== undefined) return hooks;
+	throw new BastionError(
+		'not-wired',
+		'migrate run is not wired yet: it has no step that exports a site or replays it onto ' +
+			'this box, so it would report sites as moved without moving anything. Nothing was ' +
+			'changed. Until it is wired, `bastion migrate plan <source>` shows what would carry, ' +
+			'and `drangler migrate survey` and `drangler migrate preview` read a VPS site and make ' +
+			'a working duplicate of it.',
+		{ next: 'bastion migrate plan <source>' }
+	);
 }
 
 function migrationPlanFor(ctx: Context, globals: Globals, source: string) {
@@ -611,17 +644,12 @@ function migrationPlanFor(ctx: Context, globals: Globals, source: string) {
 		residency: loaded.config.runtime.residency,
 		tenants: Math.max(1, loaded.config.tenants.length)
 	});
-	const kind = source.startsWith('http') ? 'drupflare' : 'vps';
-	const checkpoint = `${loaded.state}/migrations/${kind}.json`;
-	const discovered: DiscoveredSite[] = ctx.files.exists(checkpoint)
-		? ((JSON.parse(ctx.files.readText(checkpoint)) as { discovered?: DiscoveredSite[] })
-				.discovered ?? [])
-		: [];
+	const survey = readSurvey(ctx, loaded.state, source);
 	return {
 		loaded,
 		plan: buildPlan({
-			source: kind,
-			discovered,
+			source: survey.kind,
+			discovered: survey.discovered ?? [],
 			tenant: loaded.config.tenants[0]?.name ?? 'default',
 			node: loaded.config.cluster?.node.id ?? 'local',
 			capacity: answer,
@@ -634,8 +662,10 @@ function migrationPlanFor(ctx: Context, globals: Globals, source: string) {
 export async function runMigrateRun(
 	ctx: Context,
 	globals: Globals & { yes?: boolean },
-	source: string
+	source: string,
+	hooks: MigrationHooks | undefined = APPLY_HOOKS
 ): Promise<number> {
+	const apply = applyHooks(hooks);
 	const { loaded, plan } = migrationPlanFor(ctx, globals, source);
 	if (plan.sites.length === 0) {
 		throw new BastionError('usage', `nothing to move from ${source}`, {
@@ -668,11 +698,7 @@ export async function runMigrateRun(
 	assertPlanFits(plan);
 
 	const run = new MigrationRun(ctx, `${loaded.state}/migrations/run.json`, plan);
-	const progress = await run.run(plan, {
-		exportSite: async () => ({ chunks: 0, done: true }),
-		provisionSite: async () => {},
-		replayChunk: async () => {}
-	});
+	const progress = await run.run(plan, apply);
 	emit(ctx, globals, { progress, done: run.done, failed: run.failed }, () =>
 		table(
 			['site', 'stage', 'chunks', 'error'],
@@ -687,7 +713,12 @@ export async function runMigrateRun(
 	return run.failed.length === 0 ? 0 : 3;
 }
 
-export async function runMigrateResume(ctx: Context, globals: Globals): Promise<number> {
+export async function runMigrateResume(
+	ctx: Context,
+	globals: Globals,
+	hooks: MigrationHooks | undefined = APPLY_HOOKS
+): Promise<number> {
+	const apply = applyHooks(hooks);
 	const loaded = load(ctx, globals);
 	const path = `${loaded.state}/migrations/run.json`;
 	if (!ctx.files.exists(path)) {
@@ -697,11 +728,7 @@ export async function runMigrateResume(ctx: Context, globals: Globals): Promise<
 	}
 	const { plan } = migrationPlanFor(ctx, globals, 'vps');
 	const run = new MigrationRun(ctx, path, plan);
-	const progress = await run.run(plan, {
-		exportSite: async () => ({ chunks: 0, done: true }),
-		provisionSite: async () => {},
-		replayChunk: async () => {}
-	});
+	const progress = await run.run(plan, apply);
 	emit(ctx, globals, { progress, done: run.done }, () =>
 		table(
 			['site', 'stage', 'chunk'],

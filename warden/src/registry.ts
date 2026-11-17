@@ -1224,7 +1224,7 @@ export const COMMANDS: CommandSpec[] = [
 			{ name: 'source', required: true, description: 'an ssh target, a URL, or --cloudflare' }
 		],
 		surface: null,
-		exempt: 'the migration wizard renders the same plan object and is its own flow'
+		exempt: 'the dashboard has no migration view yet'
 	},
 	{
 		group: 'migrate',
@@ -1236,26 +1236,26 @@ export const COMMANDS: CommandSpec[] = [
 		],
 		exits: [JSON_EXIT],
 		surface: null,
-		exempt: 'the migration wizard renders the same plan object and is its own flow'
+		exempt: 'the dashboard has no migration view yet'
 	},
 	{
 		group: 'migrate',
 		name: 'migrate run',
-		description: 'execute the plan, resumable per site',
+		description: 'execute the plan; refused until the apply step is wired',
 		manual: 'migrating',
 		args: [
 			{ name: 'source', required: true, description: 'an ssh target, a URL, or --cloudflare' }
 		],
 		surface: null,
-		exempt: 'the migration wizard renders the same plan object and is its own flow'
+		exempt: 'the dashboard has no migration view yet'
 	},
 	{
 		group: 'migrate',
 		name: 'migrate resume',
-		description: 'continue an interrupted migration',
+		description: 'continue an interrupted migration; refused until the apply step is wired',
 		manual: 'migrating',
 		surface: null,
-		exempt: 'the migration wizard renders the same plan object and is its own flow'
+		exempt: 'the dashboard has no migration view yet'
 	},
 	{
 		group: 'migrate',
@@ -1263,7 +1263,7 @@ export const COMMANDS: CommandSpec[] = [
 		description: 'where a migration got to',
 		manual: 'migrating',
 		surface: null,
-		exempt: 'the migration wizard renders the same plan object and is its own flow'
+		exempt: 'the dashboard has no migration view yet'
 	},
 	{
 		group: 'api',
