@@ -1198,7 +1198,7 @@ Documented in `bastion manual migrating`.
 
 ### `bastion migrate run <source>`
 
-execute the plan, resumable per site
+execute the plan; refused until the apply step is wired
 
 | argument | required | meaning                               |
 | -------- | -------- | ------------------------------------- |
@@ -1208,7 +1208,7 @@ Documented in `bastion manual migrating`.
 
 ### `bastion migrate resume`
 
-continue an interrupted migration
+continue an interrupted migration; refused until the apply step is wired
 
 Documented in `bastion manual migrating`.
 
