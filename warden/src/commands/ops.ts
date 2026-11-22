@@ -4,6 +4,7 @@ import {
 	BastionError,
 	CertificateStore,
 	EXPIRY_LADDER,
+	HOST_SCOPE,
 	NEVER_REACHABLE,
 	acceptedCves,
 	buildSecrets,
@@ -14,7 +15,9 @@ import {
 	redact,
 	rolloutPlan,
 	rulesFor,
-	wouldAllow
+	tenantScope,
+	wouldAllow,
+	type SecretStore
 } from '@drupflare/bastion';
 import { kv, table, yesNo } from '../format';
 import { emit, load, type Globals } from '../state';
@@ -99,14 +102,53 @@ export function runCertList(ctx: Context, globals: Globals): void {
 	);
 }
 
-export function runSecretsList(ctx: Context, globals: Globals): void {
+/**
+ * The store a secrets command acts on, and the scope it chose.
+ *
+ * Without `--tenant` that is the host scope, which holds the node key and every secret that
+ * existed before scopes did, and every command says so in its output. With it, the same store
+ * narrowed to that tenant, so a command can never reach the other scope by naming a secret.
+ *
+ * `mustExist` is for commands that create something: a typo in `--tenant` must not start a scope
+ * no tenant will ever read. Removal and listing accept a tenant that is gone, because its secrets
+ * outlive it and somebody has to be able to clear them.
+ */
+export function secretScope(
+	ctx: Context,
+	globals: Globals & { tenant?: string },
+	mustExist = false
+): { store: SecretStore; scope: string; label: string; state: string } {
 	const loaded = load(ctx, globals);
-	const store = buildSecrets(ctx, loaded.config.drivers.secrets);
-	void store.list().then((secrets) => {
-		emit(ctx, globals, { driver: store.id(), secrets }, () =>
-			secrets.length === 0
-				? `the ${store.id()} store holds nothing bastion can enumerate`
-				: table(
+	const host = buildSecrets(ctx, loaded.config.drivers.secrets);
+	if (globals.tenant === undefined) {
+		return { store: host, scope: HOST_SCOPE, label: 'host scope', state: loaded.state };
+	}
+	if (mustExist && !loaded.config.tenants.some((entry) => entry.name === globals.tenant)) {
+		throw new BastionError('usage', `there is no tenant called ${globals.tenant}`, {
+			next: 'bastion tenant list'
+		});
+	}
+	const scope = tenantScope(globals.tenant);
+	return {
+		store: host.scope(scope),
+		scope,
+		label: `${globals.tenant} scope`,
+		state: loaded.state
+	};
+}
+
+export async function runSecretsList(
+	ctx: Context,
+	globals: Globals & { tenant?: string }
+): Promise<void> {
+	const { store, scope, label } = secretScope(ctx, globals);
+	const secrets = await store.list();
+	emit(ctx, globals, { driver: store.id(), scope, secrets }, () =>
+		secrets.length === 0
+			? `the ${store.id()} store holds nothing in the ${label} that bastion can enumerate`
+			: [
+					label,
+					table(
 						['name', 'driver', 'updated'],
 						secrets.map((secret) => [
 							secret.name,
@@ -114,18 +156,21 @@ export function runSecretsList(ctx: Context, globals: Globals): void {
 							secret.updatedAt === 0 ? '-' : new Date(secret.updatedAt).toISOString()
 						])
 					)
-		);
-	});
+				].join('\n')
+	);
 }
 
 /** `get` prints the value on stdout and NEVER inside the --json payload */
-export async function runSecretsGet(ctx: Context, globals: Globals, name: string): Promise<void> {
-	const loaded = load(ctx, globals);
-	const store = buildSecrets(ctx, loaded.config.drivers.secrets);
+export async function runSecretsGet(
+	ctx: Context,
+	globals: Globals & { tenant?: string },
+	name: string
+): Promise<void> {
+	const { store, scope } = secretScope(ctx, globals);
 	const value = await store.get(name);
-	if (value === null) throw new BastionError('usage', `no secret called ${name}`);
+	if (value === null) throw new BastionError('usage', `no secret called ${name} in ${scope}`);
 	if (globals.json === true) {
-		ctx.io.out(JSON.stringify({ name, driver: store.id(), value: redact(value) }));
+		ctx.io.out(JSON.stringify({ name, driver: store.id(), scope, value: redact(value) }));
 		return;
 	}
 	ctx.io.out(value);

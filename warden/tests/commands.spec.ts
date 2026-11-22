@@ -147,6 +147,76 @@ describe('tenant suspend, resume and egress', () => {
 		expect(await run(ctx, ['tenant', 'suspend', 'nobody'])).toBe(EXIT.USAGE);
 	});
 
+	it('reports whether the file changed, so a repeat is visibly a no-op', async () => {
+		const { ctx, io } = harness();
+		await run(ctx, ['--json', 'tenant', 'suspend', 'acme']);
+		await run(ctx, ['--json', 'tenant', 'suspend', 'acme']);
+		const [first, second] = io
+			.outText()
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line));
+		expect(first).toMatchObject({ suspended: true, changed: true });
+		expect(second).toMatchObject({ suspended: true, changed: false });
+	});
+
+	it('removes the flag on resume rather than writing suspended: false', async () => {
+		const { ctx, files } = harness();
+		await run(ctx, ['tenant', 'suspend', 'acme']);
+		await run(ctx, ['tenant', 'resume', 'acme']);
+		expect(files.readText('/srv/bastion.yml')).not.toContain('suspended');
+	});
+
+	/**
+	 * Writing the flag stops nothing; the running process does, on a reload. So `reload` has to
+	 * see a suspended tenant whose process is still up, which it used to skip as "left alone".
+	 */
+	describe('reload and a suspended tenant', () => {
+		const DIGEST = '/var/lib/bastion/tenants/acme/config.sha256';
+
+		async function check(running: boolean) {
+			const { ctx, files } = harness(running ? { [DIGEST]: 'abc\n' } : {});
+			await run(ctx, ['tenant', 'suspend', 'acme']);
+			const second = withDisk(files);
+			const code = await run(second.ctx, ['--json', 'reload', '--check']);
+			return {
+				code,
+				report: JSON.parse(second.io.outText().trim().split('\n').pop() as string)
+			};
+		}
+
+		it('counts it as out of date while its process is still running', async () => {
+			const { report } = await check(true);
+			expect(report.stopping).toEqual(['acme']);
+			expect(report.changed).toContain('acme');
+		});
+
+		it('leaves it alone once it has been stopped', async () => {
+			const { report } = await check(false);
+			expect(report.stopping).toEqual([]);
+			expect(report.changed).not.toContain('acme');
+			expect(report.suspended).toEqual(['acme']);
+		});
+
+		it('asks the running process for the stop, and reports what it stopped', async () => {
+			const { ctx, files } = harness({
+				[DIGEST]: 'abc\n',
+				'/var/lib/bastion/bastion.pid': '4242'
+			});
+			await run(ctx, ['tenant', 'suspend', 'acme']);
+			const second = withDisk(files);
+			setTimeout(() => {
+				files.writeText(
+					'/var/lib/bastion/reload.outcome',
+					JSON.stringify({ at: 0, swapped: [], stopped: ['acme'], failed: [] })
+				);
+			}, 5);
+			expect(await run(second.ctx, ['reload'])).toBe(EXIT.OK);
+			expect(files.exists('/var/lib/bastion/reload.request')).toBe(true);
+			expect(second.io.outText()).toMatch(/stopped\s+acme/);
+		});
+	});
+
 	it('says plainly that an empty allow list denies everything', async () => {
 		const { ctx, io } = harness();
 		expect(await run(ctx, ['tenant', 'egress', 'beta'])).toBe(EXIT.OK);
@@ -1917,5 +1987,153 @@ describe('a bundle named as a url', () => {
 		const { ctx, io } = harness({ '/srv/payload.tar.gz': 'bundle-bytes' });
 		expect(await run(ctx, ['deploy', 'www.example.edu', '/srv/payload.tar.gz'])).toBe(EXIT.OK);
 		expect(io.outText()).toContain('deployed');
+	});
+});
+
+describe('secret scopes', () => {
+	const FILE = {
+		'/srv/bastion.yml': CONFIG.replace(
+			'version: 1',
+			'version: 1\ndrivers:\n  secrets:\n    driver: file'
+		)
+	};
+	const HOST_FILE = '/var/lib/bastion/secrets/secrets.age';
+	const DIGEST = '/var/lib/bastion/tenants/acme/config.sha256';
+
+	/** the file driver needs a passphrase in the environment, which is where bastion reads it */
+	function boxed(seed: Record<string, string> = {}) {
+		const h = harness({ ...FILE, ...seed });
+		const ctx: Context = { ...h.ctx, env: { BASTION_SECRET_PASSPHRASE: 'a passphrase' } };
+		const json = async (...argv: string[]) => {
+			const before = h.io.outText().length;
+			const code = await run(ctx, ['--json', ...argv]);
+			const out = h.io.outText().slice(before).trim().split('\n').pop() as string;
+			return { code, out, body: out === '' ? null : JSON.parse(out) };
+		};
+		return { h, ctx, json };
+	}
+
+	it('acts on the host scope without --tenant, and says so', async () => {
+		const { h, json } = boxed();
+		const set = await json('secrets', 'set', 'NODE_KEY', '--value', 'host-value');
+		expect(set.body).toMatchObject({ scope: 'host' });
+		expect(h.files.exists(HOST_FILE)).toBe(true);
+	});
+
+	it('puts a --tenant secret in that tenant s own file and leaves the host file alone', async () => {
+		const { h, json } = boxed();
+		const set = await json(
+			'secrets',
+			'set',
+			'SMTP_PASSWORD',
+			'--tenant',
+			'acme',
+			'--value',
+			'v'
+		);
+		expect(set.body).toMatchObject({ scope: 'tenant/acme' });
+		expect(h.files.exists(`${HOST_FILE}.tenant-acme`)).toBe(true);
+		expect(h.files.exists(HOST_FILE)).toBe(false);
+	});
+
+	it('lists one scope at a time, and never a value', async () => {
+		const { json } = boxed();
+		await json('secrets', 'set', 'NODE_KEY', '--value', 'host-value');
+		await json(
+			'secrets',
+			'set',
+			'SMTP_PASSWORD',
+			'--tenant',
+			'acme',
+			'--value',
+			'tenant-value'
+		);
+
+		const host = await json('secrets', 'list');
+		const acme = await json('secrets', 'list', '--tenant', 'acme');
+		expect(host.body.secrets.map((s: { name: string }) => s.name)).toEqual(['NODE_KEY']);
+		expect(acme.body.secrets.map((s: { name: string }) => s.name)).toEqual(['SMTP_PASSWORD']);
+		expect(host.out + acme.out).not.toMatch(/host-value|tenant-value/);
+	});
+
+	it('does not find a host secret from a tenant scope, or the reverse', async () => {
+		const { json } = boxed();
+		await json('secrets', 'set', 'NODE_KEY', '--value', 'host-value');
+		await json('secrets', 'set', 'SMTP_PASSWORD', '--tenant', 'acme', '--value', 'v');
+		expect((await json('secrets', 'get', 'NODE_KEY', '--tenant', 'acme')).code).toBe(
+			EXIT.USAGE
+		);
+		expect((await json('secrets', 'get', 'SMTP_PASSWORD')).code).toBe(EXIT.USAGE);
+	});
+
+	it('echoes a read value nowhere under --json, and names the scope it read', async () => {
+		const { json } = boxed();
+		await json(
+			'secrets',
+			'set',
+			'SMTP_PASSWORD',
+			'--tenant',
+			'acme',
+			'--value',
+			'tenant-value'
+		);
+		const read = await json('secrets', 'get', 'SMTP_PASSWORD', '--tenant', 'acme');
+		expect(read.out).not.toContain('tenant-value');
+		expect(read.body).toMatchObject({ scope: 'tenant/acme' });
+	});
+
+	it('refuses to start a scope for a tenant that does not exist', async () => {
+		const { h, json } = boxed();
+		expect((await json('secrets', 'set', 'A', '--tenant', 'ghost', '--value', 'v')).code).toBe(
+			EXIT.USAGE
+		);
+		expect(h.files.exists(`${HOST_FILE}.tenant-ghost`)).toBe(false);
+	});
+
+	it('still clears a scope whose tenant is gone', async () => {
+		const { json } = boxed();
+		expect((await json('secrets', 'rm', 'A', '--tenant', 'ghost')).code).toBe(EXIT.OK);
+	});
+
+	it('rotates inside one scope and refuses to rotate what is only in the other', async () => {
+		const { json } = boxed();
+		await json('secrets', 'set', 'NODE_KEY', '--value', 'host-value');
+		expect(
+			(await json('secrets', 'rotate', 'NODE_KEY', '--tenant', 'acme', '--value', 'x')).code
+		).toBe(EXIT.USAGE);
+		await json('secrets', 'set', 'SMTP_PASSWORD', '--tenant', 'acme', '--value', 'one');
+		expect(
+			(await json('secrets', 'rotate', 'SMTP_PASSWORD', '--tenant', 'acme', '--value', 'two'))
+				.code
+		).toBe(EXIT.OK);
+		expect((await json('secrets', 'rotate', 'SMTP_PASSWORD', '--value', 'x')).code).toBe(
+			EXIT.USAGE
+		);
+	});
+
+	it('marks a running tenant out of date, so reload swaps it to pick the change up', async () => {
+		const { h, json } = boxed({ [DIGEST]: 'abc\n' });
+		await json('secrets', 'set', 'SMTP_PASSWORD', '--tenant', 'acme', '--value', 'v');
+		expect(h.files.readText(DIGEST)).toBe('stale\n');
+	});
+
+	it('does not invent a digest for a tenant that is not running', async () => {
+		const { h, json } = boxed();
+		await json('secrets', 'set', 'SMTP_PASSWORD', '--tenant', 'acme', '--value', 'v');
+		expect(h.files.exists(DIGEST)).toBe(false);
+	});
+
+	it('leaves a host secret change out of the reload decision', async () => {
+		const { h, json } = boxed({ [DIGEST]: 'abc\n' });
+		await json('secrets', 'set', 'NODE_KEY', '--value', 'host-value');
+		expect(h.files.readText(DIGEST)).toBe('abc\n');
+	});
+
+	it('refuses a tenant scope on a driver that cannot hold one, naming the drivers that can', async () => {
+		const keyring = withDisk(memoryFiles({ '/srv/bastion.yml': CONFIG }));
+		expect(
+			await run(keyring.ctx, ['secrets', 'set', 'A', '--tenant', 'acme', '--value', 'v'])
+		).toBe(EXIT.FAILED);
+		expect(keyring.io.errText()).toContain('file or kms');
 	});
 });

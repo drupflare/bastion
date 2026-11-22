@@ -333,7 +333,7 @@ export const COMMANDS: CommandSpec[] = [
 	{
 		group: 'tenants',
 		name: 'tenant suspend',
-		description: 'stop a tenant and serve a maintenance page',
+		description: 'mark a tenant suspended; the next reload stops it and its sites answer 503',
 		manual: 'tenants',
 		args: [{ name: 'name', required: true, description: 'the tenant name' }],
 		surface: '/tenants'
@@ -660,7 +660,7 @@ export const COMMANDS: CommandSpec[] = [
 	{
 		group: 'secrets',
 		name: 'secrets set',
-		description: 'store a secret',
+		description: 'store a secret in the host scope, or in one tenant s with --tenant',
 		manual: 'secrets',
 		args: [{ name: 'name', required: true, description: 'the secret name' }],
 		options: [
@@ -668,7 +668,8 @@ export const COMMANDS: CommandSpec[] = [
 				flags: '--value <value>',
 				description:
 					'the value; prefer BASTION_SECRET_VALUE so it stays out of the shell history'
-			}
+			},
+			{ flags: '--tenant <name>', description: 'that tenant s scope; absent means the host' }
 		],
 		exits: [JSON_EXIT],
 		surface: null,
@@ -680,14 +681,20 @@ export const COMMANDS: CommandSpec[] = [
 		description: 'read a secret; audited, and never echoed under --json',
 		manual: 'secrets',
 		args: [{ name: 'name', required: true, description: 'the secret name' }],
+		options: [
+			{ flags: '--tenant <name>', description: 'that tenant s scope; absent means the host' }
+		],
 		surface: null,
 		exempt: 'a secret value never reaches a browser'
 	},
 	{
 		group: 'secrets',
 		name: 'secrets list',
-		description: 'every secret name; never a value',
+		description: 'every secret name in a scope; never a value',
 		manual: 'secrets',
+		options: [
+			{ flags: '--tenant <name>', description: 'that tenant s scope; absent means the host' }
+		],
 		surface: '/operations'
 	},
 	{
@@ -696,6 +703,9 @@ export const COMMANDS: CommandSpec[] = [
 		description: 'remove a secret',
 		manual: 'secrets',
 		args: [{ name: 'name', required: true, description: 'the secret name' }],
+		options: [
+			{ flags: '--tenant <name>', description: 'that tenant s scope; absent means the host' }
+		],
 		surface: null,
 		exempt: 'the secret surface is deliberately CLI only'
 	},
@@ -705,7 +715,10 @@ export const COMMANDS: CommandSpec[] = [
 		description: 'replace a secret and record the rotation',
 		manual: 'secrets',
 		args: [{ name: 'name', required: true, description: 'the secret name' }],
-		options: [{ flags: '--value <value>', description: 'the new value' }],
+		options: [
+			{ flags: '--value <value>', description: 'the new value' },
+			{ flags: '--tenant <name>', description: 'that tenant s scope; absent means the host' }
+		],
 		exits: [JSON_EXIT],
 		surface: null,
 		exempt: 'the secret surface is deliberately CLI only'

@@ -27,6 +27,8 @@ export type Action =
 	| 'metrics.read'
 	| 'secrets.read'
 	| 'secrets.write'
+	| 'tenant.secrets.read'
+	| 'tenant.secrets.write'
 	| 'cluster.read'
 	| 'cluster.write'
 	| 'audit.read'
@@ -57,12 +59,17 @@ export const GRANTS: Record<Role, Action[]> = {
 		'metrics.read',
 		'secrets.read',
 		'secrets.write',
+		'tenant.secrets.read',
+		'tenant.secrets.write',
 		'cluster.read',
 		'cluster.write',
 		'audit.read',
 		'pairing.read',
 		'pairing.write'
 	],
+	// `tenant.secrets.*` is the one grant that reaches a secret, and only the tenant's own scope:
+	// the host-wide `secrets.*` routes stay operator-only, and the handler pins the scope to the
+	// credential's tenant
 	'tenant-admin': [
 		'tenant.read',
 		'site.read',
@@ -70,7 +77,9 @@ export const GRANTS: Record<Role, Action[]> = {
 		'deploy',
 		'rollback',
 		'logs.read',
-		'metrics.read'
+		'metrics.read',
+		'tenant.secrets.read',
+		'tenant.secrets.write'
 	],
 	'tenant-viewer': ['tenant.read', 'site.read', 'logs.read', 'metrics.read']
 };

@@ -15,6 +15,7 @@ import {
 	drill,
 	expirySeverity,
 	formatFor,
+	markStale,
 	renewable,
 	rolloutPlan,
 	selfSigned,
@@ -23,6 +24,7 @@ import {
 import { kv, sizeOrRefuse, table } from '../format';
 import { emit, load, requireBackupOptions, writePath, type Globals } from '../state';
 import { issueFor } from './domains';
+import { secretScope } from './ops';
 
 export function runTenantLimits(
 	ctx: Context,
@@ -73,13 +75,27 @@ export function runTenantLimits(
 	emit(ctx, globals, { tenant: name, limits }, () => `set limits on ${name}`);
 }
 
-export async function runSecretsSet(
+type ScopedGlobals = Globals & { tenant?: string };
+
+/**
+ * What a change to a tenant's secrets still needs.
+ *
+ * A worker's secrets are read when its process starts, so a stored change reaches a running
+ * tenant only through a swap. The tenant is marked out of date so `bastion reload` swaps exactly
+ * that one, and the output says so rather than implying the site already has the new value.
+ */
+function applyHint(ctx: Context, state: string, tenant: string | undefined): string {
+	if (tenant === undefined) return '';
+	markStale(ctx, state, tenant);
+	return ` ${tenant} gets it the next time it starts; run \`bastion reload\` to swap it now`;
+}
+
+async function storeSecret(
 	ctx: Context,
-	globals: Globals & { value?: string },
+	globals: ScopedGlobals & { value?: string },
 	name: string
-): Promise<void> {
-	const loaded = load(ctx, globals);
-	const store = buildSecrets(ctx, loaded.config.drivers.secrets);
+): Promise<{ driver: string; scope: string; label: string; hint: string }> {
+	const { store, scope, label, state } = secretScope(ctx, globals, true);
 	const value = globals.value ?? ctx.env.BASTION_SECRET_VALUE;
 	if (value === undefined || value === '') {
 		throw new BastionError(
@@ -89,34 +105,51 @@ export async function runSecretsSet(
 		);
 	}
 	await store.set(name, value);
+	return { driver: store.id(), scope, label, hint: applyHint(ctx, state, globals.tenant) };
+}
+
+export async function runSecretsSet(
+	ctx: Context,
+	globals: ScopedGlobals & { value?: string },
+	name: string
+): Promise<void> {
+	const stored = await storeSecret(ctx, globals, name);
 	emit(
 		ctx,
 		globals,
-		{ name, driver: store.id() },
-		() => `stored ${name} in the ${store.id()} store`
+		{ name, driver: stored.driver, scope: stored.scope },
+		() => `stored ${name} in the ${stored.driver} store, ${stored.label}.${stored.hint}`
 	);
 }
 
-export async function runSecretsRm(ctx: Context, globals: Globals, name: string): Promise<void> {
-	const loaded = load(ctx, globals);
-	const store = buildSecrets(ctx, loaded.config.drivers.secrets);
+export async function runSecretsRm(
+	ctx: Context,
+	globals: ScopedGlobals,
+	name: string
+): Promise<void> {
+	const { store, scope, label, state } = secretScope(ctx, globals);
 	await store.remove(name);
-	emit(ctx, globals, { removed: name }, () => `removed ${name}`);
+	const hint = applyHint(ctx, state, globals.tenant);
+	emit(ctx, globals, { removed: name, scope }, () => `removed ${name} from the ${label}.${hint}`);
 }
 
 export async function runSecretsRotate(
 	ctx: Context,
-	globals: Globals & { value?: string },
+	globals: ScopedGlobals & { value?: string },
 	name: string
 ): Promise<void> {
-	const loaded = load(ctx, globals);
-	const store = buildSecrets(ctx, loaded.config.drivers.secrets);
+	const { store, scope } = secretScope(ctx, globals, true);
 	const current = await store.get(name);
-	if (current === null) throw new BastionError('usage', `no secret called ${name}`);
-	await runSecretsSet(ctx, globals, name);
+	if (current === null) throw new BastionError('usage', `no secret called ${name} in ${scope}`);
+	const stored = await storeSecret(ctx, globals, name);
 	// the old value is not kept: a rotation that leaves the previous secret readable has not
 	// rotated anything an attacker who already read it cares about
-	emit(ctx, globals, { rotated: name }, () => `rotated ${name}`);
+	emit(
+		ctx,
+		globals,
+		{ rotated: name, scope },
+		() => `rotated ${name} in the ${stored.label}.${stored.hint}`
+	);
 }
 
 export function runSecretsSeal(ctx: Context, globals: Globals): void {
