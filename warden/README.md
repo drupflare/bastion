@@ -210,24 +210,24 @@ because that is not a rollback. And it will not go below the security floor with
 
 ## Commands
 
-| Group     | Commands                                                      |
-| --------- | ------------------------------------------------------------- |
-| Lifecycle | `init` `up` `down` `restart` `reload` `serve`                 |
-| Inspect   | `status` `doctor` `health` `diagnose` `metrics` `logs` `tail` |
-| Config    | `config show\|where\|get\|set\|validate\|schema\|edit`        |
-| Tenants   | `tenant list\|add\|show\|rm\|suspend\|resume\|limits\|egress` |
-| Sites     | `site list\|add\|show\|rm\|probe`                             |
-| Delivery  | `deploy` `version` `rollout` `rollback`                       |
-| Repair    | `repair` `quarantine` `recycle`                               |
-| Backup    | `backup now\|list\|verify\|prune\|restore\|drill\|estimate`   |
-| Secrets   | `secrets set\|get\|list\|rm\|rotate\|seal\|unseal`            |
-| Certs     | `cert list\|issue\|renew\|import\|trust\|untrust`             |
-| Egress    | `egress show\|allow\|deny\|test`                              |
-| Cluster   | `cluster init\|join\|leave\|nodes\|place\|promote\|provision` |
-| Capacity  | `capacity`                                                    |
-| Migrate   | `migrate survey\|plan\|run\|resume`                           |
-| Audit     | `audit tail\|export\|verify`                                  |
-| Updates   | `update check\|apply\|rollback`                               |
+| Group     | Commands                                                        |
+| --------- | --------------------------------------------------------------- |
+| Lifecycle | `init` `up` `down` `restart` `reload` `serve`                   |
+| Inspect   | `status` `doctor` `health` `diagnose` `metrics` `logs` `tail`   |
+| Config    | `config show\|where\|get\|set\|validate\|schema\|edit`          |
+| Tenants   | `tenant list\|add\|show\|rm\|suspend\|resume\|limits\|egress`   |
+| Sites     | `site list\|add\|show\|rm\|probe`                               |
+| Delivery  | `deploy` `version` `rollout` `rollback`                         |
+| Repair    | `repair` `quarantine` `recycle`                                 |
+| Backup    | `backup now\|list\|verify\|prune\|restore\|drill\|estimate`     |
+| Secrets   | `secrets set\|get\|list\|rm\|rotate\|seal\|unseal` (`--tenant`) |
+| Certs     | `cert list\|issue\|renew\|import\|trust\|untrust`               |
+| Egress    | `egress show\|allow\|deny\|test`                                |
+| Cluster   | `cluster init\|join\|leave\|nodes\|place\|promote\|provision`   |
+| Capacity  | `capacity`                                                      |
+| Migrate   | `migrate survey\|plan\|run\|resume`                             |
+| Audit     | `audit tail\|export\|verify`                                    |
+| Updates   | `update check\|apply\|rollback`                                 |
 
 `bastion manual` is the full reference, shipped inside the binary and readable with the network
 down. Every command takes `--json`, which prints the same object the text output is rendered from.
@@ -237,10 +237,17 @@ down. Every command takes `--json`, which prints the same object the text output
 - **A site's primary node is a single point of failure for writes to that site.** Promoting a
   replica makes its snapshot authoritative and loses anything not yet replicated, bounded by the
   replica lag setting.
-- **`isolateMemory` is enforced per tenant, not per isolate.** A cgroup bounds a process; one site
-  can consume its tenant's whole budget.
-- **Subrequest counts and the startup budget are declared, not enforced.** They are inside the
-  isolate, where bastion cannot see them. `doctor` prints which is which.
+- **A tenant's `limits.memory` is enforced per tenant, not per isolate.** A cgroup bounds a
+  process; one site can consume its tenant's whole budget.
+- **`runtime.limits` (`isolateMemory`, `startupMs`, `subrequests`, `alarmMs`) is declared and
+  floor-checked, and nothing enforces it.** The validator refuses a value below the floor. workerd
+  does not apply any of the four and bastion has no check of its own, so raising one changes no
+  behaviour. `doctor` prints which is which.
+- **`bastion tenant suspend` takes effect at the next `bastion reload`.** The reload stops the
+  tenant's process and its sites answer 503. The management API reloads at once.
+- **Tenant secrets need the `file` or `kms` driver.** The `keyring` and `env` drivers hold host
+  secrets only and refuse `--tenant`. A tenant's generated config holds its secrets in the clear, at
+  mode 0600.
 - **HTTP/3 is off.** WebSockets do not work over h3, the `Alt-Svc` advertisement cannot be
   suppressed, and published measurements show QUIC losing to HTTP/2 on fast networks. Front bastion
   with Caddy or nginx if you want it.

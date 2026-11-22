@@ -23,6 +23,8 @@ as a single binary you run on your own hardware.
 - [Getting Started](#getting-started)
 - [What It Does](#what-it-does)
 - [Isolation Modes](#isolation-modes)
+- [Suspending a Tenant](#suspending-a-tenant)
+- [Secrets Per Tenant](#secrets-per-tenant)
 - [Platform Limits](#platform-limits)
 - [Configuration](#configuration)
 - [Custom Workers](#custom-workers)
@@ -109,6 +111,65 @@ Inside a guest there is no network interface at all. Serving traffic arrives ove
 adapter the site binds leaves the same way, so egress is the absence of a device rather than a rule
 that could be wrong.
 
+## Suspending a Tenant
+
+`bastion tenant suspend acme` sets a flag in `bastion.yml` and keeps the sites, storage and
+certificates. A running bastion acts on it at the next `bastion reload`, and the management API
+reloads at once. Then three things are true:
+
+- the tenant's workerd and its adapter sockets are stopped, and `bastion up` skips it;
+- every name of its sites answers `503` with a short plain page and `Cache-Control: no-store`
+  before the request reaches workerd. The page names neither the tenant nor a reason;
+- the console and API of the box itself stay reachable.
+
+A request refused this way is not a view. It never enters the request window the usage report is
+built from, and the operator's JSON metrics count it as `suspended` among the refusals that belong
+to no site. Refusals made after routing, such as a per-tenant rate limit, are still recorded against the
+site.
+
+`bastion tenant resume acme` clears the flag, and the next reload starts the tenant again. Both
+commands are safe to repeat. `POST /api/tenants/:tenant/suspend` and `/resume` do the same for an
+operator session; a tenant-admin and an API token are refused.
+
+## Secrets Per Tenant
+
+Secrets live in a scope. `host` holds the box's own, such as the node key, and every secret stored
+before scopes existed. `tenant/<name>` holds one tenant's. A tenant's worker is given its own scope
+and nothing else: each secret becomes a text binding of the same name, and the host's secrets and
+every other tenant's are never in its configuration.
+
+```
+bastion secrets set SMTP_PASSWORD --tenant acme --value ...
+bastion secrets list --tenant acme
+bastion secrets rm SMTP_PASSWORD --tenant acme
+```
+
+Without `--tenant` a command acts on `host` and says so. Only the `file` and `kms` drivers hold
+tenant scopes. The default `keyring` driver and the `env` driver hold host secrets only and refuse
+`--tenant`, so set `drivers.secrets.driver: file` first.
+
+The `file` driver keeps each tenant's scope in a neighbouring file, `<path>.tenant-<name>`, sealed
+with a key derived from the same passphrase by HKDF-SHA256 with the scope as `info`. A tenant file
+copied over another tenant's, or over the host's, does not decrypt. The host file keeps the format
+it always had, so nothing migrates. The `kms` driver seals one blob per scope.
+
+A tenant secret's name is letters, digits and underscores and starts with a letter, because it
+becomes a binding. A name that another binding of the site already uses refuses the tenant's start.
+Secrets are read when a tenant starts, so `secrets set --tenant` marks that tenant out of date and
+`bastion reload` swaps it.
+
+What this does not do:
+
+- The tenant's generated `config.capnp` holds its secret values in the clear. It is written with
+  mode 0600 in the tenant's state directory, and in `isolated` mode it is copied into that tenant's
+  guest image.
+- The tenant's own code can read its own secrets, as with any Worker binding. There is no record of
+  those reads.
+- `bastion tenant rm` leaves the tenant's secrets file in place. Clear it with
+  `bastion secrets rm --tenant` first.
+- A tenant-admin may set, list and remove secrets in its own scope over the API, and cannot reach
+  the host scope or another tenant's.
+
 ## Platform Limits
 
 Standalone workerd enforces no isolate memory cap, no CPU limit, no subrequest cap and no startup
@@ -124,6 +185,12 @@ budget. bastion enforces what it can and declares the rest.
 
 The Cloudflare values are defaults and floors here. A configuration may raise any of them and may
 never lower one, because the site payload is optimised around them.
+
+Two different things carry the word limit. A tenant's `limits` (`cpu`, `memory`, `pids`) become a
+cgroup, and the kernel enforces that. The values under `runtime.limits` (`isolateMemory`,
+`startupMs`, `subrequests`, `alarmMs`) are declared and floor-checked: the validator refuses a value
+below the floor and nothing else reads them. workerd enforces none of the four, and bastion does not
+add a check of its own, so raising one changes no behaviour.
 
 ## Configuration
 
@@ -267,8 +334,10 @@ state directory rather than overwriting it.
 `bastion pair <url>#<claim token>` connects a box to a drupflare dashboard. The box holds one
 outbound WebSocket and sends signed status, findings, metrics, audit and usage reports. It never
 listens for the dashboard. Commands the dashboard sends wait for local approval unless the operator
-set that class to `auto`, and stateful commands always wait. The six actions are `health.observe`,
-`tenant.reload`, `site.deploy`, `site.add`, `site.rollback` and `backup.now`. The dashboard also sends the site id
+set that class to `auto`, and stateful and destructive commands always wait. The eleven actions are
+`health.observe`, `tenant.reload`, `site.deploy`, `site.add`, `site.rollback`, `backup.now`,
+`tenant.add`, `tenant.suspend`, `tenant.resume`, `tenant.limits` and `tenant.remove`. Removing a
+tenant is the one destructive action, and it refuses a tenant that still holds a site. The dashboard also sends the site id
 it holds for each host, which the usage report is keyed on, and `bastion pair status` lists them. `bastion pair --show-fields` lists
 everything that leaves the box, and `bastion unpair` stops it and leaves the box standalone.
 
