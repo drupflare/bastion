@@ -263,6 +263,12 @@ Limits are floors. The Cloudflare values are defaults here and a configuration m
 them and may never lower one, because the site payload is optimised around them. The validator
 refuses a lower value and names the floor.
 
+Those are the values under `runtime.limits`: `isolateMemory`, `startupMs`, `subrequests` and
+`alarmMs`. They are declared and floor-checked, and nothing enforces them. workerd applies none of
+the four and bastion has no check of its own, so raising one changes no behaviour. A tenant's own
+`limits` (`cpu`, `memory`, `pids`) are different: they become a cgroup and the kernel enforces
+them.
+
 ## Tenants
 
 <a id="tenants"></a>
@@ -274,6 +280,21 @@ primary node.
     bastion tenant add acme --cpu 2 --memory 4Gi --max-sites 40
     bastion tenant show acme
     bastion tenant list
+    bastion tenant suspend acme
+    bastion tenant resume acme
+
+`tenant suspend` sets a flag and keeps the sites, storage and certificates. It stops nothing by
+itself. A running bastion acts on the flag at the next `bastion reload`, which stops the tenant's
+workerd and its adapter sockets; `bastion up` skips a suspended tenant. From then on every name of
+the tenant's sites answers 503 with a short plain page and `Cache-Control: no-store`, before the
+request reaches workerd, and the page names neither the tenant nor a reason. The console and API of
+the box stay reachable. A request refused this way is not a view: it never enters the request
+window the usage report is built from, and the operator's JSON metrics count it as `suspended`
+among the refusals that belong to no site. Refusals made after routing, such as a per-tenant rate
+limit, are still recorded against the site. `tenant resume` clears the flag and the next reload
+starts the tenant again. Both are safe to repeat. The management API runs the same commands at
+`POST /api/tenants/:tenant/suspend` and `/resume`, reloads straight away, and refuses everyone
+but an operator session.
 
 `tenant show` prints the capability block with an enforcement point against each entry. Three
 capabilities are enforced in the generated workerd configuration and cannot be reached around:
@@ -772,6 +793,47 @@ disk is a set of blobs that need a call to someone else's service to open.
 The encrypted file driver is sealed until it is given a passphrase. Reads raise a typed error
 naming the seal rather than answering empty.
 
+### Scopes
+
+Every secret lives in a scope. `host` holds the box's own, such as the node key, and every secret
+stored before scopes existed. `tenant/<name>` holds one tenant's. Without `--tenant` a command
+acts on `host` and says so.
+
+    bastion secrets set SMTP_PASSWORD --tenant acme --value ...
+    bastion secrets list --tenant acme
+    bastion secrets rotate SMTP_PASSWORD --tenant acme --value ...
+    bastion secrets rm SMTP_PASSWORD --tenant acme
+
+Only the `file` and `kms` drivers hold tenant scopes. `keyring`, the default, and `env` hold
+host secrets only and refuse `--tenant`, because neither can list a scope and bastion cannot bind
+what it cannot list. Set `drivers.secrets.driver: file` to use them.
+
+The file driver keeps each tenant's scope in a neighbouring file, `<path>.tenant-<name>`, sealed
+with a key derived from the same passphrase by HKDF-SHA256 with the scope as `info`, and the scope
+is authenticated data too. A tenant file copied over another tenant's, or over the host's, does not
+decrypt. The host file keeps the format it always had, so nothing migrates. The kms driver seals
+one blob per scope.
+
+A tenant's worker is given its own scope and nothing else. Each secret becomes a text binding of
+the same name in that tenant's generated configuration, so its name is letters, digits and
+underscores and starts with a letter. A secret that shares a name with another binding of the site
+refuses the tenant's start rather than choosing one. The host's secrets and every other tenant's
+are never in the configuration. Secrets are read when a tenant starts: `secrets set --tenant`
+marks that tenant out of date, and `bastion reload` swaps it.
+
+What this does not do:
+
+- The generated `config.capnp` holds the tenant's secret values in the clear. It is written with
+  mode 0600 in the tenant's state directory, and in `isolated` mode copied into that tenant's
+  guest image.
+- The tenant's own code can read its own secrets, and nothing records those reads.
+- `bastion tenant rm` leaves the tenant's secrets file in place. Clear it with
+  `bastion secrets rm --tenant` first.
+
+Over the API, `GET`, `PUT` and `DELETE` on `/api/tenants/:tenant/secrets` reach one tenant's
+scope. A tenant-admin may use them for its own tenant and is refused any other, and the host-wide
+`/api/secrets` routes stay operator-only. None of them accept an API token.
+
 ## TLS
 
 <a id="tls"></a>
@@ -1122,10 +1184,11 @@ multi-tenant box is a interception capability against every client that trusted 
 ### Secrets a Site Needs
 
 Site secrets never go in `bastion.yml`. They go through the configured driver, which is the OS
-keyring by default:
+keyring by default. A secret a tenant's sites need goes in that tenant's scope, which needs the
+file or kms driver (see `bastion manual secrets`):
 
-    bastion secrets set SMTP_PASSWORD --value ...
-    bastion secrets list
+    bastion secrets set SMTP_PASSWORD --tenant acme --value ...
+    bastion secrets list --tenant acme
 
 `secrets get` is audited and the value never appears in a `--json` payload.
 
@@ -1339,13 +1402,26 @@ classes always wait, and a command that names a looser class than the box holds 
 treated as the stricter one. `bastion pair status` lists what is waiting; `pair approve` and
 `pair reject` record the decision and `serve` applies it and reports the result.
 
-A box answers to six actions and no others: `health.observe` (safe), `tenant.reload` and
-`site.deploy` (rebuild), and `site.add`, `site.rollback` and `backup.now` (stateful). Anything else,
-including removing a site or a tenant, is refused with `unsupported_action`. `site.add` runs
-`bastion site add` for a host and a bundle the command names, in the tenant it names or the first
-one. It answers success for a host that already holds the same bundle, refuses `site_exists` for a
-different one, and refuses `no_tenant` on a box with no tenant, because creating one is the
-operator's decision. It downloads the bundle, unpacks it and checks the tree before it writes any
+A box answers to eleven actions and no others: `health.observe` (safe), `tenant.reload` and
+`site.deploy` (rebuild), `site.add`, `site.rollback`, `backup.now`, `tenant.add`,
+`tenant.suspend`, `tenant.resume` and `tenant.limits` (stateful), and `tenant.remove`
+(destructive). Anything else, including removing a site, is refused with `unsupported_action`.
+The tenant actions run `bastion tenant add`, `suspend`, `resume`, `limits` and `rm`. A tenant
+may be named as typed or by the `h:` digest a box that hashes names shows the dashboard. Stateful
+and destructive commands always wait for you to approve them, so a tenant is never added or removed
+unattended. `tenant.suspend` and `tenant.resume` write the flag and then reload that tenant in
+the running process, so the change applies when you approve it. `tenant.remove` refuses a tenant that still holds a site (`tenant_not_empty`) and
+never deletes its state. `tenant.limits` refuses a ceiling below the sites a tenant holds
+(`below_site_count`). `tenant.add` answers success when the tenant exists with the same ceiling
+and `tenant_exists` when it does not.
+
+`site.add` runs `bastion site add` for a host and a bundle the command names, in the tenant it
+names. With no tenant named it uses the only tenant, answers `ambiguous_tenant` when the box holds
+several, and answers `no_tenant` when it holds none. It answers `unknown_tenant` for a name the
+box does not hold and `capacity-exceeded` when the tenant is at its `maxSites` ceiling, before it
+fetches anything. It answers success for a host that already holds the same bundle and refuses
+`site_exists` for a different one. Usage reports name the tenant on every site, and count only the
+requests the box served: one the front door refused is not a view. It downloads the bundle, unpacks it and checks the tree before it writes any
 configuration: an entry module must exist, and every module the entry imports by relative name must
 be in the archive. A bundle that fails the check or does not unpack is refused with
 `bundle_invalid` and nothing is written. The site serves after the next `bastion reload`.

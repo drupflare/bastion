@@ -13,21 +13,25 @@
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="resolveroute"><span class="tsd-kind-call-signature">resolveRoute</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">table</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/RouteTable.html" class="tsd-signature-type tsd-kind-interface">RouteTable</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">host</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">pathname</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../types/RouteOutcome.html" class="tsd-signature-type tsd-kind-type-alias">RouteOutcome</a><a href="#resolveroute" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="resolveroute"><span class="tsd-kind-call-signature">resolveRoute</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">table</span><span class="tsd-signature-symbol">:</span> <a href="../interfaces/RouteTable.html" class="tsd-signature-type tsd-kind-interface">RouteTable</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">host</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">pathname</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">live</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">LiveState</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../types/RouteOutcome.html" class="tsd-signature-type tsd-kind-type-alias">RouteOutcome</a><a href="#resolveroute" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Host to site to tenant, then the per-tenant route refusal.</p>
 <p>An unknown host is 404 rather than a default site: serving the wrong tenant's content under an
 unrecognised name is how a misconfigured DNS record becomes a data leak.</p>
+<p>A suspended tenant's site is 503 before anything else about the request is looked at. The table
+is built once at start and a suspension lands later, so the flag is asked of <code>live</code> on every
+request rather than copied into a route.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
 <li><span><span class="tsd-kind-parameter">table</span>: <a href="../interfaces/RouteTable.html" class="tsd-signature-type tsd-kind-interface">RouteTable</a></span></li>
 <li><span><span class="tsd-kind-parameter">host</span>: <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li>
-<li><span><span class="tsd-kind-parameter">pathname</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<li><span><span class="tsd-kind-parameter">pathname</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">live</span>: <span class="tsd-signature-type">LiveState</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="../types/RouteOutcome.html" class="tsd-signature-type tsd-kind-type-alias">RouteOutcome</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/drupflare/bastion/blob/e6cfa373ae31c51bd2e82c8ed5b1c4ba065cd0ac/core/src/front/router.ts#L89">core/src/front/router.ts:89</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/drupflare/bastion/blob/4263d1643b9f4caa827d32f99611835449f0d0da/core/src/front/router.ts#L102">core/src/front/router.ts:102</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

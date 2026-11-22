@@ -284,7 +284,7 @@ Documented in `bastion manual tenants`.
 
 ### `bastion tenant suspend <name>`
 
-stop a tenant and serve a maintenance page
+mark a tenant suspended; the next reload stops it and its sites answer 503
 
 | argument | required | meaning         |
 | -------- | -------- | --------------- |
@@ -623,7 +623,7 @@ Documented in `bastion manual backups`.
 
 ### `bastion secrets set <name>`
 
-store a secret
+store a secret in the host scope, or in one tenant s with --tenant
 
 | argument | required | meaning         |
 | -------- | -------- | --------------- |
@@ -632,6 +632,7 @@ store a secret
 | flag              | meaning                                                                     |
 | ----------------- | --------------------------------------------------------------------------- |
 | `--value <value>` | the value; prefer BASTION_SECRET_VALUE so it stays out of the shell history |
+| `--tenant <name>` | that tenant s scope; absent means the host                                  |
 
 Documented in `bastion manual secrets`.
 
@@ -643,11 +644,19 @@ read a secret; audited, and never echoed under --json
 | -------- | -------- | --------------- |
 | `name`   | yes      | the secret name |
 
+| flag              | meaning                                    |
+| ----------------- | ------------------------------------------ |
+| `--tenant <name>` | that tenant s scope; absent means the host |
+
 Documented in `bastion manual secrets`.
 
 ### `bastion secrets list`
 
-every secret name; never a value
+every secret name in a scope; never a value
+
+| flag              | meaning                                    |
+| ----------------- | ------------------------------------------ |
+| `--tenant <name>` | that tenant s scope; absent means the host |
 
 Documented in `bastion manual secrets`.
 
@@ -659,6 +668,10 @@ remove a secret
 | -------- | -------- | --------------- |
 | `name`   | yes      | the secret name |
 
+| flag              | meaning                                    |
+| ----------------- | ------------------------------------------ |
+| `--tenant <name>` | that tenant s scope; absent means the host |
+
 Documented in `bastion manual secrets`.
 
 ### `bastion secrets rotate <name>`
@@ -669,9 +682,10 @@ replace a secret and record the rotation
 | -------- | -------- | --------------- |
 | `name`   | yes      | the secret name |
 
-| flag              | meaning       |
-| ----------------- | ------------- |
-| `--value <value>` | the new value |
+| flag              | meaning                                    |
+| ----------------- | ------------------------------------------ |
+| `--value <value>` | the new value                              |
+| `--tenant <name>` | that tenant s scope; absent means the host |
 
 Documented in `bastion manual secrets`.
 
