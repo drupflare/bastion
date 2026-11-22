@@ -771,8 +771,19 @@ describe('the site map', () => {
 
 	it('announces a version that includes the frame, so the control plane sends it', async () => {
 		const { sentFrames } = await started();
-		const answer = JSON.parse(sentFrames[0]!) as { range: { max: { minor: number } } };
+		const answer = JSON.parse(sentFrames[0]!) as {
+			range: { min: { minor: number }; max: { minor: number } };
+		};
 		expect(answer.range.max.minor).toBeGreaterThanOrEqual(1);
+	});
+
+	it('announces the whole range from 1.0 to 1.2, so a control plane on 1.1 still agrees', async () => {
+		const { sentFrames } = await started();
+		const answer = JSON.parse(sentFrames[0]!) as {
+			range: { min: { major: number; minor: number }; max: { major: number; minor: number } };
+		};
+		expect(answer.range.min).toEqual({ major: 1, minor: 0 });
+		expect(answer.range.max).toEqual({ major: 1, minor: 2 });
 	});
 
 	it('stores the map the control plane sends right after ready and keeps it on disk', async () => {

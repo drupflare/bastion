@@ -126,7 +126,12 @@ function everyBody() {
 		'metrics.batch': metricsBody(input, window, analytics),
 		'audit.head': auditHeadBody(log),
 		'usage.report': usageBody(
-			{ nodeId: NODE_ID, now, siteIds: { 'www.example.edu': 'site_testsite0001' } },
+			{
+				nodeId: NODE_ID,
+				now,
+				siteIds: { 'www.example.edu': 'site_testsite0001' },
+				hashNames: false
+			},
 			hourly,
 			now - day
 		),
@@ -310,13 +315,19 @@ describe('what leaves the box', () => {
 			});
 		}
 		const body = usageBody(
-			{ nodeId: NODE_ID, now, siteIds: { 'www.example.edu': 'site_testsite0001' } },
+			{
+				nodeId: NODE_ID,
+				now,
+				siteIds: { 'www.example.edu': 'site_testsite0001' },
+				hashNames: false
+			},
 			analytics,
 			start
 		);
 		expect(body!.intervals).toEqual([
 			{
 				siteId: 'site_testsite0001',
+				tenant: 'acme',
 				start: new Date(start).toISOString().replace('.000Z', 'Z'),
 				end: new Date(start + hour).toISOString().replace('.000Z', 'Z'),
 				accuracy: 'exact',
@@ -326,7 +337,128 @@ describe('what leaves the box', () => {
 				settlement: 'open'
 			}
 		]);
-		expect(usageBody({ nodeId: NODE_ID, now, siteIds: {} }, analytics, start)).toBeNull();
+		expect(
+			usageBody({ nodeId: NODE_ID, now, siteIds: {}, hashNames: false }, analytics, start)
+		).toBeNull();
+	});
+
+	it('names the tenant on every interval, as a digest when the operator hashes names', () => {
+		const hour = 3_600_000;
+		const now = 1_790_000_000_000;
+		const start = Math.floor(now / hour) * hour - hour;
+		const analytics = new AnalyticsWindow(100);
+		for (const [tenant, site] of [
+			['acme', 'www.example.edu'],
+			['campus', 'docs.example.edu']
+		] as const) {
+			analytics.record({
+				at: start + 1000,
+				tenant,
+				site,
+				status: 200,
+				durationMs: 1,
+				bytes: 1,
+				cached: false,
+				refusal: null
+			});
+		}
+		const siteIds = {
+			'www.example.edu': 'site_testsite0001',
+			'docs.example.edu': 'site_testsite0002'
+		};
+		const named = usageBody(
+			{ nodeId: NODE_ID, now, siteIds, hashNames: false },
+			analytics,
+			start
+		);
+		expect(
+			(named!.intervals as { siteId: string; tenant: string }[]).map((entry) => [
+				entry.siteId,
+				entry.tenant
+			])
+		).toEqual([
+			['site_testsite0001', 'acme'],
+			['site_testsite0002', 'campus']
+		]);
+		const hashed = usageBody(
+			{ nodeId: NODE_ID, now, siteIds, hashNames: true },
+			analytics,
+			start
+		);
+		const tenants = (hashed!.intervals as { tenant: string }[]).map((entry) => entry.tenant);
+		expect(tenants).toEqual([nameOf('acme', NODE_ID, true), nameOf('campus', NODE_ID, true)]);
+		expect(JSON.stringify(hashed)).not.toContain('campus');
+		expect(nodeBodyOk('usage.report', hashed)).toBe(true);
+	});
+
+	it('counts only served requests: a request the front door refused is not a view', () => {
+		const hour = 3_600_000;
+		const now = 1_790_000_000_000;
+		const start = Math.floor(now / hour) * hour - hour;
+		const analytics = new AnalyticsWindow(100);
+		for (const refusal of [
+			null,
+			null,
+			'rate-limit-tenant',
+			'body-cap',
+			'upstream-unreachable'
+		]) {
+			analytics.record({
+				at: start + 1000,
+				tenant: 'acme',
+				site: 'www.example.edu',
+				status: refusal === null ? 200 : 429,
+				durationMs: 1,
+				bytes: 1,
+				cached: false,
+				refusal
+			});
+		}
+		const siteIds = { 'www.example.edu': 'site_testsite0001' };
+		const body = usageBody(
+			{ nodeId: NODE_ID, now, siteIds, hashNames: false },
+			analytics,
+			start
+		);
+		expect((body!.intervals as { views: number }[])[0]?.views).toBe(2);
+
+		const only = new AnalyticsWindow(100);
+		only.record({
+			at: start + 1000,
+			tenant: 'acme',
+			site: 'www.example.edu',
+			status: 429,
+			durationMs: 1,
+			bytes: 1,
+			cached: false,
+			refusal: 'rate-limit-tenant'
+		});
+		expect(
+			usageBody({ nodeId: NODE_ID, now, siteIds, hashNames: false }, only, start)
+		).toBeNull();
+	});
+
+	it('refuses a usage body whose tenant is empty or too long', () => {
+		const interval = {
+			siteId: 'site_testsite0001',
+			start: '2026-11-05T12:00:00Z',
+			end: '2026-11-05T13:00:00Z',
+			accuracy: 'exact',
+			views: 1,
+			lowerBound: 1,
+			observedViews: 1,
+			settlement: 'open'
+		};
+		const body = (tenant: string | undefined) => ({
+			reportId: 'usage_report_0001',
+			source: 'node',
+			sentAt: '2026-11-05T13:00:00Z',
+			intervals: [{ ...interval, ...(tenant === undefined ? {} : { tenant }) }]
+		});
+		expect(nodeBodyOk('usage.report', body(undefined))).toBe(true);
+		expect(nodeBodyOk('usage.report', body('acme'))).toBe(true);
+		expect(nodeBodyOk('usage.report', body(''))).toBe(false);
+		expect(nodeBodyOk('usage.report', body('x'.repeat(129)))).toBe(false);
 	});
 
 	it('finds a site by its lowercase host when the config spelled it with capitals', () => {
@@ -345,7 +477,12 @@ describe('what leaves the box', () => {
 			refusal: null
 		});
 		const body = usageBody(
-			{ nodeId: NODE_ID, now, siteIds: { 'www.example.edu': 'site_testsite0001' } },
+			{
+				nodeId: NODE_ID,
+				now,
+				siteIds: { 'www.example.edu': 'site_testsite0001' },
+				hashNames: false
+			},
 			analytics,
 			start
 		);
@@ -372,7 +509,12 @@ describe('what leaves the box', () => {
 			});
 		}
 		const body = usageBody(
-			{ nodeId: NODE_ID, now, siteIds: { 'www.example.edu': 'site_testsite0001' } },
+			{
+				nodeId: NODE_ID,
+				now,
+				siteIds: { 'www.example.edu': 'site_testsite0001' },
+				hashNames: false
+			},
 			analytics,
 			start
 		);

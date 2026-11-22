@@ -2,12 +2,14 @@ import {
 	buildSecrets,
 	CommandBook,
 	commandKey,
+	decide,
 	defaultContext,
 	EXIT,
 	LEAVES_THE_BOX,
 	loadConfig,
 	memoryFiles,
 	memoryIo,
+	nameOf,
 	NODE_KEY_SECRET,
 	PairStore,
 	scriptedRunner,
@@ -294,18 +296,24 @@ describe('bastion unpair', () => {
 describe('the actions a control plane may ask for', () => {
 	const executors = fleetExecutors(rig().ctx, {});
 
-	it('holds exactly six actions and none in the destructive class', () => {
+	it('holds exactly eleven actions and only tenant.remove is destructive', () => {
 		expect(Object.keys(executors).sort()).toEqual([
 			'backup.now',
 			'health.observe',
 			'site.add',
 			'site.deploy',
 			'site.rollback',
-			'tenant.reload'
+			'tenant.add',
+			'tenant.limits',
+			'tenant.reload',
+			'tenant.remove',
+			'tenant.resume',
+			'tenant.suspend'
 		]);
-		for (const executor of Object.values(executors)) {
-			expect(executor.class).not.toBe('destructive');
-		}
+		const destructive = Object.entries(executors)
+			.filter(([, executor]) => executor.class === 'destructive')
+			.map(([action]) => action);
+		expect(destructive).toEqual(['tenant.remove']);
 	});
 
 	it('puts the actions that change a site or the data in the stateful class', () => {
@@ -949,4 +957,331 @@ describe.skipIf(!process.env['BOX_BUNDLE_ARCHIVE'])('site.add with the real box 
 			rmSync(root, { recursive: true, force: true });
 		}
 	}, 120_000);
+});
+
+describe('tenant commands', () => {
+	const TWO = `${CONFIG}  - name: campus\n    sites: []\n`;
+	const TWO_SITES = CONFIG.replace(
+		'        bundle: ./payload.tar.gz\n',
+		'        bundle: ./payload.tar.gz\n      - host: b.example.edu\n        bundle: ./payload.tar.gz\n'
+	);
+
+	function boxWith(config: string): Rig {
+		const base = rig();
+		base.files.writeText('/srv/bastion.yml', config);
+		return base;
+	}
+
+	const tenants = (ctx: Context) => loadConfig(ctx, {}).config.tenants;
+
+	async function exec(ctx: Context, action: string, raw: Record<string, unknown>) {
+		const executor = fleetExecutors(ctx, {})[action]!;
+		return executor.run(executor.params(raw));
+	}
+
+	it('adds a tenant with a ceiling, and answers a resend of the same command with success', async () => {
+		const { ctx } = boxWith(CONFIG);
+		expect(await exec(ctx, 'tenant.add', { name: 'campus', maxSites: 5 })).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(tenants(ctx).find((tenant) => tenant.name === 'campus')?.limits?.maxSites).toBe(5);
+		expect(await exec(ctx, 'tenant.add', { name: 'campus', maxSites: 5 })).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(tenants(ctx)).toHaveLength(2);
+	});
+
+	it('refuses to add a tenant that exists with another ceiling', async () => {
+		const { ctx, files } = boxWith(CONFIG);
+		const before = files.readText('/srv/bastion.yml');
+		expect(await exec(ctx, 'tenant.add', { name: 'acme', maxSites: 9 })).toEqual({
+			ok: false,
+			code: 'tenant_exists'
+		});
+		expect(files.readText('/srv/bastion.yml')).toBe(before);
+	});
+
+	it('refuses tenant parameters that could be read as a flag or that the action does not take', () => {
+		const { ctx } = boxWith(CONFIG);
+		const all = fleetExecutors(ctx, {});
+		for (const name of ['--yes', 'Acme', '-x', 'a b', '', 7, 'h:zz']) {
+			for (const action of [
+				'tenant.add',
+				'tenant.remove',
+				'tenant.suspend',
+				'tenant.resume'
+			]) {
+				expect(() => all[action]!.params({ name }), `${action} ${String(name)}`).toThrow();
+			}
+		}
+		for (const maxSites of [0, -1, 1.5, '5', 100_001]) {
+			expect(() => all['tenant.add']!.params({ name: 'campus', maxSites })).toThrow();
+		}
+		expect(() => all['tenant.add']!.params({ name: 'campus', mode: 'x' })).toThrow(
+			/unexpected parameter/
+		);
+		expect(() => all['tenant.add']!.params({ name: 'h:0123456789abcdef01234567' })).toThrow();
+	});
+
+	it('removes an empty tenant and keeps the rest of the configuration', async () => {
+		const { ctx } = boxWith(TWO);
+		expect(await exec(ctx, 'tenant.remove', { name: 'campus' })).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(tenants(ctx).map((tenant) => tenant.name)).toEqual(['acme']);
+	});
+
+	it('will not remove a tenant that still holds a site, and writes nothing', async () => {
+		const { ctx, files } = boxWith(CONFIG);
+		const before = files.readText('/srv/bastion.yml');
+		expect(await exec(ctx, 'tenant.remove', { name: 'acme' })).toEqual({
+			ok: false,
+			code: 'tenant_not_empty'
+		});
+		expect(files.readText('/srv/bastion.yml')).toBe(before);
+	});
+
+	it('names an unknown tenant for every action that needs one', async () => {
+		const { ctx } = boxWith(CONFIG);
+		for (const action of ['tenant.remove', 'tenant.suspend', 'tenant.resume']) {
+			expect(await exec(ctx, action, { name: 'nobody' }), action).toEqual({
+				ok: false,
+				code: 'unknown_tenant'
+			});
+		}
+		expect(await exec(ctx, 'tenant.limits', { name: 'nobody', pids: 10 })).toEqual({
+			ok: false,
+			code: 'unknown_tenant'
+		});
+	});
+
+	it('is queued for the operator whatever the approval settings say, and no other tenant action is destructive', () => {
+		const { ctx } = boxWith(CONFIG);
+		const executors = fleetExecutors(ctx, {});
+		const config = {
+			...loadConfig(ctx, {}).config,
+			pairing: {
+				sendHostname: false,
+				hashNames: false,
+				commands: { safe: 'auto', rebuild: 'auto', stateful: 'auto', destructive: 'auto' }
+			}
+		} as Parameters<typeof decide>[0];
+		expect(decide(config, 'safe', executors['tenant.remove']!.class)).toEqual({
+			verdict: 'queue',
+			effectiveClass: 'destructive'
+		});
+		for (const action of ['tenant.add', 'tenant.suspend', 'tenant.resume', 'tenant.limits']) {
+			expect(decide(config, 'safe', executors[action]!.class)).toEqual({
+				verdict: 'queue',
+				effectiveClass: 'stateful'
+			});
+		}
+	});
+
+	it('suspends and resumes through the box commands and keeps the sites', async () => {
+		const { ctx } = boxWith(CONFIG);
+		expect(await exec(ctx, 'tenant.suspend', { name: 'acme' })).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(tenants(ctx)[0]?.suspended).toBe(true);
+		expect(tenants(ctx)[0]?.sites).toHaveLength(1);
+		expect(await exec(ctx, 'tenant.resume', { name: 'acme' })).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(tenants(ctx)[0]?.suspended).toBeUndefined();
+	});
+
+	it('reloads only the named tenant on a running box after it writes the suspend flag', async () => {
+		const { ctx } = boxWith(TWO);
+		const reloads: (string[] | undefined)[] = [];
+		const runtime = {
+			reload: async (only?: string[]) => {
+				reloads.push(only);
+				return { at: 0, swapped: [], failed: [] };
+			}
+		} as never;
+		const executors = fleetExecutors(ctx, {}, runtime);
+		const suspend = executors['tenant.suspend']!;
+		expect(await suspend.run(suspend.params({ name: 'campus' }))).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(tenants(ctx).find((tenant) => tenant.name === 'campus')?.suspended).toBe(true);
+		const resume = executors['tenant.resume']!;
+		await resume.run(resume.params({ name: 'campus' }));
+		expect(reloads).toEqual([['campus'], ['campus']]);
+	});
+
+	it('reports a tenant the reload could not apply as reload_failed', async () => {
+		const { ctx } = boxWith(CONFIG);
+		const runtime = {
+			reload: async () => ({
+				at: 0,
+				swapped: [],
+				failed: [{ tenant: 'acme', reason: 'did not start' }]
+			})
+		} as never;
+		const suspend = fleetExecutors(ctx, {}, runtime)['tenant.suspend']!;
+		expect(await suspend.run(suspend.params({ name: 'acme' }))).toEqual({
+			ok: false,
+			code: 'reload_failed'
+		});
+	});
+
+	it('sets the limits it is given and nothing else', async () => {
+		const { ctx } = boxWith(CONFIG);
+		expect(
+			await exec(ctx, 'tenant.limits', {
+				name: 'acme',
+				maxSites: 4,
+				memory: '512Mi',
+				cpu: '1.5',
+				pids: 200
+			})
+		).toEqual({ ok: true, code: null });
+		expect(tenants(ctx)[0]?.limits).toEqual({
+			maxSites: 4,
+			memory: 512 * 1024 * 1024,
+			cpu: '1.5',
+			pids: 200
+		});
+	});
+
+	it('refuses limits that name nothing, or that are not a size, a count or a core share', () => {
+		const { ctx } = boxWith(CONFIG);
+		const { params } = fleetExecutors(ctx, {})['tenant.limits']!;
+		expect(() => params({ name: 'acme' })).toThrow(/no limit/);
+		for (const bad of [
+			{ memory: '4 GB' },
+			{ memory: '--x' },
+			{ memory: 512 },
+			{ cpu: '--cpu' },
+			{ cpu: '1e3' },
+			{ pids: 0 },
+			{ pids: '5' },
+			{ maxSites: 0 },
+			{ extra: 1 }
+		]) {
+			expect(() => params({ name: 'acme', ...bad }), JSON.stringify(bad)).toThrow();
+		}
+	});
+
+	it('will not set a ceiling below the sites a tenant already holds', async () => {
+		const { ctx, files } = boxWith(TWO_SITES);
+		const before = files.readText('/srv/bastion.yml');
+		expect(await exec(ctx, 'tenant.limits', { name: 'acme', maxSites: 1 })).toEqual({
+			ok: false,
+			code: 'below_site_count'
+		});
+		expect(files.readText('/srv/bastion.yml')).toBe(before);
+	});
+
+	it('finds a tenant by the digest a box that hashes names shows the control plane', async () => {
+		const world = rig(claimed);
+		await run(world.ctx, ['pair', address, '--json']);
+		const ref = nameOf('acme', NODE_ID, true);
+		expect(await exec(world.ctx, 'tenant.suspend', { name: ref })).toEqual({
+			ok: true,
+			code: null
+		});
+		expect(tenants(world.ctx)[0]?.suspended).toBe(true);
+		expect(
+			await exec(world.ctx, 'tenant.suspend', { name: 'h:000000000000000000000000' })
+		).toEqual({ ok: false, code: 'unknown_tenant' });
+	});
+
+	it('returns no secret, path or message in any result', async () => {
+		const { ctx } = boxWith(CONFIG);
+		const results = [
+			await exec(ctx, 'tenant.add', { name: 'campus' }),
+			await exec(ctx, 'tenant.suspend', { name: 'campus' }),
+			await exec(ctx, 'tenant.remove', { name: 'acme' }),
+			await exec(ctx, 'tenant.remove', { name: 'campus' })
+		];
+		for (const result of results) {
+			expect(Object.keys(result).sort()).toEqual(['code', 'ok']);
+			expect(result.code === null || /^[A-Za-z0-9._-]{1,64}$/.test(result.code)).toBe(true);
+		}
+	});
+});
+
+describe('site.add and its tenant', () => {
+	const HOST = 'new.example.edu';
+	const PATH = '/srv/payload-1.tar.gz';
+	const TWO = `${CONFIG}  - name: campus\n    sites: []\n`;
+	const NONE = 'version: 1\nmode: solo\nstate: /var/lib/bastion\ntenants: []\n';
+	const FULL = CONFIG.replace('    sites:\n', '    limits:\n      maxSites: 1\n    sites:\n');
+
+	function boxWith(config: string) {
+		const base = rig();
+		base.files.writeText('/srv/bastion.yml', config);
+		base.files.writeText(PATH, 'archive');
+		const runner = scriptedRunner({
+			tar: (args) => {
+				const dest = args[args.indexOf('-C') + 1]!;
+				base.files.writeText(`${dest}/site.js`, 'export default{}');
+				return { code: 0, stdout: '', stderr: '' };
+			}
+		});
+		return { ...base, ctx: { ...base.ctx, runner } };
+	}
+
+	const add = (ctx: Context, extra: Record<string, unknown> = {}) => {
+		const executor = fleetExecutors(ctx, {})['site.add']!;
+		return executor.run(executor.params({ host: HOST, bundle: PATH, ...extra }));
+	};
+
+	it('answers ambiguous_tenant when two tenants exist and none is named, and never takes the first', async () => {
+		const { ctx, files } = boxWith(TWO);
+		const before = files.readText('/srv/bastion.yml');
+		expect(await add(ctx)).toEqual({ ok: false, code: 'ambiguous_tenant' });
+		expect(files.readText('/srv/bastion.yml')).toBe(before);
+		const runner = ctx.runner as ReturnType<typeof scriptedRunner>;
+		expect(runner.calls.find((call) => call.command === 'tar')).toBeUndefined();
+	});
+
+	it('adds to the named tenant when two exist', async () => {
+		const { ctx } = boxWith(TWO);
+		expect(await add(ctx, { tenant: 'campus' })).toEqual({ ok: true, code: null });
+		const config = loadConfig(ctx, {}).config;
+		expect(config.tenants.find((tenant) => tenant.name === 'campus')?.sites[0]?.host).toBe(
+			HOST
+		);
+		expect(config.tenants.find((tenant) => tenant.name === 'acme')?.sites).toHaveLength(1);
+	});
+
+	it('uses the one tenant when exactly one exists and none is named', async () => {
+		const { ctx } = boxWith(CONFIG);
+		expect(await add(ctx)).toEqual({ ok: true, code: null });
+		expect(loadConfig(ctx, {}).config.tenants[0]?.sites.map((site) => site.host)).toContain(
+			HOST
+		);
+	});
+
+	it('answers no_tenant for a box with none and unknown_tenant for a name it does not hold', async () => {
+		expect(await add(boxWith(NONE).ctx)).toEqual({ ok: false, code: 'no_tenant' });
+		expect(await add(boxWith(TWO).ctx, { tenant: 'nobody' })).toEqual({
+			ok: false,
+			code: 'unknown_tenant'
+		});
+	});
+
+	it('enforces the tenant ceiling on the fleet path, before anything is fetched', async () => {
+		const { ctx, files } = boxWith(FULL);
+		const before = files.readText('/srv/bastion.yml');
+		expect(await add(ctx)).toEqual({ ok: false, code: 'capacity-exceeded' });
+		expect(files.readText('/srv/bastion.yml')).toBe(before);
+		const runner = ctx.runner as ReturnType<typeof scriptedRunner>;
+		expect(runner.calls.find((call) => call.command === 'tar')).toBeUndefined();
+	});
+
+	it('still answers success for a site the box already holds, even with several tenants', async () => {
+		const { ctx } = boxWith(TWO.replace('./payload.tar.gz', PATH));
+		expect(await add(ctx, { host: 'www.example.edu' })).toEqual({ ok: true, code: null });
+	});
 });

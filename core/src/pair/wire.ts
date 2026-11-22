@@ -16,7 +16,7 @@ import {
  * both directions, which is what keeps it from drifting.
  */
 
-export const FLEET_LINK_VERSION = { major: 1, minor: 1 } as const;
+export const FLEET_LINK_VERSION = { major: 1, minor: 2 } as const;
 export const MAX_SITE_MAP = 1000;
 export const FLEET_TS_WINDOW_MS = 5 * 60_000;
 
@@ -114,7 +114,12 @@ export const LEAVES_THE_BOX: readonly LeavingField[] = [
 	{ type: 'usage.report', field: 'reportId', description: 'The usage report id.' },
 	{ type: 'usage.report', field: 'source', description: 'The reporting component.' },
 	{ type: 'usage.report', field: 'sentAt', description: 'When the report was sent.' },
-	{ type: 'usage.report', field: 'intervals', description: 'Hourly view counts per site.' },
+	{
+		type: 'usage.report',
+		field: 'intervals',
+		description:
+			'Hourly view counts per site, with the tenant name, hashed if the operator chooses.'
+	},
 	{
 		type: 'command.result',
 		field: 'opId',
@@ -310,6 +315,7 @@ function usageIntervalOk(value: unknown): boolean {
 	const { accuracy, views, lowerBound } = value;
 	if (
 		!matches(value.siteId, SITE_ID) ||
+		!(value.tenant === undefined || isText(value.tenant, 1, 128)) ||
 		!isIso(value.start) ||
 		!isIso(value.end) ||
 		!['exact', 'estimated', 'unaccounted'].includes(accuracy as string) ||

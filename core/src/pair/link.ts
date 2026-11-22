@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { AuditLog } from '../audit/log';
+import { DEFAULT_PAIRING } from '../config/defaults';
 import type { BastionConfig } from '../config/types';
 import type { Context } from '../context';
 import type { AnalyticsWindow } from '../observe/analytics';
@@ -82,6 +83,8 @@ export interface LinkDeps {
 	state: string;
 	secrets: SecretStore;
 	executors: Executors;
+	/** the configuration as it is on disk now, so a tenant a command added shows in the next report */
+	reread?: () => BastionConfig | null;
 	/** the request window `serve` holds; absent means no metrics or usage are sent */
 	analytics?: AnalyticsWindow;
 	connect?: Connect;
@@ -145,7 +148,7 @@ export class FleetLink {
 	private input(nodeId: string): FieldInput {
 		return {
 			ctx: this.deps.ctx,
-			config: this.deps.config,
+			config: this.deps.reread?.() ?? this.deps.config,
 			state: this.deps.state,
 			nodeId,
 			...(this.deps.hostname === undefined ? {} : { hostname: this.deps.hostname }),
@@ -546,7 +549,12 @@ export class FleetLink {
 			}
 			if (now - (sent['usage.report'] ?? 0) >= USAGE_EVERY_MS) {
 				const body = usageBody(
-					{ nodeId: record.nodeId, now, siteIds: record.siteIds },
+					{
+						nodeId: record.nodeId,
+						now,
+						siteIds: record.siteIds,
+						hashNames: (input.config.pairing ?? DEFAULT_PAIRING).hashNames
+					},
 					analytics,
 					sent['usage.report'] ?? now - USAGE_EVERY_MS
 				);

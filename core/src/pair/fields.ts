@@ -186,7 +186,13 @@ const HOUR_MS = 3_600_000;
  * `sites` frame from the control plane, so no interval is built before the first one.
  */
 export function usageBody(
-	input: { nodeId: string; now: number; siteIds: Record<string, string> },
+	input: {
+		nodeId: string;
+		now: number;
+		siteIds: Record<string, string>;
+		/** whether the operator hashes names, which the tenant of an interval follows */
+		hashNames: boolean;
+	},
 	analytics: AnalyticsWindow,
 	since: number
 ) {
@@ -197,15 +203,21 @@ export function usageBody(
 	const full = analytics.size >= analytics.limit;
 	const intervals: Record<string, unknown>[] = [];
 	for (let start = first; start < end; start += HOUR_MS) {
-		const bySite = new Map<string, number>();
+		const bySite = new Map<string, { views: number; tenant: string }>();
 		for (const sample of analytics.within({ from: start, to: start + HOUR_MS - 1 })) {
-			bySite.set(sample.site, (bySite.get(sample.site) ?? 0) + 1);
+			// a request the front door refused (rate limit, body cap, unreachable upstream, suspended)
+			// was never served, so it is not a view
+			if (sample.refusal !== null) continue;
+			const held = bySite.get(sample.site);
+			if (held === undefined) bySite.set(sample.site, { views: 1, tenant: sample.tenant });
+			else held.views += 1;
 		}
-		for (const [host, views] of bySite) {
+		for (const [host, { views, tenant }] of bySite) {
 			const siteId = input.siteIds[host] ?? input.siteIds[host.toLowerCase()];
 			if (siteId === undefined) continue;
 			intervals.push({
 				siteId,
+				...(tenant === '' ? {} : { tenant: nameOf(tenant, input.nodeId, input.hashNames) }),
 				start: iso(start),
 				end: iso(start + HOUR_MS),
 				accuracy: full && oldest > start ? 'estimated' : 'exact',
