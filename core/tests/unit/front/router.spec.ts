@@ -3,6 +3,7 @@ import { defaultConfig } from '../../../src/config/defaults';
 import type { BastionConfig } from '../../../src/config/types';
 import {
 	DIAGNOSTIC_ROUTES,
+	SUSPENDED_REASON,
 	isDiagnosticPath,
 	normaliseHost,
 	resolveRoute,
@@ -100,5 +101,46 @@ describe('resolveRoute', () => {
 	it('refuses per tenant, so one tenant turning it on does not open another', () => {
 		expect(resolveRoute(table, 'lab.example.edu', '/sql').ok).toBe(true);
 		expect(resolveRoute(table, 'www.example.edu', '/sql').ok).toBe(false);
+	});
+
+	describe('a suspended tenant', () => {
+		const suspended = new Set<string>();
+		const live = { suspended: (tenant: string) => suspended.has(tenant) };
+
+		it('is 503 for every one of its names, and no other tenant is touched', () => {
+			suspended.clear();
+			suspended.add('acme');
+			expect(resolveRoute(table, 'www.example.edu', '/', live)).toMatchObject({
+				ok: false,
+				status: 503,
+				reason: SUSPENDED_REASON
+			});
+			expect(resolveRoute(table, 'lab.example.edu', '/', live).ok).toBe(true);
+		});
+
+		it('is read on every request, so a suspension after the table was built lands', () => {
+			suspended.clear();
+			expect(resolveRoute(table, 'www.example.edu', '/', live).ok).toBe(true);
+			suspended.add('acme');
+			expect(resolveRoute(table, 'www.example.edu', '/', live).ok).toBe(false);
+			suspended.delete('acme');
+			expect(resolveRoute(table, 'www.example.edu', '/', live).ok).toBe(true);
+		});
+
+		it('is 503 before the diagnostic refusal, so the answer does not vary by path', () => {
+			suspended.clear();
+			suspended.add('acme');
+			expect(resolveRoute(table, 'www.example.edu', '/sql', live)).toMatchObject({
+				status: 503
+			});
+		});
+
+		it('does not turn an unknown host into a 503', () => {
+			suspended.clear();
+			suspended.add('acme');
+			expect(resolveRoute(table, 'other.example.edu', '/', live)).toMatchObject({
+				status: 404
+			});
+		});
 	});
 });

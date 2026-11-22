@@ -358,6 +358,45 @@ describe.skipIf(reason !== null)(`tenant isolation (${reason ?? 'enabled'})`, ()
 		});
 	});
 
+	/**
+	 * A suspension has to stop traffic and the process, not only set a flag.
+	 *
+	 * The flag used to be written and read by nothing at runtime, so a suspended tenant kept its
+	 * workerd and kept answering until someone restarted the box.
+	 */
+	describe('suspending a tenant', () => {
+		let neighbour: string[] = [];
+
+		it('stops that tenant s runtime on reload and leaves the other on its own process', async () => {
+			neighbour = await heldBy('beta');
+			await bastion('tenant suspend acme');
+			const answer = await bastion('reload');
+			expect(answer.code).toBe(0);
+			expect(answer.out).toMatch(/stopped\s+acme/);
+			await inside('sleep 2');
+			expect(await runtimeProcesses()).toBe(1);
+			expect(await heldBy('beta')).toEqual(neighbour);
+		});
+
+		it('answers its site with a 503 that carries nothing of the worker s', async () => {
+			const answer = await served('www.acme.edu');
+			expect(answer.out).toContain('503');
+			expect(answer.out).not.toContain('from acme');
+		});
+
+		it('keeps serving the other tenant', async () => {
+			expect((await served('www.beta.edu')).out).toContain('200 beta');
+		});
+
+		it('starts the tenant again on resume and reload', async () => {
+			await bastion('tenant resume acme');
+			expect((await bastion('reload')).code).toBe(0);
+			await inside('sleep 4');
+			expect(await runtimeProcesses()).toBe(2);
+			expect((await served('www.acme.edu')).out).toContain('200 acme');
+		});
+	});
+
 	describe('stopping', () => {
 		it('stops both tenants, not just the first', async () => {
 			expect((await bastion('down')).code).toBe(0);

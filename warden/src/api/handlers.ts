@@ -92,6 +92,23 @@ function assertOwns(ctx: Context, globals: Globals, host: string, tenant: string
 	}
 }
 
+/**
+ * Refuses a tenant name in a path that is not the principal's own.
+ *
+ * Same reason as {@link assertOwns}: the name comes from the path, authorization saw only the
+ * action, and a tenant-admin addressing `/api/tenants/other/secrets` must get a refusal rather
+ * than another tenant's scope. An operator has no tenant of its own and reaches any.
+ */
+function assertOwnsTenant(tenant: string | null, named: string): string {
+	if (tenant !== null && tenant !== named) {
+		throw new BastionError(
+			'capability-refused',
+			`that credential is scoped to ${tenant} and cannot reach ${named}`
+		);
+	}
+	return named;
+}
+
 export function implementations(globals: Globals): Record<string, RouteImpl> {
 	/** the host a site-addressed route acts on, checked against the principal before it is used */
 	const owned = (input: Input, host: string): string => {
@@ -159,6 +176,43 @@ export function implementations(globals: Globals): Record<string, RouteImpl> {
 		},
 		'DELETE /api/tenants/:tenant': {
 			argv: ({ params }) => ['tenant', 'rm', params.tenant as string, '--yes']
+		},
+		'POST /api/tenants/:tenant/suspend': {
+			argv: ({ params }) => ['tenant', 'suspend', params.tenant as string]
+		},
+		'POST /api/tenants/:tenant/resume': {
+			argv: ({ params }) => ['tenant', 'resume', params.tenant as string]
+		},
+		'GET /api/tenants/:tenant/secrets': {
+			argv: ({ params, tenant }) => [
+				'secrets',
+				'list',
+				'--tenant',
+				assertOwnsTenant(tenant, params.tenant as string)
+			]
+		},
+		'PUT /api/tenants/:tenant/secrets/:name': {
+			argv: async ({ params, tenant, request }) => {
+				const body = await readBody(request);
+				return [
+					'secrets',
+					'set',
+					params.name as string,
+					'--tenant',
+					assertOwnsTenant(tenant, params.tenant as string),
+					'--value',
+					need(body, 'value')
+				];
+			}
+		},
+		'DELETE /api/tenants/:tenant/secrets/:name': {
+			argv: ({ params, tenant }) => [
+				'secrets',
+				'rm',
+				params.name as string,
+				'--tenant',
+				assertOwnsTenant(tenant, params.tenant as string)
+			]
 		},
 		'GET /api/sites': {
 			argv: () => ['site', 'list'],
@@ -329,7 +383,11 @@ export function apiHandlers(globals: Globals): Record<string, ApiHandler> {
 				);
 			}
 			if (parsed === null) {
-				throw new BastionError('internal', `${argv.join(' ')} printed nothing to parse`);
+				// the value of --value is a secret on the routes that set one, so it is never echoed
+				const shown = argv.map((word, at) =>
+					argv[at - 1] === '--value' ? '(redacted)' : word
+				);
+				throw new BastionError('internal', `${shown.join(' ')} printed nothing to parse`);
 			}
 			return narrow(parsed);
 		};

@@ -3,10 +3,18 @@ import { chooseEncoding, compress, type CompressionPolicy } from './compress';
 import { applyHeaders, defaultResponseHeaders } from './headers';
 import { ConnectionCounter, RateLimiter } from './ratelimit';
 import { redirectFor, redirectResponse } from './redirect';
-import { resolveRoute, type Route, type RouteTable } from './router';
+import {
+	resolveRoute,
+	SUSPENDED_REASON,
+	type LiveState,
+	type Route,
+	type RouteTable
+} from './router';
 
 export interface FrontDeps {
 	table: RouteTable;
+	/** the state that moves after start, such as a tenant being suspended */
+	live?: LiveState;
 	trust: TrustPolicy;
 	perIp: RateLimiter;
 	perTenant: RateLimiter;
@@ -96,8 +104,18 @@ export async function handleRequest(
 		};
 	}
 
-	const outcome = resolveRoute(deps.table, request.headers.get('host'), url.pathname);
+	const outcome = resolveRoute(deps.table, request.headers.get('host'), url.pathname, deps.live);
 	if (!outcome.ok) {
+		// the body names neither the tenant nor why: a visitor learns the site is unavailable and
+		// nothing about who runs it. No route is returned, so the request is not recorded as a view
+		if (outcome.status === 503) {
+			return {
+				response: refuse(503, 'this site is unavailable', { 'cache-control': 'no-store' }),
+				route: null,
+				client,
+				refusal: SUSPENDED_REASON
+			};
+		}
 		return {
 			response: refuse(outcome.status, outcome.reason),
 			route: null,

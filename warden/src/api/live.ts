@@ -23,7 +23,30 @@ export function liveHandlers(
 	/** the command-backed map, for the representations that are still a command */
 	fallback: Record<string, ApiHandler>
 ): Record<string, ApiHandler> {
+	/**
+	 * Suspending writes the flag through the command and then reloads this process, so the route
+	 * answers after the front door has started refusing and the process has been stopped. The
+	 * command alone would leave the tenant serving until the next sweep.
+	 */
+	const suspension = (action: 'suspend' | 'resume'): ApiHandler => {
+		const key = `POST /api/tenants/:tenant/${action}`;
+		return async (input) => {
+			const written = await fallback[key]?.(input);
+			const outcome = await runtime.reload([input.params.tenant as string]);
+			return {
+				...(written as object),
+				applied: {
+					stopped: outcome.stopped ?? [],
+					swapped: outcome.swapped,
+					failed: outcome.failed
+				}
+			};
+		};
+	};
+
 	return {
+		'POST /api/tenants/:tenant/suspend': suspension('suspend'),
+		'POST /api/tenants/:tenant/resume': suspension('resume'),
 		/**
 		 * Two representations of one route, chosen by `Accept`.
 		 *

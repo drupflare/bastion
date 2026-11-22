@@ -38,15 +38,48 @@ function replaceTenant(
 // #region tenants
 
 /**
- * Stops a tenant and keeps everything it owns.
+ * Sets or clears a tenant's `suspended` flag in the configuration file and nothing else.
+ *
+ * The flag is the whole state: the running process reads it, so this changes no process by
+ * itself. Idempotent, and `changed` says whether the file moved. Exported so the fleet link and
+ * the management API call the code the command calls.
+ */
+export function setTenantSuspended(
+	ctx: Context,
+	globals: Globals,
+	name: string,
+	suspended: boolean
+): { tenant: string; suspended: boolean; changed: boolean; sites: number; path?: string } {
+	const loaded = load(ctx, globals);
+	const tenant = tenantOrRefuse(loaded, name);
+	const sites = tenant.sites.length;
+	if ((tenant.suspended === true) === suspended) {
+		return { tenant: name, suspended, changed: false, sites };
+	}
+	const path = write(
+		ctx,
+		globals,
+		loaded,
+		replaceTenant(loaded, name, ({ suspended: _was, ...rest }) =>
+			suspended ? { ...rest, suspended: true } : rest
+		)
+	);
+	return { tenant: name, suspended, changed: true, sites, path };
+}
+
+/**
+ * Suspends a tenant and keeps everything it owns.
  *
  * The distinction from `tenant rm` is the whole command: suspending keeps the sites, the storage
  * and the certificates, so resuming is one word rather than a restore.
+ *
+ * Writing the flag stops nothing by itself. A running `bastion serve` stops the tenant's process
+ * and starts answering its sites with a 503 when it next reloads; `bastion up` skips a suspended
+ * tenant outright. The management API reloads the moment it suspends, so only this command waits.
  */
 export function runTenantSuspend(ctx: Context, globals: Globals, name: string): void {
-	const loaded = load(ctx, globals);
-	const tenant = tenantOrRefuse(loaded, name);
-	if (tenant.suspended === true) {
+	const result = setTenantSuspended(ctx, globals, name, true);
+	if (!result.changed) {
 		emit(
 			ctx,
 			globals,
@@ -55,30 +88,24 @@ export function runTenantSuspend(ctx: Context, globals: Globals, name: string): 
 		);
 		return;
 	}
-	const path = write(
-		ctx,
-		globals,
-		loaded,
-		replaceTenant(loaded, name, (entry) => ({ ...entry, suspended: true }))
-	);
-	emit(ctx, globals, { tenant: name, suspended: true, changed: true, path }, () =>
+	emit(ctx, globals, { tenant: name, suspended: true, changed: true, path: result.path }, () =>
 		[
 			kv([
 				['suspended', name],
-				['sites', String(tenant.sites.length)],
+				['sites', String(result.sites)],
 				['state', 'kept']
 			]),
 			'',
-			`its sites stop answering on the next \`bastion reload\`. Resume with ` +
+			`a running bastion keeps serving ${name} until \`bastion reload\`. The reload stops ` +
+				`its process and answers its sites with a 503. Resume with ` +
 				`\`bastion tenant resume ${name}\``
 		].join('\n')
 	);
 }
 
 export function runTenantResume(ctx: Context, globals: Globals, name: string): void {
-	const loaded = load(ctx, globals);
-	const tenant = tenantOrRefuse(loaded, name);
-	if (tenant.suspended !== true) {
+	const result = setTenantSuspended(ctx, globals, name, false);
+	if (!result.changed) {
 		emit(
 			ctx,
 			globals,
@@ -87,16 +114,10 @@ export function runTenantResume(ctx: Context, globals: Globals, name: string): v
 		);
 		return;
 	}
-	const path = write(
-		ctx,
-		globals,
-		loaded,
-		replaceTenant(loaded, name, ({ suspended: _was, ...rest }) => rest)
-	);
 	emit(
 		ctx,
 		globals,
-		{ tenant: name, suspended: false, changed: true, path },
+		{ tenant: name, suspended: false, changed: true, path: result.path },
 		() => `${name} resumed; run \`bastion reload\` to start it`
 	);
 }

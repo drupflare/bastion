@@ -789,12 +789,15 @@ export {
 	type CommandOutcome
 } from './pair/wire';
 export {
+	HOST_SCOPE,
 	buildSecrets,
 	envSecrets,
 	fileSecrets,
 	keyringSecrets,
 	kmsSecrets,
 	redact,
+	tenantOfScope,
+	tenantScope,
 	type KmsClient,
 	type SecretClients,
 	type SecretRef,
@@ -806,6 +809,7 @@ export {
 	RUNTIME_DIGEST,
 	RUNTIME_PIDFILE,
 	Runtime,
+	markStale,
 	tenantDigest,
 	type ReloadOutcome,
 	type RuntimeOptions,

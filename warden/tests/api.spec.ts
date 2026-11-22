@@ -54,14 +54,17 @@ interface Answer {
 	body: { ok?: boolean; result?: unknown; error?: { code: string; message: string } };
 }
 
-function harness(role: 'operator' | 'tenant-admin' | 'tenant-viewer' = 'operator') {
-	const files = memoryFiles({ '/srv/bastion.yml': CONFIG });
+function harness(
+	role: 'operator' | 'tenant-admin' | 'tenant-viewer' = 'operator',
+	over: { config?: string; env?: Record<string, string> } = {}
+) {
+	const files = memoryFiles({ '/srv/bastion.yml': over.config ?? CONFIG });
 	const ctx: Context = {
 		io: memoryIo(),
 		files,
 		runner: scriptedRunner(),
 		fetch: () => Promise.reject(new Error('no network in the gate lane')),
-		env: { BASTION_TEST: '1' },
+		env: { BASTION_TEST: '1', ...(over.env ?? {}) },
 		cwd: '/srv',
 		platform: 'linux',
 		now: () => Date.UTC(2026, 8, 22)
@@ -121,6 +124,16 @@ const SAMPLE: Record<string, { path: string; body?: unknown }> = {
 	'GET /api/tenants': { path: '/api/tenants' },
 	'POST /api/tenants': { path: '/api/tenants', body: { name: 'gamma' } },
 	'DELETE /api/tenants/:tenant': { path: '/api/tenants/beta' },
+	'POST /api/tenants/:tenant/suspend': { path: '/api/tenants/beta/suspend', body: {} },
+	'POST /api/tenants/:tenant/resume': { path: '/api/tenants/beta/resume', body: {} },
+	'GET /api/tenants/:tenant/secrets': { path: '/api/tenants/acme/secrets' },
+	'PUT /api/tenants/:tenant/secrets/:name': {
+		path: '/api/tenants/acme/secrets/SMTP_PASSWORD',
+		body: { value: 'hunter2' }
+	},
+	'DELETE /api/tenants/:tenant/secrets/:name': {
+		path: '/api/tenants/acme/secrets/SMTP_PASSWORD'
+	},
 	'GET /api/sites': { path: '/api/sites' },
 	'POST /api/sites': {
 		path: '/api/sites',
@@ -423,5 +436,149 @@ describe('the shape the dashboard reads', () => {
 		const { call } = harness();
 		const result = (await call('GET', '/api/cluster')).body.result as { nodes: unknown[] };
 		expect(result.nodes).toEqual([]);
+	});
+});
+
+/**
+ * Suspending and a tenant s own secrets, through the handler map.
+ *
+ * The suspend routes run the same command the CLI does; the process-level effect (stopping the
+ * tenant and refusing at the front door) is the runtime s and is covered in `core`.
+ */
+describe('suspending a tenant over the api', () => {
+	it('suspends for an operator, and says the second call changed nothing', async () => {
+		const { call, files } = harness();
+		const first = await call('POST', '/api/tenants/beta/suspend', {});
+		const second = await call('POST', '/api/tenants/beta/suspend', {});
+		expect(first.status).toBe(200);
+		expect(first.body.result).toMatchObject({ tenant: 'beta', suspended: true, changed: true });
+		expect(second.status).toBe(200);
+		expect(second.body.result).toMatchObject({ suspended: true, changed: false });
+		const written = files.readText('/srv/bastion.yml');
+		expect(written.slice(written.indexOf('name: beta'))).toContain('suspended');
+	});
+
+	it('resumes, and clears the flag', async () => {
+		const { call, files } = harness();
+		await call('POST', '/api/tenants/beta/suspend', {});
+		const resumed = await call('POST', '/api/tenants/beta/resume', {});
+		expect(resumed.body.result).toMatchObject({ suspended: false, changed: true });
+		expect(files.readText('/srv/bastion.yml')).not.toContain('suspended');
+	});
+
+	it('is refused for a tenant admin, even for its own tenant', async () => {
+		const { call } = harness('tenant-admin');
+		expect((await call('POST', '/api/tenants/acme/suspend', {})).status).toBe(403);
+		expect((await call('POST', '/api/tenants/acme/resume', {})).status).toBe(403);
+	});
+
+	it('is refused for an api token, because it needs a session', async () => {
+		const { ctx, tokens } = harness();
+		const deps: ApiDeps = {
+			config: { state: '/var/lib/bastion' } as ApiDeps['config'],
+			sessions: new SessionStore(ctx),
+			tokens,
+			origin: ORIGIN,
+			handlers: apiHandlers({ config: '/srv/bastion.yml' })
+		};
+		const secret = tokens.create('ci', 'operator', null).secret;
+		const answer = await handleApi(
+			ctx,
+			new Request(`${ORIGIN}/api/tenants/beta/suspend`, {
+				method: 'POST',
+				headers: { authorization: `Bearer ${secret}` }
+			}),
+			deps
+		);
+		expect(answer.status).toBe(403);
+	});
+
+	it('answers 400 for a tenant that does not exist', async () => {
+		const { call } = harness();
+		expect((await call('POST', '/api/tenants/ghost/suspend', {})).status).toBe(400);
+	});
+});
+
+describe('a tenant s secrets over the api', () => {
+	const FILE_CONFIG = CONFIG.replace(
+		'version: 1',
+		'version: 1\ndrivers:\n  secrets:\n    driver: file'
+	);
+	const env = { BASTION_SECRET_PASSPHRASE: 'a passphrase' };
+	const own = (role: 'operator' | 'tenant-admin' | 'tenant-viewer' = 'tenant-admin') =>
+		harness(role, { config: FILE_CONFIG, env });
+
+	it('lets a tenant admin set, list and remove its own', async () => {
+		const { call } = own();
+		const put = await call('PUT', '/api/tenants/acme/secrets/SMTP_PASSWORD', {
+			value: 'hunter2'
+		});
+		expect(put.status, JSON.stringify(put.body)).toBe(200);
+		const list = await call('GET', '/api/tenants/acme/secrets');
+		const names = (list.body.result as { secrets: { name: string }[] }).secrets.map(
+			(s) => s.name
+		);
+		expect(names).toEqual(['SMTP_PASSWORD']);
+		expect((await call('DELETE', '/api/tenants/acme/secrets/SMTP_PASSWORD')).status).toBe(200);
+		const after = await call('GET', '/api/tenants/acme/secrets');
+		expect((after.body.result as { secrets: unknown[] }).secrets).toEqual([]);
+	});
+
+	it('never puts the value in an answer', async () => {
+		const { call } = own();
+		const put = await call('PUT', '/api/tenants/acme/secrets/SMTP_PASSWORD', {
+			value: 'hunter2'
+		});
+		const list = await call('GET', '/api/tenants/acme/secrets');
+		expect(JSON.stringify([put.body, list.body])).not.toContain('hunter2');
+	});
+
+	it('refuses a tenant admin naming another tenant, on every verb', async () => {
+		const { call } = own();
+		for (const [method, path, body] of [
+			['GET', '/api/tenants/beta/secrets', undefined],
+			['PUT', '/api/tenants/beta/secrets/SMTP_PASSWORD', { value: 'x' }],
+			['DELETE', '/api/tenants/beta/secrets/SMTP_PASSWORD', undefined]
+		] as const) {
+			const answer = await call(method, path, body);
+			expect(answer.body.error?.message, `${method} ${path}`).toContain('scoped to acme');
+		}
+	});
+
+	it('writes nothing for the other tenant when it tries', async () => {
+		const { call, files } = own();
+		await call('PUT', '/api/tenants/beta/secrets/SMTP_PASSWORD', { value: 'x' });
+		expect(files.exists('/var/lib/bastion/secrets/secrets.age.tenant-beta')).toBe(false);
+	});
+
+	it('keeps the host scope operator-only', async () => {
+		const { call } = own();
+		expect((await call('GET', '/api/secrets')).status).toBe(403);
+		expect((await call('PUT', '/api/secrets/NODE_KEY', { value: 'x' })).status).toBe(403);
+	});
+
+	it('does not let a viewer reach a secret list', async () => {
+		const { call } = own('tenant-viewer');
+		expect((await call('GET', '/api/tenants/acme/secrets')).status).toBe(403);
+	});
+
+	it('lets an operator reach any tenant s scope, each separately', async () => {
+		const { call } = own('operator');
+		await call('PUT', '/api/tenants/acme/secrets/SMTP_PASSWORD', { value: 'one' });
+		await call('PUT', '/api/tenants/beta/secrets/API_TOKEN', { value: 'two' });
+		const names = async (tenant: string) =>
+			(
+				(await call('GET', `/api/tenants/${tenant}/secrets`)).body.result as {
+					secrets: { name: string }[];
+				}
+			).secrets.map((s) => s.name);
+		expect(await names('acme')).toEqual(['SMTP_PASSWORD']);
+		expect(await names('beta')).toEqual(['API_TOKEN']);
+	});
+
+	it('refuses a secret name that would not be a valid binding', async () => {
+		const { call } = own();
+		const answer = await call('PUT', '/api/tenants/acme/secrets/not-valid', { value: 'x' });
+		expect(answer.status).toBe(400);
 	});
 });

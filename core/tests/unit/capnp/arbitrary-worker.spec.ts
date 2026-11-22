@@ -181,3 +181,28 @@ describe('reading a bundle into a module list', () => {
 		expect(modules.map((m) => m.name)).toEqual(['index.js']);
 	});
 });
+
+describe('a tenant s secrets', () => {
+	it('become text bindings on the worker', () => {
+		const config = plain({ secrets: { SMTP_PASSWORD: 'hunter2' } });
+		expect(config).toContain('(name = "SMTP_PASSWORD", text = "hunter2")');
+	});
+
+	it('are escaped like every other value, so one cannot close the literal', () => {
+		const config = plain({ secrets: { TOKEN: 'a"b\nc' } });
+		expect(config).toContain('text = "a\\"b\\nc"');
+	});
+
+	it('add nothing when there are none', () => {
+		expect(plain({ secrets: {} })).toBe(plain());
+	});
+
+	it('refuse a name that another binding already holds, rather than picking one', () => {
+		expect(() => plain({ vars: { MODE: 'a' }, secrets: { MODE: 'b' } })).toThrow(
+			/same name as a binding/
+		);
+		expect(() => plain({ bindings: { kv: ['CACHE'] }, secrets: { CACHE: 'b' } })).toThrow(
+			/same name as a binding/
+		);
+	});
+});

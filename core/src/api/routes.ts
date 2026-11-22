@@ -100,6 +100,22 @@ export const ROUTES: RouteDefinition[] = [
 		token: false,
 		command: 'bastion tenant rm'
 	},
+	// both are the operator's alone (`tenant.write`) and session only. Suspending is idempotent,
+	// and the response says what the running process did about it
+	{
+		method: 'POST',
+		path: '/api/tenants/:tenant/suspend',
+		action: 'tenant.write',
+		token: false,
+		command: 'bastion tenant suspend'
+	},
+	{
+		method: 'POST',
+		path: '/api/tenants/:tenant/resume',
+		action: 'tenant.write',
+		token: false,
+		command: 'bastion tenant resume'
+	},
 	{
 		method: 'GET',
 		path: '/api/sites',
@@ -190,6 +206,29 @@ export const ROUTES: RouteDefinition[] = [
 		action: 'secrets.write',
 		token: false,
 		command: 'bastion secrets set'
+	},
+	// one tenant's scope. A tenant-admin reaches its own and the handler refuses a path naming
+	// another; an operator reaches any. Never a token, like the host routes above
+	{
+		method: 'GET',
+		path: '/api/tenants/:tenant/secrets',
+		action: 'tenant.secrets.read',
+		token: false,
+		command: 'bastion secrets list'
+	},
+	{
+		method: 'PUT',
+		path: '/api/tenants/:tenant/secrets/:name',
+		action: 'tenant.secrets.write',
+		token: false,
+		command: 'bastion secrets set'
+	},
+	{
+		method: 'DELETE',
+		path: '/api/tenants/:tenant/secrets/:name',
+		action: 'tenant.secrets.write',
+		token: false,
+		command: 'bastion secrets rm'
 	},
 	{
 		method: 'GET',

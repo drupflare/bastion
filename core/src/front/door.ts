@@ -3,12 +3,14 @@ import type { Context } from '../context';
 import type { FrontDeps } from './handler';
 import type { ListenerSpec, TlsMaterial } from './listener';
 import { ConnectionCounter, RateLimiter } from './ratelimit';
-import { routeTable, type Route } from './router';
+import { routeTable, type LiveState, type Route } from './router';
 
 export interface DoorOptions {
 	/** hands the sanitised request to the tenant's workerd, or to the site's primary node */
 	upstream(route: Route, request: Request, client: string): Promise<Response>;
 	hsts?: boolean;
+	/** read on every request, because a suspension lands after the front door is built */
+	live?: LiveState;
 }
 
 /**
@@ -35,7 +37,8 @@ export function buildFront(ctx: Context, config: BastionConfig, options: DoorOpt
 		maxBodyBytes: config.front.maxBodyBytes,
 		now: ctx.now,
 		upstream: options.upstream,
-		...(options.hsts === undefined ? {} : { hsts: options.hsts })
+		...(options.hsts === undefined ? {} : { hsts: options.hsts }),
+		...(options.live === undefined ? {} : { live: options.live })
 	};
 }
 

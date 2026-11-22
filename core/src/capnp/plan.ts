@@ -192,6 +192,13 @@ export interface PlanInput {
 	};
 	/** plain text bindings the bundle reads as vars */
 	vars: Record<string, string>;
+	/**
+	 * This tenant's secrets, which is the only scope a tenant's config is ever given.
+	 *
+	 * The caller reads them from the tenant's own scope, so this module cannot be handed another
+	 * tenant's by accident of a lookup; it never sees a store.
+	 */
+	secrets?: Record<string, string>;
 }
 
 /**
@@ -390,6 +397,19 @@ export function planSite(input: PlanInput): CapnpConfig {
 		});
 	}
 	for (const [name, value] of Object.entries(input.vars)) {
+		bindings.push({ name, kind: 'text', value });
+	}
+	// a secret that shares a name with another binding would be a duplicate workerd refuses to
+	// start on, and silently preferring one of the two would hand the bundle the wrong value
+	const taken = new Set(bindings.map((binding) => binding.name));
+	for (const [name, value] of Object.entries(input.secrets ?? {})) {
+		if (taken.has(name)) {
+			throw new BastionError(
+				'config-invalid',
+				`the secret ${name} has the same name as a binding on ${input.site.host}`,
+				{ next: `bastion secrets list --tenant ${input.tenant.name}` }
+			);
+		}
 		bindings.push({ name, kind: 'text', value });
 	}
 	// codegen is a capability the product declines by default; the binding is simply absent, which

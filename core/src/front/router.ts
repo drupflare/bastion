@@ -75,6 +75,15 @@ export function routeTable(config: BastionConfig): RouteTable {
 export type RouteOutcome =
 	{ ok: true; route: Route } | { ok: false; status: number; reason: string };
 
+/** what the table cannot know, because it changes after the table was built */
+export interface LiveState {
+	/** whether the tenant is suspended right now */
+	suspended(tenant: string): boolean;
+}
+
+/** the reason a request is refused for a suspended tenant, which no response body ever carries */
+export const SUSPENDED_REASON = 'suspended';
+
 /** whether a pathname falls inside the diagnostic set, matching the route and anything under it */
 export function isDiagnosticPath(pathname: string): boolean {
 	return DIAGNOSTIC_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
@@ -85,11 +94,16 @@ export function isDiagnosticPath(pathname: string): boolean {
  *
  * An unknown host is 404 rather than a default site: serving the wrong tenant's content under an
  * unrecognised name is how a misconfigured DNS record becomes a data leak.
+ *
+ * A suspended tenant's site is 503 before anything else about the request is looked at. The table
+ * is built once at start and a suspension lands later, so the flag is asked of `live` on every
+ * request rather than copied into a route.
  */
 export function resolveRoute(
 	table: RouteTable,
 	host: string | null,
-	pathname: string
+	pathname: string,
+	live?: LiveState
 ): RouteOutcome {
 	if (host === null || host.trim() === '') {
 		return { ok: false, status: 400, reason: 'no Host header' };
@@ -101,6 +115,9 @@ export function resolveRoute(
 			status: 404,
 			reason: `no site is configured for ${normaliseHost(host)}`
 		};
+	}
+	if (live?.suspended(route.tenant) === true) {
+		return { ok: false, status: 503, reason: SUSPENDED_REASON };
 	}
 	if (!route.capabilities.diagnosticRoutes && isDiagnosticPath(pathname)) {
 		return {

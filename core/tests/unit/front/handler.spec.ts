@@ -154,6 +154,44 @@ describe('handleRequest', () => {
 		expect(outcome.response.headers.get('content-encoding')).toBe('br');
 	});
 
+	describe('a suspended tenant', () => {
+		const suspendedDeps = () => {
+			let off = true;
+			const d = deps({ live: { suspended: () => off } });
+			return { d, resume: () => (off = false) };
+		};
+
+		it('gets a neutral 503 and the request never reaches the tenant', async () => {
+			const { d } = suspendedDeps();
+			const outcome = await handleRequest(get('/node/1'), '203.0.113.7', d);
+			expect(outcome.response.status).toBe(503);
+			expect(outcome.response.headers.get('cache-control')).toBe('no-store');
+			expect(d.seen).toHaveLength(0);
+		});
+
+		it('names neither the tenant, the site nor a reason in the body', async () => {
+			const { d } = suspendedDeps();
+			const body = await (await handleRequest(get(), '203.0.113.7', d)).response.text();
+			for (const leak of ['acme', 'example.edu', 'suspend']) {
+				expect(body.toLowerCase()).not.toContain(leak);
+			}
+		});
+
+		it('returns no route, so the request is not counted against a site as a view', async () => {
+			const { d } = suspendedDeps();
+			const outcome = await handleRequest(get(), '203.0.113.7', d);
+			expect(outcome.route).toBe(null);
+			expect(outcome.refusal).toBe('suspended');
+		});
+
+		it('serves again the moment the flag clears', async () => {
+			const { d, resume } = suspendedDeps();
+			expect((await handleRequest(get(), '203.0.113.7', d)).response.status).toBe(503);
+			resume();
+			expect((await handleRequest(get(), '203.0.113.7', d)).response.status).toBe(200);
+		});
+	});
+
 	it('sets HSTS only on a listener that asked for it', async () => {
 		const plain = await handleRequest(get(), '203.0.113.7', deps());
 		expect(plain.response.headers.get('strict-transport-security')).toBe(null);

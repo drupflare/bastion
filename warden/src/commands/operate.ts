@@ -44,18 +44,25 @@ export async function runReload(
 	const changed: string[] = [];
 	const unchanged: string[] = [];
 	const suspended: string[] = [];
+	const stopping: string[] = [];
 
 	for (const tenant of loaded.config.tenants) {
+		const path = `${loaded.state}/tenants/${tenant.name}/${RUNTIME_DIGEST}`;
+		const current = ctx.files.exists(path) ? ctx.files.readText(path).trim() : null;
 		if (tenant.suspended === true) {
 			suspended.push(tenant.name);
+			// the runtime removes the digest when it stops a tenant, so one still on disk is a
+			// tenant still running that the configuration says should not be
+			if (current !== null) {
+				stopping.push(tenant.name);
+				changed.push(tenant.name);
+			}
 			continue;
 		}
 		// the digest of what this tenant is configured with, against what the running process
 		// recorded when it started. The runtime writes that baseline, so this reads the box rather
 		// than its own last answer
 		const digest = tenantDigest(loaded.config, tenant);
-		const path = `${loaded.state}/tenants/${tenant.name}/${RUNTIME_DIGEST}`;
-		const current = ctx.files.exists(path) ? ctx.files.readText(path).trim() : null;
 		if (current === digest) {
 			unchanged.push(tenant.name);
 			continue;
@@ -63,30 +70,48 @@ export async function runReload(
 		changed.push(tenant.name);
 	}
 
-	const report = (applied: string[] | null, failed: ReloadOutcome['failed'] = []): void => {
-		emit(ctx, globals, { changed, unchanged, suspended, applied, failed }, () =>
-			[
-				kv([
-					['out of date', changed.length === 0 ? '(nothing)' : changed.join(', ')],
-					['unchanged', unchanged.length === 0 ? '(none)' : unchanged.join(', ')],
-					['suspended', suspended.length === 0 ? '(none)' : suspended.join(', ')],
-					...(applied === null
-						? []
-						: ([
-								['swapped', applied.length === 0 ? '(nothing)' : applied.join(', ')]
-							] as [string, string][]))
-				]),
-				'',
-				...failed.map((entry) => `${entry.tenant} did not come back: ${entry.reason}`),
-				changed.length === 0
-					? 'every tenant is running the configuration on disk'
-					: applied === null
-						? `${changed.length} tenant${changed.length === 1 ? '' : 's'} ` +
-							`${changed.length === 1 ? 'is' : 'are'} running an older configuration. ` +
-							'Run `bastion reload` without --check to swap them'
-						: `${applied.length} tenant${applied.length === 1 ? '' : 's'} swapped; the ` +
-							'rest kept their Durable Objects resident'
-			].join('\n')
+	const report = (
+		applied: string[] | null,
+		failed: ReloadOutcome['failed'] = [],
+		stopped: string[] = []
+	): void => {
+		emit(
+			ctx,
+			globals,
+			{ changed, unchanged, suspended, stopping, applied, stopped, failed },
+			() =>
+				[
+					kv([
+						['out of date', changed.length === 0 ? '(nothing)' : changed.join(', ')],
+						['unchanged', unchanged.length === 0 ? '(none)' : unchanged.join(', ')],
+						['suspended', suspended.length === 0 ? '(none)' : suspended.join(', ')],
+						...(stopping.length === 0
+							? []
+							: ([['still running', stopping.join(', ')]] as [string, string][])),
+						...(applied === null
+							? []
+							: ([
+									[
+										'swapped',
+										applied.length === 0 ? '(nothing)' : applied.join(', ')
+									],
+									...(stopped.length === 0
+										? []
+										: ([['stopped', stopped.join(', ')]] as [string, string][]))
+								] as [string, string][]))
+					]),
+					'',
+					...failed.map((entry) => `${entry.tenant} did not come back: ${entry.reason}`),
+					changed.length === 0
+						? 'every tenant is running the configuration on disk'
+						: applied === null
+							? `${changed.length} tenant${changed.length === 1 ? '' : 's'} ` +
+								`${changed.length === 1 ? 'is' : 'are'} running an older configuration. ` +
+								'Run `bastion reload` without --check to swap them'
+							: `${applied.length} tenant${applied.length === 1 ? '' : 's'} swapped` +
+								(stopped.length === 0 ? '' : `, ${stopped.length} stopped`) +
+								'; the rest kept their Durable Objects resident'
+				].join('\n')
 		);
 	};
 
@@ -122,7 +147,7 @@ export async function runReload(
 			{ next: 'bastion status' }
 		);
 	}
-	report(outcome.swapped, outcome.failed);
+	report(outcome.swapped, outcome.failed, outcome.stopped ?? []);
 	return outcome.failed.length === 0 ? 0 : 3;
 }
 

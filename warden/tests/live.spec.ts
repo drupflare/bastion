@@ -121,3 +121,58 @@ describe('GET /api/metrics', () => {
 		expect(answer.window.to - answer.window.from).toBe(24 * 60 * 60 * 1000);
 	});
 });
+
+describe('POST /api/tenants/:tenant/suspend and resume', () => {
+	function wired() {
+		const order: string[] = [];
+		const reloads: (string[] | undefined)[] = [];
+		const runtime = {
+			reload: async (only?: string[]) => {
+				order.push('reload');
+				reloads.push(only);
+				return { at: 0, swapped: [], stopped: ['beta'], failed: [] };
+			}
+		} as unknown as Runtime;
+		const command: ApiHandler = () => {
+			order.push('command');
+			return { tenant: 'beta', suspended: true, changed: true };
+		};
+		const handlers = liveHandlers(runtime, {
+			'POST /api/tenants/:tenant/suspend': command,
+			'POST /api/tenants/:tenant/resume': command
+		});
+		const ask = (action: 'suspend' | 'resume') =>
+			handlers[`POST /api/tenants/:tenant/${action}`]?.({
+				ctx: {} as Context,
+				principal: { id: 'op', role: 'operator', tenant: null, credential: 'session' },
+				tenant: null,
+				params: { tenant: 'beta' },
+				request: new Request(`https://127.0.0.1:8787/api/tenants/beta/${action}`, {
+					method: 'POST'
+				})
+			});
+		return { ask, order, reloads };
+	}
+
+	it('writes the flag first and then reloads the process, for that tenant only', async () => {
+		const { ask, order, reloads } = wired();
+		await ask('suspend');
+		expect(order).toEqual(['command', 'reload']);
+		expect(reloads).toEqual([['beta']]);
+	});
+
+	it('says what the process did, beside what the command wrote', async () => {
+		const { ask } = wired();
+		expect(await ask('suspend')).toMatchObject({
+			tenant: 'beta',
+			changed: true,
+			applied: { stopped: ['beta'], swapped: [], failed: [] }
+		});
+	});
+
+	it('reloads on resume as well, which is what starts the tenant again', async () => {
+		const { ask, reloads } = wired();
+		await ask('resume');
+		expect(reloads).toEqual([['beta']]);
+	});
+});

@@ -53,6 +53,7 @@ import {
 } from '../isolation/sandbox';
 import { nodeConnector, VSOCK_PORTS, vsockFetch, type StreamConnector } from '../isolation/vsock';
 import { AnalyticsWindow, DataPointWindow } from '../observe/analytics';
+import { buildSecrets, tenantScope, type SecretStore } from '../secrets/store';
 import { TenantSupervisor } from '../supervise/tenant';
 import { ACME_CHALLENGE_PREFIX, httpResponder } from '../tls/acme';
 import { CertificateStore } from '../tls/store';
@@ -103,6 +104,13 @@ export interface RuntimeOptions {
 	 * edits the file; the process holding the tenants has to go back to it.
 	 */
 	configPath?: string;
+	/**
+	 * The box's secret store, from which each tenant's own scope is bound into its worker.
+	 *
+	 * A seam like `adapters`: leaving it out builds the configured driver, which the gate lane
+	 * would not want touching a keyring.
+	 */
+	secrets?: SecretStore;
 }
 
 /**
@@ -137,7 +145,23 @@ export const RELOAD_OUTCOME = 'reload.outcome';
 export interface ReloadOutcome {
 	at: number;
 	swapped: string[];
+	/** tenants that were running and are now stopped because they are suspended */
+	stopped?: string[];
 	failed: { tenant: string; reason: string }[];
+}
+
+/**
+ * Marks a running tenant out of date without changing its configuration.
+ *
+ * A tenant's secrets are read when it starts and are not part of `tenantDigest`, so changing one
+ * would otherwise leave `reload` reporting nothing to do. The digest file also says "this tenant
+ * is running", so it is overwritten rather than removed.
+ */
+export function markStale(ctx: Context, state: string, tenant: string): boolean {
+	const path = `${state}/tenants/${tenant}/${RUNTIME_DIGEST}`;
+	if (!ctx.files.exists(path)) return false;
+	ctx.files.writeText(path, 'stale\n');
+	return true;
 }
 
 /**
@@ -175,6 +199,8 @@ export class Runtime {
 	private readonly ctx: Context;
 	private options: RuntimeOptions;
 	private readonly supervisors = new Map<string, TenantSupervisor>();
+	/** the tenants this process has brought up and not taken down, in every mode */
+	private readonly brought = new Set<string>();
 	private readonly listeners = new Map<string, Listener>();
 	/** one unix listener per adapter slot, per tenant, torn down with the tenant */
 	private readonly adapters = new Map<string, Listener[]>();
@@ -294,6 +320,7 @@ export class Runtime {
 
 		const worker = resolveSiteWorker(site.worker);
 		const bundle = await this.bundleFor(site, paths);
+		const secrets = await this.tenantSecrets(tenant.name);
 
 		// workerd refuses a `disk` service whose directory is absent, and its own storage is one:
 		// `Directory named "bastion_storage" not found`. It creates neither, so bastion does
@@ -354,10 +381,52 @@ export class Runtime {
 					? {}
 					: { versionMetadata: worker.versionMetadata })
 			},
-			vars: site.bindings ?? {}
+			vars: site.bindings ?? {},
+			secrets
 		});
 		this.ctx.files.writeText(paths.config, renderConfig(plan));
+		// the rendered config now holds this tenant's secret values in the clear
+		this.ctx.files.chmod(paths.config, 0o600);
 		return plan;
+	}
+
+	/**
+	 * What this tenant's worker is given as secrets, read from its own scope and no other.
+	 *
+	 * The scope is built from the tenant being started, so a bug elsewhere cannot hand it the host's
+	 * or another tenant's. A driver that cannot hold scopes (the env and keyring drivers) yields
+	 * none, which is also what every box that never set a tenant secret has. A sealed store warns
+	 * and yields none, because refusing would stop every tenant on a box that simply has no
+	 * passphrase. A store that opens and then fails, such as a wrong passphrase, stops this tenant
+	 * from starting: a site that comes up without its credentials is worse than one that is down.
+	 */
+	private async tenantSecrets(tenant: string): Promise<Record<string, string>> {
+		const host =
+			this.options.secrets ?? buildSecrets(this.ctx, this.options.config.drivers.secrets);
+		let store: SecretStore;
+		try {
+			store = host.scope(tenantScope(tenant));
+		} catch (error) {
+			if (error instanceof BastionError && error.code === 'driver-refused') return {};
+			throw error;
+		}
+		if (store.sealed()) {
+			this.ctx.io.err(`the secret store is sealed, so ${tenant} starts without its secrets`);
+			return {};
+		}
+		const out: Record<string, string> = {};
+		for (const ref of await store.list()) {
+			const value = await store.get(ref.name);
+			if (value !== null) out[ref.name] = value;
+		}
+		return out;
+	}
+
+	/** whether the tenant is suspended in the configuration this process holds right now */
+	isSuspended(tenant: string): boolean {
+		return (
+			this.options.config.tenants.find((entry) => entry.name === tenant)?.suspended === true
+		);
 	}
 
 	/**
@@ -504,6 +573,7 @@ export class Runtime {
 		this.ctx.files.mkdirp(`${staging}/bundle`);
 		this.ctx.files.mkdirp(`${staging}/assets`);
 		this.ctx.files.writeText(`${staging}/config.capnp`, this.ctx.files.readText(paths.config));
+		this.ctx.files.chmod(`${staging}/config.capnp`, 0o600);
 
 		let bytes = this.ctx.files.size(`${staging}/config.capnp`);
 		const site = tenant.sites[0];
@@ -591,7 +661,17 @@ export class Runtime {
 		// returned a host process wrapped in nothing, on the grounds that the VM was the boundary,
 		// while no guest was ever created: the mode an operator picks for untrusted tenants was
 		// the weakest of the three rather than the strongest
-		if (config.mode === 'isolated') return await this.startGuest(declared, paths);
+		if (config.mode === 'isolated') {
+			const guest = await this.startGuest(declared, paths);
+			// the digest doubles as the "this tenant is running" marker `reload` reads, and a guest
+			// has no supervisor to write it from `onStart`
+			this.ctx.files.writeText(
+				`${paths.state}/${RUNTIME_DIGEST}`,
+				`${tenantDigest(config, declared)}\n`
+			);
+			this.brought.add(tenant);
+			return guest;
+		}
 
 		const wrapped = sandboxArgv({ mode: config.mode, tenant, paths }, binary as string, []);
 		const supervisor = new TenantSupervisor(this.ctx, tenant, {
@@ -614,6 +694,7 @@ export class Runtime {
 			}
 		});
 		this.supervisors.set(tenant, supervisor);
+		this.brought.add(tenant);
 
 		// `run` rather than `start`: it is the loop, and nothing called it. The supervisor had a
 		// backoff, a jitter and a crash-loop breaker, and a tenant whose workerd died stayed dead
@@ -662,7 +743,9 @@ export class Runtime {
 		if (this.front === null) {
 			this.front = buildFront(this.ctx, this.options.config, {
 				upstream: this.tenantUpstream(),
-				hsts: this.options.config.listeners.https !== undefined
+				hsts: this.options.config.listeners.https !== undefined,
+				// the front door is built once; the suspended flag moves after that
+				live: { suspended: (tenant) => this.isSuspended(tenant) }
 			});
 		}
 
@@ -754,6 +837,10 @@ export class Runtime {
 		);
 		if (tenant === undefined) {
 			return { ok: false, detail: `this node holds no site called ${ask.site}` };
+		}
+		// this path skips the front door, so the front door's refusal has to be repeated here
+		if (this.isSuspended(tenant.name)) {
+			return { ok: false, detail: `${ask.site} is suspended on this node` };
 		}
 		const url = new URL(`http://${ask.site}/replica`);
 		url.searchParams.set('action', ask.action);
@@ -921,6 +1008,12 @@ export class Runtime {
 		const needsBinary = this.options.config.mode !== 'isolated';
 		for (const tenant of this.options.config.tenants) {
 			if (needsBinary && this.options.binary === undefined) break;
+			// a suspended tenant keeps its state and starts nothing; resuming and reloading starts it
+			if (tenant.suspended === true) {
+				// the previous run's digest would read as "running" to `reload`
+				this.ctx.files.remove(`${this.pathsFor(tenant.name).state}/${RUNTIME_DIGEST}`);
+				continue;
+			}
 			await this.startTenant(tenant.name);
 		}
 
@@ -979,6 +1072,20 @@ export class Runtime {
 	 * mark for no gain, and the whole point is to disturb as little as possible.
 	 */
 	async swapTenant(tenant: string): Promise<void> {
+		await this.stopTenant(tenant);
+		// the capnp is regenerated from the config on disk, which is what makes this a swap rather
+		// than a restart of the same thing
+		await this.startTenant(tenant);
+	}
+
+	/**
+	 * Takes one tenant's process and adapter sockets down and starts nothing.
+	 *
+	 * What a suspension needs and what a swap does first. The digest file is removed because it is
+	 * also what `reload` reads as "this tenant is running": left behind, a suspended tenant would
+	 * read as running and a resumed one would read as unchanged and never start.
+	 */
+	async stopTenant(tenant: string): Promise<void> {
 		const supervisor = this.supervisors.get(tenant);
 		if (supervisor !== undefined) {
 			supervisor.stop();
@@ -992,9 +1099,22 @@ export class Runtime {
 			for (const listener of this.adapters.get(tenant) ?? []) await listener.stop(false);
 			this.adapters.delete(tenant);
 		}
-		// the capnp is regenerated from the config on disk, which is what makes this a swap rather
-		// than a restart of the same thing
-		await this.startTenant(tenant);
+		this.brought.delete(tenant);
+		this.ctx.files.remove(`${this.pathsFor(tenant).state}/${RUNTIME_DIGEST}`);
+	}
+
+	/**
+	 * What a reload has to do for one tenant, decided from this process and the digest on disk.
+	 *
+	 * A suspended tenant that is still running is stopped; a suspended one that is not is left
+	 * alone. Every other tenant is swapped when its recorded digest differs, which is also how a
+	 * resumed tenant starts: stopping it removed the digest.
+	 */
+	private pending(tenant: TenantConfig): 'stop' | 'swap' | null {
+		if (tenant.suspended === true) return this.brought.has(tenant.name) ? 'stop' : null;
+		const path = `${this.pathsFor(tenant.name).state}/${RUNTIME_DIGEST}`;
+		const running = this.ctx.files.exists(path) ? this.ctx.files.readText(path).trim() : null;
+		return running === tenantDigest(this.options.config, tenant) ? null : 'swap';
 	}
 
 	/**
@@ -1006,16 +1126,61 @@ export class Runtime {
 	async swapChanged(): Promise<string[]> {
 		const swapped: string[] = [];
 		for (const tenant of this.options.config.tenants) {
-			if (tenant.suspended === true) continue;
-			const path = `${this.pathsFor(tenant.name).state}/${RUNTIME_DIGEST}`;
-			const running = this.ctx.files.exists(path)
-				? this.ctx.files.readText(path).trim()
-				: null;
-			if (running === tenantDigest(this.options.config, tenant)) continue;
+			const todo = this.pending(tenant);
+			if (todo === 'stop') await this.stopTenant(tenant.name);
+			if (todo !== 'swap') continue;
 			await this.swapTenant(tenant.name);
 			swapped.push(tenant.name);
 		}
 		return swapped;
+	}
+
+	/** reloads queue behind one another, so two callers never swap one tenant at the same time */
+	private applying: Promise<unknown> = Promise.resolve();
+
+	private async applyReload(only?: string[]): Promise<ReloadOutcome> {
+		const swapped: string[] = [];
+		const stopped: string[] = [];
+		const failed: { tenant: string; reason: string }[] = [];
+		for (const tenant of this.options.config.tenants) {
+			if (only !== undefined && !only.includes(tenant.name)) continue;
+			const todo = this.pending(tenant);
+			if (todo === null) continue;
+			try {
+				if (todo === 'stop') {
+					await this.stopTenant(tenant.name);
+					stopped.push(tenant.name);
+				} else {
+					await this.swapTenant(tenant.name);
+					swapped.push(tenant.name);
+				}
+			} catch (error) {
+				// one tenant whose new configuration does not start must not take the others with
+				// it; the outcome names it and the rest of the box carries on
+				failed.push({
+					tenant: tenant.name,
+					reason: error instanceof Error ? error.message : String(error)
+				});
+			}
+		}
+		return { at: this.ctx.now(), swapped, stopped, failed };
+	}
+
+	/**
+	 * Reads the configuration again and applies it: swaps what changed, stops what was suspended
+	 * and starts what was resumed.
+	 *
+	 * The management API calls this straight after it changes a tenant's suspension, so a suspend
+	 * takes effect when the route answers rather than at the next sweep. `only` narrows it to the
+	 * named tenants, so suspending one does not swap another that happens to be out of date.
+	 */
+	async reload(only?: string[]): Promise<ReloadOutcome> {
+		const turn = this.applying.then(() => {
+			this.reread();
+			return this.applyReload(only);
+		});
+		this.applying = turn.catch(() => undefined);
+		return turn;
 	}
 
 	/**
@@ -1028,31 +1193,8 @@ export class Runtime {
 		const request = `${this.options.config.state}/${RELOAD_REQUEST}`;
 		if (!this.ctx.files.exists(request)) return null;
 		this.ctx.files.remove(request);
-		this.reread();
 
-		const swapped: string[] = [];
-		const failed: { tenant: string; reason: string }[] = [];
-		for (const tenant of this.options.config.tenants) {
-			if (tenant.suspended === true) continue;
-			const path = `${this.pathsFor(tenant.name).state}/${RUNTIME_DIGEST}`;
-			const running = this.ctx.files.exists(path)
-				? this.ctx.files.readText(path).trim()
-				: null;
-			if (running === tenantDigest(this.options.config, tenant)) continue;
-			try {
-				await this.swapTenant(tenant.name);
-				swapped.push(tenant.name);
-			} catch (error) {
-				// one tenant whose new configuration does not start must not take the others with
-				// it; the outcome names it and the rest of the box carries on
-				failed.push({
-					tenant: tenant.name,
-					reason: error instanceof Error ? error.message : String(error)
-				});
-			}
-		}
-
-		const outcome: ReloadOutcome = { at: this.ctx.now(), swapped, failed };
+		const outcome = await this.reload();
 		this.ctx.files.writeText(
 			`${this.options.config.state}/${RELOAD_OUTCOME}`,
 			`${JSON.stringify(outcome)}\n`
@@ -1075,6 +1217,7 @@ export class Runtime {
 		this.listeners.clear();
 		this.adapters.clear();
 		this.supervisors.clear();
+		this.brought.clear();
 	}
 
 	/** one tenant's supervisor, so `status` and the health ledger can read its restart count */

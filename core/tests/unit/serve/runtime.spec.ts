@@ -8,7 +8,8 @@ import { scriptedRunner } from '../../../src/host/exec';
 import { memoryFiles } from '../../../src/host/files';
 import { memoryIo } from '../../../src/io';
 import { cgroupPath } from '../../../src/isolation/cgroups';
-import { Runtime } from '../../../src/serve/runtime';
+import { envSecrets, fileSecrets, tenantScope, type SecretStore } from '../../../src/secrets/store';
+import { Runtime, markStale } from '../../../src/serve/runtime';
 import { SessionStore } from '../../../src/serve/session';
 import { bundleFrom } from '../../../src/serve/static';
 import { TokenStore } from '../../../src/serve/tokens';
@@ -217,12 +218,13 @@ describe('Runtime.startTenant', () => {
 		expect(await runtime.swapChanged()).toEqual(['acme']);
 	});
 
-	it('leaves a suspended tenant alone', async () => {
+	it('never swaps a suspended tenant; a running one is stopped instead', async () => {
 		const { h, runtime } = serving();
 		await runtime.startTenant('acme');
 		h.files.remove('/var/lib/bastion/tenants/acme/config.sha256');
 		(h.config.tenants[0] as { suspended?: boolean }).suspended = true;
 		expect(await runtime.swapChanged()).toEqual([]);
+		expect(runtime.running).toEqual([]);
 	});
 
 	/**
@@ -1114,5 +1116,281 @@ describe('Runtime.serveManagement', () => {
 		});
 		const response = await bare.serveManagement(new Request('https://127.0.0.1:8787/'));
 		expect(await response.text()).toContain('carries no dashboard');
+	});
+});
+
+/**
+ * Suspending a tenant has to stop it, and the flag used to stop nothing.
+ *
+ * `reload` skipped suspended tenants, so one that was running when it was suspended kept its
+ * process and kept answering; `up` started it regardless; and the front door never read the flag.
+ */
+describe('Runtime suspension', () => {
+	const STATE = '/var/lib/bastion';
+
+	function suspendable() {
+		const h = harness({
+			state: STATE,
+			listeners: { management: { address: '127.0.0.1:8787' } },
+			tenants: [
+				{ name: 'acme', sites: [{ host: 'www.example.edu', bundle: BUNDLE }] },
+				{ name: 'beta', sites: [{ host: 'docs.example.edu', bundle: BUNDLE }] }
+			]
+		});
+		h.files.writeText(`${BUNDLE}/index.js`, 'export default {}');
+		const spawn = h.runner.spawn;
+		h.runner.spawn = (command, args, options) => ({
+			...spawn(command, args, options),
+			exited: new Promise<number>(() => {})
+		});
+		const seen: Request[] = [];
+		const runtime = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: async (_route, request) => {
+				seen.push(request);
+				return new Response('rendered');
+			},
+			binary: '/usr/local/bin/workerd',
+			adapters: memoryAdapters,
+			acknowledgeUnsafeMode: true,
+			platform: 'linux'
+		});
+		const tenant = (name: string) =>
+			h.config.tenants.find((entry) => entry.name === name) as { suspended?: boolean };
+		const spawns = () => h.runner.calls.filter((call) => call.mode === 'spawn').length;
+		const visit = (host: string) =>
+			runtime.serve(new Request(`https://${host}/`, { headers: { host } }), '203.0.113.7');
+		return { h, runtime, tenant, spawns, visit, seen };
+	}
+
+	it('does not start a suspended tenant on up', async () => {
+		const { runtime, tenant, spawns } = suspendable();
+		tenant('beta').suspended = true;
+		await runtime.up();
+		expect(runtime.running).toEqual(['acme']);
+		expect(spawns()).toBe(1);
+	});
+
+	it('stops a running tenant on reload once it is suspended, and only that one', async () => {
+		const { h, runtime, tenant } = suspendable();
+		await runtime.up();
+		tenant('beta').suspended = true;
+
+		const outcome = await runtime.reload();
+		expect(outcome.stopped).toEqual(['beta']);
+		expect(outcome.swapped).toEqual([]);
+		expect(runtime.running).toEqual(['acme']);
+		// the digest is what `reload` reads as "running", so a stopped tenant must not leave one
+		expect(h.files.exists(`${STATE}/tenants/beta/config.sha256`)).toBe(false);
+		expect(h.files.exists(`${STATE}/tenants/acme/config.sha256`)).toBe(true);
+	});
+
+	it('has nothing left to do the second time, so suspending twice changes nothing', async () => {
+		const { runtime, tenant, spawns } = suspendable();
+		await runtime.up();
+		tenant('beta').suspended = true;
+		await runtime.reload();
+		const before = spawns();
+		const again = await runtime.reload();
+		expect(again.stopped).toEqual([]);
+		expect(again.swapped).toEqual([]);
+		expect(spawns()).toBe(before);
+	});
+
+	it('starts the tenant again when it is resumed', async () => {
+		const { runtime, tenant, spawns } = suspendable();
+		await runtime.up();
+		tenant('beta').suspended = true;
+		await runtime.reload();
+		const before = spawns();
+
+		delete tenant('beta').suspended;
+		const outcome = await runtime.reload();
+		expect(outcome.swapped).toEqual(['beta']);
+		expect(runtime.running.sort()).toEqual(['acme', 'beta']);
+		expect(spawns()).toBe(before + 1);
+	});
+
+	it('limits an api-driven reload to the tenant it was asked about', async () => {
+		const { h, runtime, tenant } = suspendable();
+		await runtime.up();
+		tenant('beta').suspended = true;
+		// acme is out of date too, and must not be swapped by a call about beta
+		h.files.writeText(`${STATE}/tenants/acme/config.sha256`, 'stale\n');
+		const outcome = await runtime.reload(['beta']);
+		expect(outcome.stopped).toEqual(['beta']);
+		expect(outcome.swapped).toEqual([]);
+	});
+
+	it('writes what it stopped into the outcome the CLI reads', async () => {
+		const { h, runtime, tenant } = suspendable();
+		await runtime.up();
+		tenant('beta').suspended = true;
+		h.files.writeText(`${STATE}/reload.request`, '{}');
+		await runtime.serveReloadRequest();
+		expect(JSON.parse(h.files.readText(`${STATE}/reload.outcome`)).stopped).toEqual(['beta']);
+	});
+
+	it('marks a running tenant out of date for a later swap, and ignores one that is not running', async () => {
+		const { h, runtime } = suspendable();
+		expect(markStale(h.ctx, STATE, 'acme')).toBe(false);
+		await runtime.up();
+		expect(markStale(h.ctx, STATE, 'acme')).toBe(true);
+		expect(await runtime.swapChanged()).toEqual(['acme']);
+	});
+
+	describe('at the front door', () => {
+		it('answers a suspended tenant with the neutral 503 and never reaches the tenant', async () => {
+			const { runtime, tenant, visit, seen } = suspendable();
+			expect((await visit('www.example.edu')).status).toBe(200);
+			tenant('acme').suspended = true;
+
+			const refused = await visit('www.example.edu');
+			expect(refused.status).toBe(503);
+			expect(refused.headers.get('cache-control')).toBe('no-store');
+			expect(await refused.text()).not.toMatch(/acme|suspend/i);
+			expect(seen).toHaveLength(1);
+			expect((await visit('docs.example.edu')).status).toBe(200);
+			void runtime;
+		});
+
+		it('refuses on the flag the reloaded configuration carries, with no restart of the door', async () => {
+			const { tenant, visit } = suspendable();
+			await visit('www.example.edu');
+			tenant('acme').suspended = true;
+			expect((await visit('www.example.edu')).status).toBe(503);
+			delete tenant('acme').suspended;
+			expect((await visit('www.example.edu')).status).toBe(200);
+		});
+
+		it('does not record a refused request as a view', async () => {
+			const { runtime, tenant, visit } = suspendable();
+			tenant('acme').suspended = true;
+			await visit('www.example.edu');
+			await visit('www.example.edu');
+			// usage is built from this window, so a request that never enters it is never billed
+			expect(runtime.analytics.size).toBe(0);
+			expect(runtime.unattributed.get('suspended')).toBe(2);
+		});
+	});
+});
+
+/**
+ * Each tenant's worker gets its own scope of secrets and nothing else.
+ *
+ * Read off the generated config, which is what workerd is actually pointed at.
+ */
+describe('Runtime tenant secrets', () => {
+	const STATE = '/var/lib/bastion';
+	const PASSPHRASE = 'a passphrase for the specs';
+
+	function boxWith(
+		secrets: (host: SecretStore) => Promise<void>,
+		phrase: string | null = PASSPHRASE
+	) {
+		const h = harness({
+			state: STATE,
+			tenants: [
+				{ name: 'acme', sites: [{ host: 'www.example.edu', bundle: BUNDLE }] },
+				{ name: 'beta', sites: [{ host: 'docs.example.edu', bundle: BUNDLE }] }
+			]
+		});
+		h.files.writeText(`${BUNDLE}/index.js`, 'export default {}');
+		const store = fileSecrets(h.ctx, `${STATE}/secrets.age`, PASSPHRASE);
+		const ready = secrets(store);
+		const runtime = () =>
+			new Runtime(h.ctx, {
+				config: h.config,
+				host: h.host,
+				upstream: h.upstream,
+				binary: '/usr/local/bin/workerd',
+				adapters: memoryAdapters,
+				platform: 'linux',
+				secrets: fileSecrets(h.ctx, `${STATE}/secrets.age`, phrase)
+			});
+		return { h, ready, runtime };
+	}
+
+	const capnp = (h: ReturnType<typeof harness>, tenant: string) =>
+		h.files.readText(`${STATE}/tenants/${tenant}/config.capnp`);
+
+	it('puts a tenant s secrets in its own config and no one else s, host included', async () => {
+		const { h, ready, runtime } = boxWith(async (store) => {
+			await store.set('NODE_KEY', 'host-only-value');
+			await store.scope(tenantScope('acme')).set('SMTP_PASSWORD', 'acme-only-value');
+			await store.scope(tenantScope('beta')).set('API_TOKEN', 'beta-only-value');
+		});
+		await ready;
+		const box = runtime();
+		await box.startTenant('acme');
+		await box.startTenant('beta');
+
+		const acme = capnp(h, 'acme');
+		expect(acme).toContain('(name = "SMTP_PASSWORD", text = "acme-only-value")');
+		for (const foreign of ['host-only-value', 'beta-only-value', 'API_TOKEN', 'NODE_KEY']) {
+			expect(acme, foreign).not.toContain(foreign);
+		}
+
+		const beta = capnp(h, 'beta');
+		expect(beta).toContain('(name = "API_TOKEN", text = "beta-only-value")');
+		for (const foreign of ['host-only-value', 'acme-only-value', 'SMTP_PASSWORD', 'NODE_KEY']) {
+			expect(beta, foreign).not.toContain(foreign);
+		}
+	});
+
+	it('writes the config readable by the owner alone, since it now holds secrets', async () => {
+		const { h, ready, runtime } = boxWith(async (store) => {
+			await store.scope(tenantScope('acme')).set('SMTP_PASSWORD', 'acme-only-value');
+		});
+		await ready;
+		await runtime().startTenant('acme');
+		expect(h.files.mode(`${STATE}/tenants/acme/config.capnp`)).toBe(0o600);
+	});
+
+	it('starts a tenant with none when the driver cannot hold scopes', async () => {
+		const h = harness({
+			state: STATE,
+			tenants: [{ name: 'acme', sites: [{ host: 'www.example.edu', bundle: BUNDLE }] }]
+		});
+		h.files.writeText(`${BUNDLE}/index.js`, 'export default {}');
+		const box = new Runtime(h.ctx, {
+			config: h.config,
+			host: h.host,
+			upstream: h.upstream,
+			binary: '/usr/local/bin/workerd',
+			adapters: memoryAdapters,
+			platform: 'linux',
+			secrets: envSecrets({ ...h.ctx, env: { BASTION_SECRET_NODE_KEY: 'host-only-value' } })
+		});
+		await box.startTenant('acme');
+		expect(capnp(h, 'acme')).not.toContain('host-only-value');
+	});
+
+	it('warns and starts without them while the store is sealed', async () => {
+		const { h, ready, runtime } = boxWith(async (store) => {
+			await store.scope(tenantScope('acme')).set('SMTP_PASSWORD', 'acme-only-value');
+		}, null);
+		await ready;
+		await runtime().startTenant('acme');
+		expect(capnp(h, 'acme')).not.toContain('acme-only-value');
+		expect(h.io.errText()).toContain('sealed');
+	});
+
+	it('refuses to start a tenant whose secrets will not decrypt, rather than starting it bare', async () => {
+		const { ready, runtime } = boxWith(async (store) => {
+			await store.scope(tenantScope('acme')).set('SMTP_PASSWORD', 'acme-only-value');
+		}, 'the wrong passphrase');
+		await ready;
+		await expect(runtime().startTenant('acme')).rejects.toThrow(/did not decrypt/);
+	});
+
+	it('refuses a secret named like a binding the site already has', async () => {
+		const { h, ready, runtime } = boxWith(async (store) => {
+			await store.scope(tenantScope('acme')).set('MODE', 'from-secret');
+		});
+		await ready;
+		(h.config.tenants[0] as { sites: SiteConfig[] }).sites[0]!.bindings = { MODE: 'from-var' };
+		await expect(runtime().startTenant('acme')).rejects.toThrow(/same name as a binding/);
 	});
 });
